@@ -1,0 +1,20 @@
+{
+  "name": "sdaintai-pipo-rfc-mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server exposing dynamic SAP PI/PO and S/4HANA RFC calls, scoped to SDAINTAI (SDADATAAI reserved for later). Deployed standalone on Cloud Foundry, called by SDAINTAI's CAP backend (and future SDADATAAI) over HTTP with Basic Auth.",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": "^20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@sap-rfc/node-rfc-library": "^1.1.2",
+    "express": "^4.19.2",
+    "basic-auth": "^2.0.1",
+    "zod": "^3.23.8"
+  }
+}

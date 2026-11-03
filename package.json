@@ -6,6 +6,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
     "@cap-js/audit-logging": ">=0",
     "@cap-js/hana": "^2",
     "@cap-js/postgres": "^2",

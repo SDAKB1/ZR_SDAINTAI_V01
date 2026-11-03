@@ -1,0 +1,19 @@
+---
+applications:
+  - name: sdaintai-pipo-rfc-mcp
+    path: .
+    buildpacks:
+      - nodejs_buildpack
+    memory: 256M
+    instances: 1
+    health-check-type: http
+    health-check-http-endpoint: /health
+    env:
+      MCP_USER_1: AYMANK
+      MCP_PASS_1: AYMANK
+      MCP_USER_2: SAIREDDY
+      MCP_PASS_2: SAIREDDY
+      # Set these before first push (cf set-env, then cf restage), not committed here:
+      # SAP_NPM_REGISTRY_TOKEN          — private npm feed token for @sap-rfc scope
+      # SDAINTAI_SAP_ASHOST / _SYSNR / _CLIENT / _USER / _PASSWD
+      # SDADATAAI_SAP_ASHOST / ...      — leave unset until SDADATAAI is ready
