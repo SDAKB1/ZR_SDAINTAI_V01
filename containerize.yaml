@@ -1,0 +1,44 @@
+1 _schema-version: '1.0'
+repository: <your-container-registry-server>
+tag: latest
+modules:
+  - name: AICONX-srv
+    build-parameters:
+      buildpack:
+        type: nodejs
+        builder: builder-jammy-base
+        path: gen/srv
+        env:
+          BP_NODE_RUN_SCRIPTS: ""
+  - name: AICONX-sidecar
+    build-parameters:
+      buildpack:
+        type: nodejs
+        builder: builder-jammy-base
+        path: gen/mtx/sidecar
+        env:
+          BP_NODE_RUN_SCRIPTS: ""
+  - name: AICONX-approuter
+    build-parameters:
+      buildpack:
+        type: nodejs
+        builder: builder-jammy-base
+        path: app/router
+        env:
+          BP_NODE_RUN_SCRIPTS: ""
+  - name: AICONX-html5-deployer
+    build-parameters:
+      buildpack:
+        type: nodejs
+        builder: builder-jammy-base
+        path: app/html5-deployer
+        env:
+          BP_NODE_RUN_SCRIPTS: ""
+  - name: AICONX-portal-deployer
+    build-parameters:
+      buildpack:
+        type: nodejs
+        builder: builder-jammy-base
+        path: app/portal
+        env:
+          BP_NODE_RUN_SCRIPTS: ""

@@ -1,0 +1,24 @@
+_schema-version: 3.3.0
+ID: sdaintai
+version: 0.0.14
+description: "SDA-INTAI Platform — Static Web Console (SDAINT-AI + BW Cockpits) + Brain AI (LangChain/LangGraph)"
+
+parameters:
+  enable-parallel-deployments: true
+
+modules:
+
+  - name: sdaintai
+    type: nodejs
+    path: app/aiconx
+    parameters:
+      buildpack: staticfile_buildpack
+      memory: 64M
+      disk-quota: 256M
+      health-check-type: process
+      no-route: false
+      routes:
+        - route: sdaintai.cfapps.us10.hana.ondemand.com
+    build-parameters:
+      builder: custom
+      commands: []

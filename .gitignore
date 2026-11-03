@@ -1,0 +1,80 @@
+node_modules/
+target/
+_out/
+gen/
+
+.cdsrc-private.json
+default-*.json
+*.sqlite*
+.brain-state.json
+.brain-vectors.json
+
+# MTA
+mta_archives/
+*_mta_build_tmp
+*.mtar
+# Track versioned release MTARs
+!deploy/*.mtar
+
+# Other
+.DS_Store
+.env
+
+# @cap-js/cds-typer
+@cds-models
+
+# Python
+__pycache__/
+*.pyc
+
+# Regenerable: images extracted from docs/doctoredo in pptx/*.docx for pptx builds
+docs/images/src/media/
+
+# Client-confidential materials (not for repo history)
+docs/energir exampls and analysis/
+
+# Large video files (exceed GitHub's 100MB limit, or just too bulky for repo history)
+docs/newSDAINTAIUX/MULESOFTZING.mp4
+docs/newSDAINTAIUX/PIPOZING.mp4
+docs/pipomulesoft updated.mp4
+docs/newSDAINTAIUX/mulesoftnewUX.mp4
+docs/newSDAINTAIUX/piponewvideoUX.mp4
+docs/newSDAINTAIUX/sdaintai new buttons UX to mim2.mp4
+docs/sdaintai new buttons UX to mim2.mp4
+docs/video recap/
+
+# Hard rule: never commit video recordings/demos, regardless of size
+*.mp4
+
+# Other-client/project deliverables (not SDAINTAI/SDADATAAI product content) —
+# kept on disk, excluded from this repo's git history going forward.
+docs/BMR*
+docs/Cascades*
+docs/EXFO*
+docs/EXFO-EDI-iFlow/
+docs/KaraHR*
+docs/Kruger*
+docs/MuleSoft-SDA-Exit*
+docs/archdeclessonslearned.pptx
+docs/SFD_KARA_RH*
+docs/TDDKARAHR*
+docs/OpenConnectors_Replacement_Plan.pptx
+docs/SDA Company Overview*
+docs/SDA-Orange-Shirt-Day*
+docs/kara ref/
+docs/images/zeddy_screens/
+docs/images/src/build_bmr_*
+docs/images/src/build_exfo_*
+docs/images/src/build_karahr_*
+docs/images/src/build_kruger_*
+docs/images/src/build_mulesoft_sda_exit_*
+docs/images/src/build_cn_mulesoft_pptx.py
+docs/images/src/build_orange_shirt_day_graphics.py
+docs/images/src/build_tddkarahr*
+docs/images/src/build_archdeclessonslearned_pptx.py
+docs/images/src/*Exemple.xlsx
+docs/open conn.png
+docs/newSDAINTAIUX/image 1 openconnector receives XML , to OPEN CONNECT.png
+docs/newSDAINTAIUX/marketo data from groovy ( open connector ) updated the C4C data .png
+docs/newSDAINTAIUX/open connector calling script .png
+docs/newSDAINTAIUX/openconnetcalling script file.png

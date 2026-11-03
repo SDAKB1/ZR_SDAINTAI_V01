@@ -1,0 +1,254 @@
+# yaml-language-server: $schema=./values.schema.json
+
+global:
+  domain: <cluster-domain>
+  imagePullSecret:
+    name: docker-registry
+  image:
+    registry: <your-container-registry-server>
+    tag: latest
+srv:
+  bindings:
+    auth:
+      serviceInstanceName: xsuaa
+    service-manager:
+      serviceInstanceName: service-manager
+    messaging:
+      serviceInstanceName: event-mesh
+    kafka:
+      serviceInstanceName: kafka
+    destination:
+      serviceInstanceName: destination
+    auditlog:
+      serviceInstanceName: auditlog
+  image:
+    repository: AICONX-srv
+  resources:
+    limits:
+      ephemeral-storage: 1G
+      memory: 500M
+    requests:
+      ephemeral-storage: 1G
+      cpu: 500m
+      memory: 500M
+  health:
+    liveness:
+      path: /health
+    readiness:
+      path: /health
+  networkSecurity:
+    allowNamespaceInternal: true
+  additionalVolumes:
+    - name: connectivity-secret
+      volumeMount:
+        mountPath: /bindings/connectivity
+        readOnly: true
+      projected:
+        sources:
+          - secret:
+              name: <your-connectivity-binding>
+              optional: false
+          - secret:
+              name: <your-connectivity-binding>
+              optional: false
+              items:
+                - key: token_service_url
+                  path: url
+          - configMap:
+              name: "{{ .Release.Name }}-connectivity-proxy-info"
+              optional: false
+sidecar:
+  bindings:
+    auth:
+      serviceInstanceName: xsuaa
+    saas-registry:
+      serviceInstanceName: saas-registry
+    service-manager:
+      serviceInstanceName: service-manager
+    html5-apps-repo-host:
+      serviceInstanceName: html5-apps-repo-host
+  image:
+    repository: AICONX-sidecar
+  resources:
+    limits:
+      ephemeral-storage: 1G
+      memory: 500M
+    requests:
+      ephemeral-storage: 1G
+      cpu: 500m
+      memory: 500M
+  health:
+    liveness:
+      path: /health
+    readiness:
+      path: /health
+  env:
+    SUBSCRIPTION_URL: https://${tenant_subdomain}-{{ .Release.Name }}-approuter-{{ .Release.Namespace }}.{{ .Values.global.domain }}
+  networkSecurity:
+    allowNamespaceInternal: true
+approuter:
+  bindings:
+    auth:
+      serviceInstanceName: xsuaa
+    html5-apps-repo-runtime:
+      serviceInstanceName: html5-apps-repo-runtime
+    portal:
+      serviceInstanceName: portal
+  image:
+    repository: AICONX-approuter
+  env:
+    TENANT_HOST_PATTERN: ^(.*)-{{ .Release.Name }}-approuter-{{ .Release.Namespace }}.{{ .Values.global.domain }} # change if expose.host is set
+  resources:
+    limits:
+      ephemeral-storage: 1G
+      memory: 500M
+    requests:
+      ephemeral-storage: 1G
+      cpu: 500m
+      memory: 500M
+  health:
+    liveness:
+      path: /
+    readiness:
+      path: /
+  envFrom:
+    - configMapRef:
+        name: "{{ .Release.Name }}-approuter-configmap"
+xsuaa:
+  serviceOfferingName: xsuaa
+  servicePlanName: application
+  parameters:
+    tenant-mode: shared
+    oauth2-configuration:
+      redirect-uris:
+        - https://*.{{ tpl .Values.global.domain . }}/**
+    xsappname: AICONX-{{ .Release.Namespace }}
+service-manager:
+  serviceOfferingName: service-manager
+  servicePlanName: container
+saas-registry:
+  serviceOfferingName: saas-registry
+  servicePlanName: application
+  parameters:
+    appName: AICONX-{{ .Release.Namespace }}
+    xsappname: AICONX-{{ .Release.Namespace }}
+    displayName: AICONX
+    description: A simple CAP project.
+    category: "CAP Application"
+    appUrls:
+      onSubscriptionAsync: true
+      onUnSubscriptionAsync: true
+      onUpdateDependenciesAsync: true
+      callbackTimeoutMillis: 300000
+      getDependencies: https://{{ .Release.Name }}-sidecar-{{ .Release.Namespace }}.{{ .Values.global.domain }}/-/cds/saas-provisioning/dependencies
+      onSubscription: https://{{ .Release.Name }}-sidecar-{{ .Release.Namespace }}.{{ .Values.global.domain }}/-/cds/saas-provisioning/tenant/{tenantId}
+
+mtx-upgrade:
+  bindings:
+    service-manager:
+      serviceInstanceName: service-manager
+  image:
+    repository: AICONX-sidecar
+  resources:
+    limits:
+      ephemeral-storage: 1G
+      memory: 1G
+    requests:
+      ephemeral-storage: 1G
+      cpu: 1000m
+      memory: 1G
+  command:
+    - "launcher"
+  args:
+    - "cds-mtx"
+    - "upgrade"
+    - '*'
+backendDestinations:
+  srv-api:
+    service: srv
+    Authentication: OAuth2UserTokenExchange
+  mtx-api:
+    service: sidecar
+event-mesh:
+  serviceOfferingName: enterprise-messaging
+  servicePlanName: default
+kafka:
+  serviceOfferingName: kafka
+  servicePlanName: standard
+  parameters:
+    public_ip: true
+    allow_access:
+      []
+destination:
+  serviceOfferingName: destination
+  servicePlanName: lite
+  parameters:
+    version: 1.0.0
+    HTML5Runtime_enabled: true
+html5-apps-repo-host:
+  serviceOfferingName: html5-apps-repo
+  servicePlanName: app-host
+html5-apps-deployer:
+  env:
+    SAP_CLOUD_SERVICE: AICONX.service
+  image:
+    repository: AICONX-html5-deployer
+  bindings:
+    xsuaa:
+      serviceInstanceName: xsuaa
+    destination:
+      serviceInstanceName: destination
+    html5-apps-repo:
+      serviceInstanceName: html5-apps-repo-host
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 1G
+    requests:
+      cpu: 1000m
+      memory: 1G
+  envFrom:
+    - configMapRef:
+        name: "{{ .Release.Name }}-html5-apps-deployer-configmap"
+html5-apps-repo-runtime:
+  serviceOfferingName: html5-apps-repo
+  servicePlanName: app-runtime
+portal:
+  serviceOfferingName: portal
+  servicePlanName: standard
+portal-deployer:
+  image:
+    repository: AICONX-portal-deployer
+  resources:
+    limits:
+      ephemeral-storage: 1G
+      memory: 500M
+    requests:
+      ephemeral-storage: 1G
+      cpu: 500m
+      memory: 500M
+  bindings:
+    auth:
+      serviceInstanceName: xsuaa
+    html5-apps-repo-host:
+      serviceInstanceName: html5-apps-repo-host
+    portal:
+      serviceInstanceName: portal
+  env:
+    SERVICE_BINDING_ROOT: /bindings
+    BPL_VCAP_SERVICES_ENABLED: "true"
+    XSUAA_CREDENTIALS:
+      secretKeyRef:
+        name: "{{ .Release.Name }}-approuter-auth"
+        key: credentials
+    REPOHOST_CREDENTIALS:
+      secretKeyRef:
+        name: "{{ .Release.Name }}-html5-apps-deployer-html5-apps-repo"
+        key: credentials
+    PORTAL_CREDENTIALS:
+      secretKeyRef:
+        name: "{{ .Release.Name }}-approuter-portal"
+        key: credentials
+auditlog:
+  serviceOfferingName: auditlog
+  servicePlanName: premium

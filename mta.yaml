@@ -1,0 +1,215 @@
+_schema-version: 3.3.0
+ID: SDAINTAI
+version: 0.0.92
+description: "SDA-INTAI Platform — Static Web Console + Brain AI (LangChain/LangGraph)"
+parameters:
+  enable-parallel-deployments: true
+  deploy_mode: html5-repo
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npm ci
+        - npx cds build --production
+        - mkdir -p gen/srv/app/aiconx
+        - cp -r app/aiconx/webapp gen/srv/app/aiconx/webapp
+modules:
+  - name: AICONX-srv
+    type: nodejs
+    path: gen/srv
+    parameters:
+      instances: 1
+      buildpack: nodejs_buildpack
+      routes:
+        - route: sdaintai.cfapps.us10.hana.ondemand.com
+    build-parameters:
+      builder: npm-ci
+    provides:
+      - name: srv-api # required by consumers of CAP services (e.g. approuter)
+        properties:
+          srv-url: ${default-url}
+    requires:
+      - name: AICONX-auth
+      - name: AICONX-db
+      - name: AICONX-brain-hana
+      - name: AICONX-messaging
+      - name: AICONX-connectivity
+      - name: AICONX-destination
+      - name: AICONX-logging
+
+  - name: AICONX-mtx
+    type: nodejs
+    path: gen/mtx/sidecar
+    requires:
+      - name: AICONX-auth
+      - name: AICONX-db
+      - name: AICONX-registry
+      - name: app-api
+        properties:
+          SUBSCRIPTION_URL: ~{app-protocol}://\${tenant_subdomain}-~{app-uri}
+      - name: AICONX-destination
+      - name: AICONX-html5-runtime
+      - name: AICONX-html5-repo-host
+      - name: AICONX-logging
+    build-parameters:
+      builder: npm-ci
+    parameters:
+      instances: 1
+      memory: 256M
+      disk-quota: 512M
+    hooks:
+      - name: upgrade-all
+        type: task
+        phases:
+          - blue-green.application.before-start.idle
+          - deploy.application.before-start
+        parameters:
+          name: upgrade
+          memory: 512M # increase as required
+          disk-quota: 768M # increase as required
+          command: cds-mtx upgrade '*'
+    provides:
+      - name: mtx-api
+        properties:
+          mtx-url: ${default-url}
+
+  - name: AICONX
+    type: approuter.nodejs
+    path: app/router
+    parameters:
+      keep-existing-routes: true
+      disk-quota: 256M
+      memory: 256M
+    properties:
+      TENANT_HOST_PATTERN: "^(.*)-${default-uri}"
+    requires:
+      - name: srv-api
+        group: destinations
+        properties:
+          name: srv-api # must be used in xs-app.json as well
+          url: ~{srv-url}
+          forwardAuthToken: true
+      - name: mtx-api
+        group: destinations
+        properties:
+          name: mtx-api # must be used in xs-app.json as well
+          url: ~{mtx-url}
+      - name: AICONX-auth
+      - name: AICONX-destination
+      - name: AICONX-html5-runtime
+      - name: AICONX-logging
+    provides:
+      - name: app-api
+        properties:
+          app-protocol: ${protocol}
+          app-uri: ${default-uri}
+
+  # ── AICONN3x HTML5 module — deployed to HTML5 repo for Portal/approuter access ──
+  - name: AICONXaiconx
+    type: com.sap.application.content
+    path: app/aiconx
+    build-parameters:
+      build-result: resources
+      builder: custom
+      commands:
+        - mkdir -p resources
+        - python3 -c "import shutil; shutil.make_archive('resources/webapp', 'zip', 'webapp')"
+      supported-platforms: [cf]
+    requires:
+      - name: AICONX-html5-repo-host
+        parameters:
+          content-target: true
+
+resources:
+  - name: AICONX-auth
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+      path: ./xs-security.json
+      config:
+        xsappname: AICONX-${space}
+        tenant-mode: shared
+        oauth2-configuration:
+          credential-types:
+            - "binding-secret"
+            - "x509"
+          redirect-uris:
+            - https://*~{app-api/app-uri}/**
+        role-collections:
+          - name: 'admin (AICONX ${space})'
+            description: 'generated'
+            role-template-references:
+              - '$XSAPPNAME.admin'
+    requires:
+      - name: app-api
+    processed-after:
+      - AICONX-messaging
+  - name: AICONX-db
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: service-manager
+      service-plan: container
+  # Dedicated HDI container for the Brain's vector store (srv/ai/vectorStore.js),
+  # kept separate from AICONX-db (the app's primary, multitenant-managed HANA
+  # binding) so this feature can't destabilize the main app's DB layer. The
+  # BRAIN_BRAINVECTOR table was deployed to this container directly via `cds
+  # deploy` from a standalone one-off project (Sep 2026 session) using the
+  # deployer (_DT) credentials — this resource only carries the least-privilege
+  # runtime (_RT) credentials, which can INSERT/SELECT/DELETE but not run DDL.
+  # Already exists as a CF user-provided service (`cf cups AICONX-brain-hana`);
+  # `existing-service` here just references it, no new provisioning.
+  - name: AICONX-brain-hana
+    type: org.cloudfoundry.existing-service
+  - name: AICONX-registry
+    type: org.cloudfoundry.managed-service
+    requires:
+      - name: mtx-api
+    parameters:
+      service: saas-registry
+      service-plan: application
+      config:
+        xsappname: AICONX-${space}
+        appName: AICONX-${space}
+        displayName: AICONX
+        description: A simple CAP project.
+        category: 'Category'
+        appUrls:
+          getDependencies: ~{mtx-api/mtx-url}/-/cds/saas-provisioning/dependencies
+          onSubscription: ~{mtx-api/mtx-url}/-/cds/saas-provisioning/tenant/{tenantId}
+          onSubscriptionAsync: true
+          onUnSubscriptionAsync: true
+          onUpdateDependenciesAsync: true
+          callbackTimeoutMillis: 300000 # Increase if your deployments are taking longer than that
+  - name: AICONX-messaging
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: enterprise-messaging
+      service-plan: default
+      path: ./event-mesh.json
+  - name: AICONX-connectivity
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: connectivity
+      service-plan: lite
+  - name: AICONX-destination
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: destination
+      service-plan: lite
+
+  - name: AICONX-html5-repo-host
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: html5-apps-repo
+      service-plan: app-host
+  - name: AICONX-html5-runtime
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: html5-apps-repo
+      service-plan: app-runtime
+  - name: AICONX-logging
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: application-logs
+      service-plan: lite

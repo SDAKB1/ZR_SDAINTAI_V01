@@ -1,0 +1,14 @@
+{
+  "name": "sdaintai-adt-mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP server exposing SAP ABAP Cloud RAP objects (via ADT REST APIs) as tools callable by Claude Code, the SDAINTAI rap-dev-orchestrator-service, or any other MCP client. Independent of Joule for Developers.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.0"
+  }
+}
