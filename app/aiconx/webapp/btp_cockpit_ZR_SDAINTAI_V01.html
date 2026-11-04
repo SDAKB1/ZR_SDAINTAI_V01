@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="SDAINT-AI Migration Cockpit — Lumi copilot-driven migration for MuleSoft, SAP PI/PO, Informatica, and Dell Boomi legacy integration assets.">
+  <title>SDAINT-AI — Migration Cockpit (Lumi)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="style.css?v=lumi30">
+  <link rel="stylesheet" href="btp_style.css?v=lumi30">
+  <link rel="stylesheet" href="btp_lumi.css?v=lumi30">
+</head>
+<body>
+
+  <!-- ==================== ACCESS LOCK ==================== -->
+  <div id="lock-overlay">
+    <!-- STEP: LOGIN -->
+    <div class="lock-card" id="lock-card">
+      <div class="lock-icon-badge"><i class="fa-solid fa-lock"></i></div>
+      <h2>SDAINTAI — Locked</h2>
+      <p>This is a private pre-sales preview. Enter your access credentials to continue.</p>
+      <div class="lock-error" id="lock-error"></div>
+      <form class="lock-fields" id="lock-form" autocomplete="off">
+        <input type="text" class="btp-input" id="lock-username" placeholder="Username" autocomplete="off">
+        <input type="password" class="btp-input" id="lock-password" placeholder="Password" autocomplete="off">
+        <button type="submit" class="btn-btp btn-btp-gold" id="lock-submit" style="width:100%;justify-content:center;">Unlock <i class="fa-solid fa-arrow-right"></i></button>
+      </form>
+      <div class="lock-switch">New client? <a id="lock-go-signup">Create an account</a></div>
+    </div>
+
+    <!-- STEP: SIGNUP -->
+    <div class="lock-card hidden" id="signup-card" style="max-width:460px;">
+      <div class="lock-icon-badge"><i class="fa-solid fa-user-plus"></i></div>
+      <h2>Create your SDAINTAI account</h2>
+      <p>Sign up with your email or a username, and a password — we'll send a verification link before setting up your first migration.</p>
+      <div class="lock-error" id="signup-error"></div>
+      <form class="lock-fields" id="signup-form" autocomplete="off">
+        <input type="text" class="btp-input" id="signup-identifier" placeholder="Email or username" autocomplete="off">
+        <input type="password" class="btp-input" id="signup-password" placeholder="Password" autocomplete="off">
+        <input type="password" class="btp-input" id="signup-password-confirm" placeholder="Confirm password" autocomplete="off">
+        <button type="submit" class="btn-btp btn-btp-gold" style="width:100%;justify-content:center;">Create Account <i class="fa-solid fa-arrow-right"></i></button>
+      </form>
+      <div class="lock-switch">Already have an account? <a id="signup-go-login">Log in</a></div>
+    </div>
+
+    <!-- STEP: VERIFY (mock email) -->
+    <div class="lock-card hidden" id="verify-card">
+      <div class="lock-icon-badge"><i class="fa-solid fa-envelope-circle-check"></i></div>
+      <h2>Check your email</h2>
+      <p>We've sent a verification link to <b id="verify-identifier-label"></b>.</p>
+      <div class="mock-note" style="margin-top:12px;text-align:left;"><i class="fa-solid fa-circle-info"></i> This is a pre-sales preview with no mail server wired up — in production this link arrives in your real inbox. Click below to simulate opening it.</div>
+      <button class="btn-btp btn-btp-gold" id="btn-verify-simulate" style="width:100%;justify-content:center;margin-top:16px;">Open Verification Link <i class="fa-solid fa-arrow-right"></i></button>
+    </div>
+
+    <!-- STEP: ONBOARD (first-time migration settings) -->
+    <div class="lock-card hidden" id="onboard-card" style="max-width:480px;">
+      <div class="lock-icon-badge"><i class="fa-solid fa-gear"></i></div>
+      <h2>Set up your first migration</h2>
+      <p>A few things SDAINTAI needs before you can scan and convert your assets — all of these can be changed later in Admin.</p>
+      <div class="lock-error" id="onboard-error"></div>
+      <form class="lock-fields" id="onboard-form" autocomplete="off">
+        <select class="btp-input" id="onboard-platform">
+          <option value="mulesoft">MuleSoft</option>
+          <option value="pipo">SAP PI/PO</option>
+          <option value="informatica">Informatica</option>
+          <option value="boomi">Dell Boomi</option>
+        </select>
+        <select class="btp-input" id="onboard-env">
+          <option>Production</option>
+          <option selected>Sandbox</option>
+          <option>Design</option>
+        </select>
+        <input type="text" class="btp-input" id="onboard-username" placeholder="Integration username">
+        <input type="password" class="btp-input" id="onboard-password" placeholder="Integration password">
+        <select class="btp-input" id="onboard-subaccount">
+          <option value="sda-ai-shared-eu10" selected>sda-ai-shared-eu10 (shared sandbox)</option>
+          <option value="sda-ai-client-eu10-01">sda-ai-client-eu10-01</option>
+          <option value="sda-ai-client-eu10-02">sda-ai-client-eu10-02</option>
+          <option value="sda-ai-client-us10-01">sda-ai-client-us10-01</option>
+        </select>
+        <label class="admin-manual-row" style="margin-top:-4px;"><input type="checkbox" id="onboard-prv-tenant"> sda-prv-tenant — keep this subaccount private to us</label>
+        <input type="text" class="btp-input" id="onboard-tenant" placeholder="Target — SAP Integration Suite tenant" value="sda-prod-eu10">
+        <input type="text" class="btp-input" id="onboard-region" placeholder="Target region" value="EU10 — Frankfurt">
+        <button type="submit" class="btn-btp btn-btp-gold" style="width:100%;justify-content:center;">Save &amp; Enter Cockpit <i class="fa-solid fa-arrow-right"></i></button>
+      </form>
+    </div>
+  </div>
+  <!-- ==================== BTP COCKPIT WORKSPACE ==================== -->
+  <div class="btp-container locked" id="btp-app-root">
+    <script>
+      // Runs immediately, before the rest of the container paints, so an
+      // already-unlocked session (this tab, this visit) never flashes the
+      // blurred/locked state — and a not-yet-unlocked session never flashes
+      // the un-blurred content before the lock class takes effect.
+      // sessionStorage can throw in some privacy-restricted contexts — fail
+      // closed (stay locked) rather than let an uncaught error through.
+      try {
+        if (sessionStorage.getItem('sdaintai_unlocked') === '1') {
+          document.getElementById('btp-app-root').classList.remove('locked');
+          document.getElementById('lock-overlay').classList.add('hidden');
+        }
+      } catch (e) { /* stay locked */ }
+    </script>
+
+    <aside class="btp-sidebar">
+      <div class="btp-brand">
+        <span class="btp-brand-sda">— SDA —</span>
+        <span class="btp-brand-title">INT-AI</span>
+      </div>
+
+      <div class="btp-lumi-btn" id="btn-open-lumi">
+        <div class="lumi-avatar idle" id="lumi-btn-avatar"><div class="visor"></div><div class="lumi-ping"></div></div>
+        <div class="lumi-btn-text">
+          <span class="lumi-btn-title">Lumi</span>
+          <span class="lumi-btn-sub">AI copilot &middot; powered by SAP Joule</span>
+        </div>
+      </div>
+
+      <div class="btp-navigation-accordion">
+        <div class="accordion-section">
+          <div class="nav-section-label">Active projects</div>
+          <div class="project-dropdown-container">
+            <div class="project-selector"><i class="fa-solid fa-caret-down"></i> <span id="project-selector-text">No project yet</span></div>
+            <div class="accordion-sub-menu stage-stepper">
+              <div class="menu-accordion active">
+                <div class="menu-accordion-title"><span class="step" id="step-node-prepare"></span> Setup</div>
+                <div class="menu-accordion-items">
+                  <a href="#" class="sidebar-item pending" id="nav-details" data-screen="details"><span class="dot-indent"></span> Project Details</a>
+                  <a href="#" class="sidebar-item pending" id="nav-connection" data-screen="connection"><span class="dot-indent"></span> Set Connection</a>
+                  <a href="#" class="sidebar-item pending" id="nav-assets" data-screen="assets"><span class="dot-indent"></span> <span class="nav-label" id="nav-assets-label">Import Assets</span></a>
+                </div>
+              </div>
+              <div class="menu-accordion">
+                <div class="menu-accordion-title"><span class="step" id="step-node-plan"></span> Plan</div>
+                <div class="menu-accordion-items hidden">
+                  <a href="#" class="sidebar-item pending" id="nav-buckets" data-screen="buckets"><span class="dot-indent"></span> Migration Buckets</a>
+                  <a href="#" class="sidebar-item pending" id="nav-wave" data-screen="wave"><span class="dot-indent"></span> Define Wave &amp; Team</a>
+                  <a href="#" class="sidebar-item pending" id="nav-approve" data-screen="approve"><span class="dot-indent"></span> Approve</a>
+                </div>
+              </div>
+              <div class="menu-accordion">
+                <div class="menu-accordion-title"><span class="step" id="step-node-execute"></span> Execute</div>
+                <div class="menu-accordion-items hidden">
+                  <a href="#" class="sidebar-item pending" id="nav-cockpit" data-screen="cockpit"><span class="dot-indent"></span> <span class="nav-label" id="nav-cockpit-label">Migration Cockpit</span></a>
+                </div>
+              </div>
+              <div class="menu-accordion">
+                <div class="menu-accordion-title"><span class="step" id="step-node-close"></span> Close</div>
+                <div class="menu-accordion-items hidden">
+                  <a href="#" class="sidebar-item pending" id="nav-close" data-screen="close"><span class="dot-indent"></span> Close Project</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="nav-section-label archived-label">Archived projects</div>
+        <div class="archived-projects-list" id="archived-projects-list"><span class="archived-empty">None yet</span></div>
+      </div>
+      <a href="#" class="sidebar-item admin-nav-item" id="nav-admin" data-screen="admin"><i class="fa-solid fa-gear"></i> Settings</a>
+      <div class="persona-switcher" id="persona-switcher" title="Persona lens — not a workflow step; switches which controls are shown, not what's underneath">
+        <span class="persona-switcher-label">Persona lens</span>
+        <select class="persona-select" id="persona-select">
+          <option value="Admin">Admin — full control</option>
+          <option value="Approver">Approver — sign-off only</option>
+          <option value="Viewer">Viewer — read-only</option>
+        </select>
+      </div>
+      <div class="btp-sidebar-footer">
+        <span class="btp-sidebar-footer-status"><span class="dot-active green"></span> SDAINTAI Brain 2.1 Online</span>
+        <a href="index.html" title="Back to Console">Console</a>
+      </div>
+    </aside>
+
+    <main class="btp-main">
+      <section class="btp-content">
+
+        <div class="btp-workspace-panel">
+
+          <div class="lumi-paused-banner" id="paused-banner">
+            <div class="lumi-avatar idle"><div class="visor"></div></div>
+            <div class="paused-banner-text">Your chat with Lumi is paused at <b><span class="stage-name" id="paused-banner-stage">this step</span></b> — your changes here are saved, and the conversation carries on from where it stopped.</div>
+            <button class="btn-btp btn-btp-gold" id="btn-continue-chat">Continue chat with Lumi</button>
+          </div>
+
+          <!-- LANDING -->
+          <div class="btp-screen active" id="screen-landing">
+            <div class="lumi-landing lumi-landing-hero">
+              <div class="lumi-avatar xl idle"><div class="visor"></div></div>
+              <div>
+                <h1 id="landing-greeting">Hi! I'm Lumi.</h1>
+                <p class="landing-sub">I'm your Integration Migration Orchestrator, powered by SAP Joule.</p>
+              </div>
+              <div class="lumi-choices">
+                <div class="lumi-chip primary lumi-chip-hero" id="btn-start-new"><i class="fa-solid fa-rocket"></i> Start a new migration</div>
+              </div>
+              <div class="lumi-chip ghost lumi-chip-link" id="btn-open-cockpit-shortcut">Open my cockpit</div>
+            </div>
+          </div>
+
+          <!-- SCREEN: ADMIN -->
+          <div class="btp-screen" id="screen-admin" style="overflow-y:auto;">
+            <div class="panel-title-row">
+              <h2>Admin — Defaults</h2>
+              <span style="font-size:0.72rem;color:var(--btp-text-muted-dark);font-weight:600;">Org-wide defaults for new migrations — applied the next time you start one, saved for this session</span>
+            </div>
+            <div style="padding:24px 32px;display:flex;flex-direction:column;gap:30px;">
+
+              <div>
+                <h3 class="admin-section-title">Default Connection</h3>
+                <div class="form-grid-btp" style="margin-bottom:16px;">
+                  <div class="form-group-btp">
+                    <label>Default Source Platform</label>
+                    <select class="btp-input" id="admin-default-platform">
+                      <option value="mulesoft">MuleSoft</option>
+                      <option value="pipo">SAP PI/PO</option>
+                      <option value="informatica">Informatica</option>
+                      <option value="boomi">Dell Boomi</option>
+                    </select>
+                  </div>
+                  <div class="form-group-btp">
+                    <label>Default Environment</label>
+                    <select class="btp-input" id="admin-default-env"><option>Production</option><option selected>Sandbox</option><option>Design</option></select>
+                  </div>
+                </div>
+                <label style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;color:var(--btp-text-muted-dark);">Default Authentication</label>
+                <div class="auth-toggle" id="admin-auth-toggle" style="margin-top:8px;">
+                  <button type="button" class="active" data-mode="userpass">Username / Password</button>
+                  <button type="button" data-mode="oauth">Client ID / Secret</button>
+                </div>
+                <div class="form-grid-btp" id="admin-userpass-fields">
+                  <div class="form-group-btp"><label>Default Integration Username</label><input type="text" class="btp-input" id="admin-default-username" value="daniel.smith@sdaintai-sandbox.io"></div>
+                  <div class="form-group-btp"><label>Default Password</label><input type="password" class="btp-input" id="admin-default-password" value="Demo#Sandbox2026!"></div>
+                </div>
+                <div class="form-grid-btp hidden" id="admin-oauth-fields">
+                  <div class="form-group-btp"><label>Default Client ID</label><input type="text" class="btp-input" id="admin-default-client-id" value="sdaintai-demo-7f3a91c2"></div>
+                  <div class="form-group-btp"><label>Default Client Secret</label><input type="password" class="btp-input" id="admin-default-client-secret" value="demo-secret-9b41-sandbox-only"></div>
+                </div>
+                <div class="form-grid-btp" style="margin-top:16px;">
+                  <div class="form-group-btp"><label>Default Target — SAP Integration Suite Tenant</label><input type="text" class="btp-input" id="admin-default-tenant" value="sda-prod-eu10"></div>
+                  <div class="form-group-btp"><label>Default Target Region</label><input type="text" class="btp-input" id="admin-default-region" value="EU10 — Frankfurt"></div>
+                </div>
+                <div class="form-group-btp" style="margin-top:16px;">
+                  <label>BTP Tenant URL — Integration Suite Design Workspace</label>
+                  <div class="admin-url-row">
+                    <input type="text" class="btp-input" id="admin-btp-tenant-url" value="https://lab-sda.integrationsuite.cfapps.us10-002.hana.ondemand.com/shell/design/contentpackage/INTPACKFROMMUKESOFT1?section=ARTIFACTS">
+                    <a href="#" class="btn-btp-action-outline" id="btn-open-btp-tenant" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open</a>
+                  </div>
+                  <label class="admin-manual-row"><input type="checkbox" id="admin-btp-tenant-manual"> Manual — I don't have a BTP Integration Suite tenant value yet</label>
+                </div>
+                <div class="form-group-btp" style="margin-top:16px;max-width:420px;">
+                  <label>SDA AI Subaccount</label>
+                  <select class="btp-input" id="admin-sda-subaccount">
+                    <option value="sda-ai-shared-eu10" selected>sda-ai-shared-eu10 (shared sandbox)</option>
+                    <option value="sda-ai-client-eu10-01">sda-ai-client-eu10-01</option>
+                    <option value="sda-ai-client-eu10-02">sda-ai-client-eu10-02</option>
+                    <option value="sda-ai-client-us10-01">sda-ai-client-us10-01</option>
+                  </select>
+                  <label class="admin-manual-row"><input type="checkbox" id="admin-prv-tenant"> sda-prv-tenant — Private tenant: this subaccount is dedicated to us only, no other SDA client migration runs here</label>
+                  <div class="conn-status" id="admin-prv-tenant-status" style="display:flex;margin-top:8px;"><span class="dot"></span> Shared subaccount</div>
+                  <div class="mock-note" style="margin-top:8px;"><i class="fa-solid fa-shield-halved"></i> Each subaccount carries its own XSUAA service instance — picking a dedicated subaccount and checking sda-prv-tenant means this client's objects live in a tenant no other client's migration can reach, not just a filtered view of a shared one.</div>
+                </div>
+              </div>
+
+              <div>
+                <h3 class="admin-section-title">Migration Acceleration — A2A Agents</h3>
+                <p class="mock-note" style="margin-bottom:10px;"><i class="fa-solid fa-gauge-high"></i> These two agents are what take a conversion from a fully manual estimate down to the AI-accelerated one shown throughout the cockpit. Uncheck either (or both) to see every duration — wave timing, Plan approval, Readiness/Progress effort — fall back toward the manual baseline, live.</p>
+                <div class="admin-team-list" style="gap:10px;">
+                  <label class="admin-manual-row" style="font-size:0.84rem;"><input type="checkbox" id="admin-agent-mapping" checked> <b>A2A — Mapping Agent</b> &nbsp;field/structure mapping between source and target</label>
+                  <label class="admin-manual-row" style="font-size:0.84rem;"><input type="checkbox" id="admin-agent-conversion" checked> <b>A2A — Conversion Agent</b> &nbsp;Groovy/code rewrite and packaging</label>
+                </div>
+                <div class="conn-status" id="admin-agent-speed-status" style="display:flex;margin-top:10px;"><span class="dot"></span> —</div>
+              </div>
+
+              <div>
+                <h3 class="admin-section-title">AI Engine — SDAINTAI Brain (LangGraph / Claude)</h3>
+                <div class="mock-note" style="margin-bottom:14px;"><i class="fa-solid fa-brain"></i> Activating this connects the cockpit to the real backend Brain — a LangGraph orchestrator backed by Claude with a learning vector store. Once active, every asset scanned, command you type, setting you change, and conversion result is logged so each migration starts smarter than the last. Off by default — nothing is sent anywhere until you activate it.</div>
+                <div class="form-group-btp" style="max-width:420px;">
+                  <label>Activation Password</label>
+                  <input type="password" class="btp-input" id="admin-brain-key" value="AYMAN2026" placeholder="Enter the AI Engine activation password">
+                </div>
+                <div class="conn-test-row" style="margin-top:12px;">
+                  <button class="btn-btp-action-solid" id="btn-activate-brain"><i class="fa-solid fa-bolt"></i> Activate AI Engine</button>
+                  <button class="btn-btp-action-outline" id="btn-deactivate-brain"><i class="fa-solid fa-power-off"></i> Deactivate</button>
+                  <div class="conn-status" id="admin-brain-status" style="display:flex;"><span class="dot"></span> AI Engine inactive</div>
+                </div>
+              </div>
+
+              <div>
+                <h3 class="admin-section-title">Target Systems — ALM</h3>
+                <div class="form-group-btp">
+                  <label>ALM Tenant URL</label>
+                  <input type="text" class="btp-input" id="admin-alm-tenant-url" placeholder="e.g. your SAP Cloud ALM / Solution Manager tenant URL">
+                  <label class="admin-manual-row"><input type="checkbox" id="admin-alm-tenant-manual" checked> Manual — I don't have an ALM tenant value yet</label>
+                </div>
+                <div class="form-group-btp" style="margin-top:16px;">
+                  <label>Figaf ALM Target</label>
+                  <input type="text" class="btp-input" id="admin-figaf-target" placeholder="e.g. PRD, or your Figaf project/target system ID">
+                  <label class="admin-manual-row"><input type="checkbox" id="admin-figaf-manual" checked> Manual — I don't have a Figaf ALM target value yet</label>
+                </div>
+              </div>
+
+              <div>
+                <h3 class="admin-section-title">Source System — SAP PI/PO (Process Orchestration)</h3>
+                <div class="form-grid-btp" style="margin-bottom:16px;">
+                  <div class="form-group-btp"><label>System Name</label><input type="text" class="btp-input" id="admin-pipo-system-name" value="PJ1"></div>
+                  <div class="form-group-btp"><label>System Version</label><input type="text" class="btp-input" id="admin-pipo-version" value="7.50"></div>
+                </div>
+                <div class="form-group-btp" style="margin-bottom:16px;">
+                  <label>Integration Directory / ES Repository Address</label>
+                  <input type="text" class="btp-input" id="admin-pipo-address" value="http://nwjava.consultsda.com:443">
+                </div>
+                <div class="form-grid-btp" style="margin-bottom:16px;">
+                  <div class="form-group-btp"><label>User ID</label><input type="text" class="btp-input" id="admin-pipo-userid" value="PI_TECH_MIG"></div>
+                  <div class="form-group-btp">
+                    <label>Password</label>
+                    <input type="password" class="btp-input" id="admin-pipo-password" placeholder="Masked in source screenshot — enter it once here">
+                  </div>
+                </div>
+                <div class="form-grid-btp">
+                  <div class="form-group-btp"><label>Authentication</label>
+                    <select class="btp-input" id="admin-pipo-auth"><option selected>BasicAuthentication</option><option>OAuth2ClientCredentials</option><option>Certificate</option></select>
+                  </div>
+                  <div class="form-group-btp"><label>Proxy Type</label>
+                    <select class="btp-input" id="admin-pipo-proxy"><option selected>OnPremise</option><option>Internet</option></select>
+                  </div>
+                  <div class="form-group-btp"><label>Location ID</label><input type="text" class="btp-input" id="admin-pipo-location" value="SDA_LAB"></div>
+                </div>
+                <div class="mock-note"><i class="fa-solid fa-circle-info"></i> Configuration settings for Integration Directory and ES Repository are the same, matching the PI/PO NWA screen this was captured from.</div>
+                <div class="conn-test-row">
+                  <button class="btn-btp-action-solid" id="btn-admin-test-pipo"><i class="fa-solid fa-plug-circle-check"></i> Test Connection</button>
+                  <div class="conn-status" id="admin-pipo-test-status" style="display:none;"></div>
+                </div>
+              </div>
+
+              <div>
+                <h3 class="admin-section-title">Team Members</h3>
+                <div class="admin-team-list" id="admin-team-list"></div>
+                <div class="admin-team-add-row">
+                  <input type="text" class="btp-input" id="admin-team-name" placeholder="Name">
+                  <input type="text" class="btp-input" id="admin-team-role" placeholder="Role">
+                  <button class="btn-btp-action-solid" id="btn-admin-add-team"><i class="fa-solid fa-user-plus"></i> Add</button>
+                </div>
+              </div>
+
+              <div>
+                <h3 class="admin-section-title">AI Agents (A2A)</h3>
+                <p class="mock-note" style="margin-bottom:10px;"><i class="fa-solid fa-circle-info"></i> Agents Lumi can recommend on blocking issues in Errors/Issues → Review &amp; assign. Add one per business process your team wants covered.</p>
+                <div class="admin-team-list" id="admin-agent-list"></div>
+                <div class="admin-team-add-row">
+                  <input type="text" class="btp-input" id="admin-agent-name" placeholder="Agent name (e.g. Warehouse & EWM)">
+                  <input type="text" class="btp-input" id="admin-agent-domain" placeholder="Business process (e.g. EWM)">
+                  <input type="text" class="btp-input" id="admin-agent-desc" placeholder="What it covers (optional)">
+                  <button class="btn-btp-action-solid" id="btn-admin-add-agent"><i class="fa-solid fa-robot"></i> Add</button>
+                </div>
+              </div>
+
+              <div>
+                <h3 class="admin-section-title">System Connection — SAP S/4HANA</h3>
+                <div class="form-grid-btp" style="margin-bottom:16px;">
+                  <div class="form-group-btp"><label>S/4HANA Host</label><input type="text" class="btp-input" id="admin-s4-host" placeholder="s4hana.customer.corp"></div>
+                  <div class="form-group-btp"><label>System ID / Client</label><input type="text" class="btp-input" id="admin-s4-client" placeholder="S4P / 100"></div>
+                </div>
+                <label style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;color:var(--btp-text-muted-dark);">Authentication</label>
+                <div class="auth-toggle" id="admin-s4-auth-toggle" style="margin-top:8px;">
+                  <button type="button" class="active" data-mode="userpass">Username / Password</button>
+                  <button type="button" data-mode="oauth">Client ID / Secret</button>
+                </div>
+                <div class="form-grid-btp" id="admin-s4-userpass-fields">
+                  <div class="form-group-btp"><label>Username</label><input type="text" class="btp-input" id="admin-s4-username" placeholder="S4HANA_TECH_USER"></div>
+                  <div class="form-group-btp"><label>Password</label><input type="password" class="btp-input" id="admin-s4-password"></div>
+                </div>
+                <div class="form-grid-btp hidden" id="admin-s4-oauth-fields">
+                  <div class="form-group-btp"><label>Client ID</label><input type="text" class="btp-input" id="admin-s4-client-id"></div>
+                  <div class="form-group-btp"><label>Client Secret</label><input type="password" class="btp-input" id="admin-s4-client-secret"></div>
+                </div>
+                <div class="mock-note"><i class="fa-solid fa-circle-info"></i> These credentials will be used once "Import to S/4HANA package" leaves preview — for now Test Connection just validates reachability, same as the mock test on the Set Connection screen.</div>
+                <div class="conn-test-row">
+                  <button class="btn-btp-action-solid" id="btn-admin-test-s4"><i class="fa-solid fa-plug-circle-check"></i> Test Connection</button>
+                  <div class="conn-status" id="admin-s4-test-status" style="display:none;"></div>
+                </div>
+              </div>
+
+            </div>
+            <footer class="btp-panel-footer">
+              <span></span>
+              <button class="btn-btp btn-btp-gold" id="btn-save-admin-defaults">Save Defaults <i class="fa-solid fa-check"></i></button>
+            </footer>
+          </div>
+
+          <!-- SCREEN: SET CONNECTION -->
+          <div class="btp-screen" id="screen-btp-connection">
+            <div class="panel-title-row"><h2>Set Connection</h2><span style="font-size:0.72rem;color:var(--btp-text-muted-dark);font-weight:600;">Opened because Lumi asked, or because the last connection test needs review</span></div>
+            <div style="padding:26px 32px; overflow-y:auto; flex-grow:1;">
+
+              <div class="form-group-btp" style="margin-bottom:20px;">
+                <label>Source Platform</label>
+                <div class="platform-grid" style="margin-left:0;max-width:100%;">
+                  <div class="platform-card" data-platform="mulesoft"><i class="fa-solid fa-diagram-project"></i><span>MuleSoft</span></div>
+                  <div class="platform-card" data-platform="pipo"><i class="fa-solid fa-shuffle"></i><span>SAP PI/PO</span></div>
+                  <div class="platform-card" data-platform="informatica"><i class="fa-solid fa-arrows-turn-to-dots"></i><span>Informatica</span></div>
+                  <div class="platform-card" data-platform="boomi"><i class="fa-solid fa-atom"></i><span>Dell Boomi</span></div>
+                </div>
+              </div>
+
+              <label style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;color:var(--btp-text-muted-dark);">How should I read your assets?</label>
+              <div class="auth-toggle" style="margin-top:8px;margin-bottom:20px;">
+                <button type="button" class="active" id="connect-mode-direct" data-connectmode="direct">Direct Connect</button>
+                <button type="button" id="connect-mode-upload" data-connectmode="upload">Upload File</button>
+              </div>
+
+              <!-- UPLOAD MODE -->
+              <div id="connect-upload-fields" class="hidden">
+                <div class="btp-drag-zone" id="upload-drop-zone">
+                  <div class="drag-icon"><i class="fa-solid fa-file-arrow-up"></i></div>
+                  <h3 id="upload-dropzone-title">Drop a MuleSoft asset file, or browse</h3>
+                  <p id="upload-dropzone-desc">Flow XML, DataWeave (.dwl), schema (.xsd/.wsdl), config (.yaml/.properties) — or a compiled artifact (.class, .jar, .dll, .so) if that's all you have</p>
+                  <span class="file-selector-btn">Browse Files</span>
+                  <input type="file" id="upload-file-input" style="display:none;">
+                </div>
+                <div id="upload-log" style="margin-top:14px;display:flex;flex-direction:column;gap:8px;"></div>
+                <div class="mock-note" style="margin-top:14px;"><i class="fa-solid fa-microchip"></i> If a file turns out to be compiled code, Lumi runs it through the SDAINTAI decompilation pipeline before it's added to your asset list.</div>
+              </div>
+
+              <!-- DIRECT CONNECT MODE -->
+              <div id="connect-direct-fields">
+              <div class="form-grid-btp" style="margin-bottom:20px;">
+                <div class="form-group-btp">
+                  <label>Platform Version / Runtime</label>
+                  <select class="btp-input" id="connection-version"></select>
+                </div>
+                <div class="form-group-btp">
+                  <label>Environment</label>
+                  <select class="btp-input" id="connection-env">
+                    <option>Production</option>
+                    <option selected>Sandbox</option>
+                    <option>Design</option>
+                  </select>
+                </div>
+              </div>
+
+              <label style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;color:var(--btp-text-muted-dark);">Source Authentication</label>
+              <div class="auth-toggle" style="margin-top:8px;">
+                <button type="button" class="active" id="auth-mode-userpass" data-mode="userpass">Username / Password</button>
+                <button type="button" id="auth-mode-oauth" data-mode="oauth">Client ID / Secret</button>
+              </div>
+
+              <div class="form-grid-btp" id="auth-userpass-fields">
+                <div class="form-group-btp">
+                  <label>Integration Username</label>
+                  <input type="text" class="btp-input" id="auth-username" value="daniel.smith@sdaintai-sandbox.io">
+                </div>
+                <div class="form-group-btp">
+                  <label>Password</label>
+                  <input type="password" class="btp-input" id="auth-password" value="Demo#Sandbox2026!">
+                </div>
+              </div>
+              <div class="form-grid-btp hidden" id="auth-oauth-fields">
+                <div class="form-group-btp">
+                  <label>Client ID</label>
+                  <input type="text" class="btp-input" id="auth-client-id" value="sdaintai-demo-7f3a91c2">
+                </div>
+                <div class="form-group-btp">
+                  <label>Client Secret</label>
+                  <input type="password" class="btp-input" id="auth-client-secret" value="demo-secret-9b41-sandbox-only">
+                </div>
+              </div>
+
+              <div class="form-grid-btp" style="margin-top:20px;">
+                <div class="form-group-btp">
+                  <label>Target — SAP Integration Suite Tenant</label>
+                  <input type="text" class="btp-input" id="target-tenant" value="sda-prod-eu10">
+                </div>
+                <div class="form-group-btp">
+                  <label>Target Region</label>
+                  <input type="text" class="btp-input" id="target-region" value="EU10 — Frankfurt">
+                </div>
+              </div>
+
+              <div class="mock-note"><i class="fa-solid fa-shield-halved"></i> Sandbox credentials for this walkthrough — captured and encrypted in the SDAINTAI Brain credential vault, the same path used in production.</div>
+
+              <div class="conn-test-row">
+                <button class="btn-btp-action-solid" id="btn-test-connection"><i class="fa-solid fa-plug-circle-check"></i> Test Connection</button>
+                <div class="conn-status" id="conn-test-status" style="display:none;"></div>
+                <button class="link-btn" id="btn-simulate-fail">simulate a connection issue</button>
+              </div>
+              </div>
+            </div>
+            <footer class="btp-panel-footer">
+              <button class="btn-btp btn-btp-cancel" onclick="window.location.href='index.html'">Cancel</button>
+              <button class="btn-btp btn-btp-gold" id="btn-save-connection" disabled>Save &amp; Continue <i class="fa-solid fa-chevron-right"></i></button>
+            </footer>
+          </div>
+
+          <!-- SCREEN: IMPORT ASSETS -->
+          <div class="btp-screen" id="screen-btp-assets">
+            <div class="panel-title-row">
+              <h2 id="assets-screen-title">Import Assets</h2>
+              <div class="panel-controls">
+                <button class="btn-btp-action-outline" id="btn-view-asset-tree" disabled title="Available once assets are scanned"><i class="fa-solid fa-sitemap"></i> <span id="btn-view-asset-tree-label">View Asset Tree</span></button>
+                <button class="btn-btp-action-solid" id="btn-import-assets-trigger"><i class="fa-solid fa-cloud-arrow-down"></i> <span id="btn-import-assets-trigger-label">Start Asset Scan</span></button>
+              </div>
+            </div>
+            <div style="padding:20px 24px 0;">
+              <div class="lumi-msg" id="assets-summary-msg" style="display:none;">
+                <div class="lumi-avatar idle"><div class="visor"></div></div>
+                <div class="lumi-bubble" id="assets-summary-text"></div>
+              </div>
+              <div class="lumi-choices" id="assets-summary-actions" style="display:none;margin-top:10px;">
+                <div class="lumi-chip" id="btn-show-asset-details">Show me the details</div>
+                <div class="lumi-chip primary" id="btn-continue-migration" style="pointer-events:none;opacity:0.5;">Continue to Plan</div>
+              </div>
+            </div>
+            <div class="btp-table-container hidden" id="assets-table-wrap">
+              <div class="assets-filter-chips" id="assets-filter-chips"></div>
+              <table class="btp-table">
+                <thead>
+                  <tr>
+                    <th>#</th><th id="th-asset-id">Asset ID</th><th id="th-asset-name">Name</th><th id="th-asset-type">Type</th>
+                    <th>Complexity</th><th>Convert %</th><th>Status</th><th></th>
+                  </tr>
+                </thead>
+                <tbody id="btp-assets-tbody"></tbody>
+              </table>
+            </div>
+            <footer class="btp-panel-footer">
+              <button class="btn-btp btn-btp-cancel" id="btn-back-to-connection"><i class="fa-solid fa-chevron-left"></i> Back</button>
+              <span></span>
+            </footer>
+          </div>
+
+          <!-- SCREEN: MIGRATION BUCKETS -->
+          <div class="btp-screen" id="screen-btp-buckets">
+            <div class="panel-title-row">
+              <h2>Migration Buckets</h2>
+              <span style="font-size:0.72rem;color:var(--btp-text-muted-dark);font-weight:600;">Opened on request — Lumi already proposed this grouping in chat</span>
+            </div>
+            <div class="btp-table-container">
+              <table class="btp-table">
+                <thead><tr><th><input type="checkbox" id="buckets-select-all"></th><th id="th-bucket-id">ID</th><th id="th-bucket-name">Name</th><th id="th-bucket-type">Type</th><th>Complexity</th><th>Deps</th><th>Status</th></tr></thead>
+                <tbody id="buckets-tbody"></tbody>
+              </table>
+            </div>
+            <footer class="btp-panel-footer">
+              <button class="btn-btp btn-btp-cancel" data-goto="assets"><i class="fa-solid fa-chevron-left"></i> Back</button>
+              <button class="btn-btp btn-btp-gold" id="btn-goto-wave-from-buckets">Define Wave <i class="fa-solid fa-chevron-right"></i></button>
+            </footer>
+          </div>
+
+          <!-- SCREEN: DEFINE WAVE & TEAM (absorbs Set Priorities — order sets priority) -->
+          <div class="btp-screen" id="screen-btp-wave" style="overflow-y:auto;">
+            <div class="panel-title-row">
+              <h2>Define Wave &amp; Team</h2>
+              <span style="font-size:0.72rem;color:var(--btp-text-muted-dark);font-weight:600;">Use the dropdown on any card to move it — position also sets priority</span>
+            </div>
+            <div class="section-label" id="wave-section-label">Assets &rarr; Waves</div>
+            <div class="wave-board" id="wave-board">
+              <div class="wave-col" data-wave="1">
+                <div class="wave-col-head"><b>Wave 1</b><span class="wave-priority-badge">Priority</span></div>
+                <div class="wave-cards" id="wave-col-1"></div>
+              </div>
+              <div class="wave-col" data-wave="2">
+                <div class="wave-col-head"><b>Wave 2</b><span></span></div>
+                <div class="wave-cards" id="wave-col-2"></div>
+              </div>
+              <div class="wave-col" data-wave="3">
+                <div class="wave-col-head"><b>Wave 3</b><span></span></div>
+                <div class="wave-cards" id="wave-col-3"></div>
+              </div>
+            </div>
+            <div class="wave-add-row" id="wave-add-row"></div>
+            <div class="structure-request">
+              <button class="btn-btp-action-outline" id="btn-validate-structure"><i class="fa-solid fa-sitemap"></i> Validate app structure&hellip;</button>
+            </div>
+            <div class="section-label">Team &rarr; Waves</div>
+            <div class="team-board" id="team-board"></div>
+            <footer class="btp-panel-footer">
+              <button class="btn-btp btn-btp-cancel" data-goto="buckets"><i class="fa-solid fa-chevron-left"></i> Back</button>
+              <button class="btn-btp btn-btp-gold" id="btn-continue-to-approve">Continue <i class="fa-solid fa-chevron-right"></i></button>
+            </footer>
+          </div>
+
+          <!-- SCREEN: APPROVE -->
+          <div class="btp-screen" id="screen-btp-approve">
+            <div class="panel-title-row"><h2>Approve Plan</h2><span style="font-size:0.72rem;color:var(--btp-text-muted-dark);font-weight:600;" id="approve-timestamp"></span></div>
+            <div class="approve-stats">
+              <div class="approve-stat"><div class="lbl" id="approve-total-assets-label">Total Assets</div><div class="val" id="approve-total-assets">—</div></div>
+              <div class="approve-stat"><div class="lbl">Waves</div><div class="val" id="approve-wave-count">—</div></div>
+              <div class="approve-stat"><div class="lbl">Team Members</div><div class="val" id="approve-team-count">—</div></div>
+              <div class="approve-stat"><div class="lbl">Est. Duration</div><div class="val" id="approve-duration">—</div></div>
+            </div>
+            <div class="approvals-list" id="approvals-list"></div>
+            <footer class="btp-panel-footer">
+              <button class="btn-btp btn-btp-cancel" data-goto="wave"><i class="fa-solid fa-chevron-left"></i> Back</button>
+              <div style="display:flex;gap:10px;">
+                <button class="btn-btp btn-btp-cancel" id="btn-export-pdf"><i class="fa-solid fa-file-pdf"></i> Export PDF</button>
+                <button class="btn-btp btn-btp-gold" id="btn-approve-start">Approve &amp; Start <i class="fa-solid fa-check"></i></button>
+              </div>
+            </footer>
+          </div>
+
+          <!-- SCREEN: MIGRATION COCKPIT (execute + monitor, merged) -->
+          <div class="btp-screen" id="screen-btp-cockpit" style="overflow-y:auto;">
+            <div class="exec-breadcrumb">Plan / <b>Execution</b></div>
+            <div class="panel-title-row" style="border-bottom:none;padding-bottom:4px;">
+              <div>
+                <h2 id="cockpit-screen-title">Migration Cockpit</h2>
+                <div class="exec-subtitle" id="cockpit-subtitle"></div>
+              </div>
+              <div class="panel-controls">
+                <button class="btn-btp-action-outline" id="btn-view-cockpit-tree"><i class="fa-solid fa-sitemap"></i> <span id="btn-view-cockpit-tree-label">View Object Tree</span></button>
+                <button class="btn-btp-action-outline exec-icon-btn" id="btn-refresh-cockpit" title="Refresh"><i class="fa-solid fa-rotate"></i></button>
+                <button class="btn-btp-action-outline exec-icon-btn" id="btn-download-zip" title="Download package (.zip)"><i class="fa-solid fa-file-zipper"></i></button>
+                <button class="btn-btp-action-outline exec-icon-btn" id="btn-revalidate-zip" title="Revalidate Package"><i class="fa-solid fa-shield-halved"></i></button>
+                <button class="btn-btp-action-outline exec-icon-btn" id="btn-migrate-sap2sap" title="Migrate SAP2SAP — remove OpenConnectors from an existing iFlow"><i class="fa-solid fa-right-left"></i></button>
+                <button class="btn-btp-action-outline exec-icon-btn danger" id="btn-delete-migration" title="Delete migration &amp; rescan"><i class="fa-solid fa-trash-can"></i></button>
+              </div>
+            </div>
+            <div class="cockpit-stats">
+              <div class="cockpit-stat"><div class="lbl">Overall Progress</div><div class="val" id="cockpit-overall">0%</div><div class="sub" id="cockpit-overall-sub">0 of 0 apps</div></div>
+              <div class="cockpit-stat"><div class="lbl">In Progress</div><div class="val" id="cockpit-inprogress">0</div><div class="sub" id="cockpit-inprogress-sub">&nbsp;</div></div>
+              <div class="cockpit-stat"><div class="lbl">Completed</div><div class="val" id="cockpit-completed">0</div><div class="sub" id="cockpit-completed-sub">On track</div></div>
+              <div class="cockpit-stat err"><div class="lbl">Errors</div><div class="val" id="cockpit-errors">0</div><div class="sub" id="cockpit-errors-sub">None raised</div></div>
+              <div class="cockpit-stat"><div class="lbl">Est. Time Remaining</div><div class="val" id="cockpit-time-remaining">0m</div><div class="sub" id="cockpit-time-remaining-sub">—</div></div>
+            </div>
+            <div class="cockpit-progress-track"><div class="cockpit-progress-fill" id="cockpit-progress-fill"></div></div>
+            <div class="wave-status-row" id="wave-status-row"></div>
+            <div class="pending-approvals-panel hidden" id="pending-approvals-panel"></div>
+
+            <div class="exec-tabs" id="exec-tabs">
+              <button class="exec-tab active" data-tab="list">Integration list</button>
+              <button class="exec-tab" data-tab="status">Migration status</button>
+              <button class="exec-tab" data-tab="readiness">Readiness</button>
+              <button class="exec-tab" data-tab="errors">Errors / issues <span id="exec-tab-errors-count">(0)</span></button>
+              <button class="exec-tab" data-tab="progress">Progress</button>
+              <button class="exec-tab" data-tab="execution">Migration execution</button>
+              <button class="exec-tab" data-tab="targetexec">Target execution</button>
+              <button class="exec-tab" data-tab="package">Integration package</button>
+              <button class="exec-tab" data-tab="report">Report</button>
+            </div>
+
+            <div class="exec-tab-panel active" id="exec-panel-list">
+              <div class="wave-filter-row">
+                <div class="wave-filter-chips" id="cockpit-wave-filter"></div>
+                <span class="wave-filter-count" id="cockpit-wave-filter-count"></span>
+              </div>
+              <div class="btp-table-container" style="margin-top:0;">
+                <table class="btp-table">
+                  <thead><tr><th>Wave</th><th id="th-cockpit-asset">Asset</th><th>Type</th><th title="Which of this source object's individual interfaces/iFlows this row is">Interface</th><th>Assignee</th><th>Status</th><th>iFlow Status</th><th>iFlow Step</th><th>iFlow Link</th><th>Insight</th><th>Download</th><th></th></tr></thead>
+                  <tbody id="cockpit-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="exec-tab-panel" id="exec-panel-status">
+              <div class="exec-panel-intro">
+                <h4>Migration status</h4>
+                <p id="exec-status-intro">Where every integration in scope stands right now.</p>
+              </div>
+              <div class="status-bucket-row" id="status-bucket-row"></div>
+              <div class="btp-table-container" style="margin-top:0;">
+                <table class="btp-table">
+                  <thead><tr><th>Wave</th><th>Total apps</th><th>Not started</th><th>Packaged</th><th>Converting</th><th>Converted</th><th>Blocked</th><th>In fix / parked</th></tr></thead>
+                  <tbody id="status-wave-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="exec-tab-panel" id="exec-panel-readiness">
+              <div class="exec-panel-intro">
+                <h4>Readiness</h4>
+                <p id="exec-readiness-intro"></p>
+              </div>
+              <div class="btp-table-container" style="margin-top:0;">
+                <table class="btp-table">
+                  <thead><tr><th>Wave</th><th id="th-readiness-name">Mule App / API Name</th><th>Owner</th><th>Owner staffed</th><th>In a package</th><th>No blocking issue</th><th>Effort</th><th>Readiness</th></tr></thead>
+                  <tbody id="readiness-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="exec-tab-panel" id="exec-panel-errors">
+              <div class="exec-panel-intro">
+                <p id="exec-errors-intro">0 blocking · 0 advisory. Blocking findings hold that asset until an owner resolves or parks it — the rest of the wave keeps converting. Advisories are semantic differences recorded during conversion; the artifact is complete and shippable, so execution never pauses for them.</p>
+              </div>
+              <div id="errors-issues-list"></div>
+            </div>
+
+            <div class="exec-tab-panel" id="exec-panel-progress">
+              <div class="exec-panel-intro">
+                <h4>Progress</h4>
+                <p id="exec-progress-intro"></p>
+              </div>
+              <div id="progress-wave-list"></div>
+            </div>
+
+            <div class="exec-tab-panel" id="exec-panel-execution">
+              <div class="exec-run-banner" id="exec-run-banner">
+                <div class="lumi-avatar idle"><div class="visor"></div></div>
+                <p>I'll run the waves in sequence and stop you only if something needs a decision — errors get routed to the owning team lead.</p>
+                <button class="btn-btp btn-btp-gold" id="btn-start-execution"><i class="fa-solid fa-play"></i> Start Execution</button>
+              </div>
+              <div class="exec-lumi-feed" id="exec-lumi-feed"></div>
+              <div class="exec-log-list" id="exec-log-list"></div>
+              <div class="exec-console" id="exec-console"></div>
+            </div>
+
+            <div class="exec-tab-panel" id="exec-panel-targetexec">
+              <div id="exec-target-is-wrap"></div>
+            </div>
+
+            <div class="exec-tab-panel" id="exec-panel-package">
+              <div class="btp-table-container" id="package-preview-wrap" style="margin-top:0;">
+                <div class="panel-title-row" style="padding:12px 16px;">
+                  <h3 id="package-preview-title" style="margin:0;font-size:0.92rem;">Integration Flow (iFlow) Package Preview</h3>
+                </div>
+                <div id="package-preview-body" style="padding:0 16px 16px;font-size:0.82rem;"></div>
+              </div>
+              <div class="export-row">
+                <button class="btn-export" id="btn-is-import-artifact"><i class="fa-solid fa-file-import"></i> IS Push and Import Artifact</button>
+                <button class="btn-export disabled" disabled><i class="fa-solid fa-server"></i> Import to S/4HANA package <span class="soon-tag">Coming soon</span></button>
+              </div>
+            </div>
+
+            <div class="exec-tab-panel" id="exec-panel-report">
+              <div class="exec-panel-intro">
+                <h4>Migration Report</h4>
+                <p id="exec-report-intro">Every converted, pushed, and migrated iFlow in one view — errors and complex iFlows carry an A2A developer dropdown right here so you can staff them without leaving the report.</p>
+              </div>
+              <div id="report-analytics"></div>
+              <div class="export-row" style="border-top:none;padding:0 0 14px;">
+                <button class="btn-export primary" id="btn-download-report-csv"><i class="fa-solid fa-file-csv"></i> Download Report (CSV)</button>
+              </div>
+              <div class="btp-table-container" style="margin-top:0;">
+                <table class="btp-table">
+                  <thead><tr><th>Wave</th><th>Asset</th><th title="Which of this source object's individual interfaces/iFlows this row is">Interface</th><th>Complexity</th><th>Status</th><th>iFlow Step</th><th>iFlow</th><th>A2A Developers (up to 8)</th></tr></thead>
+                  <tbody id="report-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="export-row exec-sticky-footer">
+              <button class="btn-export primary" id="btn-add-package"><i class="fa-solid fa-box-open"></i> Add Package</button>
+              <button class="btn-export" id="btn-start-execution-footer"><i class="fa-solid fa-play"></i> Start Execution</button>
+              <button class="btn-export primary" id="btn-export-is" disabled title="Available once at least one asset has converted successfully"><i class="fa-solid fa-cloud-arrow-up"></i> <span id="btn-export-is-label">Push to BTP Integration Suite</span></button>
+            </div>
+          </div>
+
+          <!-- SCREEN: CLOSE -->
+          <div class="btp-screen" id="screen-btp-close">
+            <div class="lumi-landing">
+              <div class="lumi-avatar lg success"><div class="visor"></div></div>
+              <div>
+                <h1>Migration complete</h1>
+                <p id="close-summary-text">All waves converted, 0 open errors.</p>
+              </div>
+              <div class="lumi-choices">
+                <div class="lumi-chip primary" id="btn-download-closure">Download closure report</div>
+                <div class="lumi-chip" id="btn-archive-project">Archive project</div>
+                <div class="lumi-chip" id="btn-save-brain">Save to Brain (LangChain DB)</div>
+                <div class="lumi-chip" id="btn-save-package">Save SDAINTAI Package</div>
+                <div class="lumi-chip ghost" id="btn-restart">Start another migration</div>
+                <div class="lumi-chip ghost danger" id="btn-delete-migration-close">Delete migration</div>
+              </div>
+            </div>
+            <div class="btp-table-container" id="closure-report-wrap" style="margin-top:22px;">
+              <div class="panel-title-row" style="padding:12px 16px;">
+                <h3 style="margin:0;font-size:0.92rem;">Closure Summary</h3>
+              </div>
+              <div id="closure-report-body" style="padding:0 16px 16px;font-size:0.82rem;"></div>
+            </div>
+          </div>
+
+          <!-- ==================== LUMI CHAT — docked as the default full-panel view; openScreen()/openDrawer() toggle .active exactly like every other .btp-screen ==================== -->
+          <div class="btp-screen lumi-drawer" id="lumi-drawer">
+            <div class="lumi-drawer-resize" id="lumi-drawer-resize" title="Drag to resize"></div>
+            <div class="lumi-drawer-header">
+              <div class="lumi-avatar idle" id="lumi-drawer-avatar"><div class="visor"></div></div>
+              <div class="who"><b>Lumi</b><span>Integration Migration Orchestrator</span></div>
+              <button class="lumi-drawer-close" id="lumi-drawer-position" title="Panel position: right (click to change)"><i class="fa-solid fa-arrows-left-right"></i></button>
+              <button class="lumi-drawer-close" id="lumi-drawer-minimize" title="Minimize"><i class="fa-solid fa-minus"></i></button>
+              <button class="lumi-drawer-close" id="lumi-drawer-fullscreen" title="Toggle fullscreen"><i class="fa-solid fa-expand"></i></button>
+              <button class="lumi-drawer-close" id="lumi-drawer-close" title="Close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="lumi-drawer-body" id="lumi-drawer-body"></div>
+            <div class="lumi-drawer-composer">
+              <input type="text" id="lumi-drawer-input" placeholder="Ask Lumi — try 'show me the app structure'">
+              <button id="lumi-drawer-send"><i class="fa-solid fa-paper-plane"></i></button>
+            </div>
+          </div>
+
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ==================== WAVE PROGRESS METER (small colorful widget, bottom-right) ==================== -->
+  <div class="wave-progress-meter hidden" id="wave-progress-meter" title="Migration progress by wave">
+    <div class="wpm-seg" data-wave="1" title="Wave 1"><div class="wpm-fill wpm-fill-1" id="wpm-fill-1"></div></div>
+    <div class="wpm-seg" data-wave="2" title="Wave 2"><div class="wpm-fill wpm-fill-2" id="wpm-fill-2"></div></div>
+    <div class="wpm-seg" data-wave="3" title="Wave 3"><div class="wpm-fill wpm-fill-3" id="wpm-fill-3"></div></div>
+  </div>
+
+  <!-- ==================== LUMI PERSISTENT MASCOT (every screen, bottom-right) ==================== -->
+  <div class="lumi-dock hidden" id="lumi-dock">
+    <div class="lumi-avatar idle" id="lumi-dock-avatar"><div class="visor"></div><span class="lumi-dock-badge"></span></div>
+    <div class="lumi-dock-label"><span class="status-dot"></span><span id="lumi-dock-label-text">Ask Lumi</span></div>
+  </div>
+
+  <!-- ==================== GENERIC MODAL ==================== -->
+  <div class="lumi-modal-overlay hidden" id="lumi-modal-overlay">
+    <div class="lumi-modal">
+      <div class="lumi-modal-head"><h4 id="lumi-modal-title">Title</h4><button id="lumi-modal-close"><i class="fa-solid fa-xmark"></i></button></div>
+      <div class="lumi-modal-body" id="lumi-modal-body"></div>
+      <div class="lumi-modal-foot" id="lumi-modal-foot"></div>
+    </div>
+  </div>
+
+  <div class="notification-container" id="toast-container"></div>
+  <script src="jszip.min.js"></script>
+  <script src="btp_app.js?v=lumi30"></script>
+</body>
+</html>

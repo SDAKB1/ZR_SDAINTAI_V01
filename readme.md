@@ -100,3 +100,48 @@ mbt build -t mtar/
 - [SAP CAP Documentation](https://cap.cloud.sap)
 - [LangChain JS](https://js.langchain.com)
 - [LangGraph JS](https://langchain-ai.github.io/langgraphjs/)
+
+## ZR_SDAINTAI_V01 — scope of this repo
+
+This repo is a scoped-down copy of SDAINTAI focused on one page:
+`app/aiconx/webapp/btp_cockpit.html` and its variant
+`btp_cockpit_ZR_SDAINTAI_V01.html` (plus `btp_app.js` / `btp_style.css` /
+`btp_lumi.css`, shared by both). It does not carry the BW Cockpit or the
+other standalone apps from the main SDAINTAI repo.
+
+## Developer workflow: one branch + one local Docker preview per developer
+
+Each developer works on their own branch and previews their own changes
+in their own local Docker container — nobody's build or `cf` deploy can
+ever touch anyone else's work or the shared production route
+(`sdaintai.cfapps.us10.hana.ondemand.com`, which is already at its CF
+route quota, so new per-developer CF routes aren't available right now).
+
+1. Clone the repo and create your own branch:
+   ```bash
+   git clone https://github.com/SDAKB1/ZR_SDAINTAI_V01.git
+   cd ZR_SDAINTAI_V01
+   git checkout -b <yourname>/<short-feature-name>
+   ```
+2. Make your changes under `app/aiconx/webapp/` (e.g. edit
+   `btp_cockpit_ZR_SDAINTAI_V01.html`, `btp_app.js`, `btp_style.css`).
+3. Preview locally with Docker — no CF route, no quota, fully isolated:
+   ```bash
+   docker compose -f docker-compose.dev.yml up --build dev1
+   ```
+   Open `http://localhost:8081/btp_cockpit_ZR_SDAINTAI_V01.html`.
+
+   `docker-compose.dev.yml` has one service block per developer
+   (`dev1` on port 8081, `dev2` on port 8082, ...). If you're the next
+   developer, copy the commented `dev3` block, give it your own name/port,
+   and use that instead of `dev1`/`dev2` — don't reuse someone else's block.
+4. Commit and push your branch, then open a PR into `main` when ready:
+   ```bash
+   git push -u origin <yourname>/<short-feature-name>
+   ```
+5. Only merge to `main` — and only run a real `cf deploy` /
+   `mbt build -t mtar/` — when the change is actually meant to ship. The
+   local Docker container is for preview only; it's a separate thing from
+   the `containerize.yaml` / `chart/` (Helm) / `Jenkinsfile` setup already
+   in this repo, which is the real build-and-deploy pipeline for
+   Kubernetes/CF, not a per-developer sandbox.
