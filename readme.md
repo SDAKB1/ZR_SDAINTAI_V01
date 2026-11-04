@@ -6,7 +6,7 @@ SAP CAP-based AI Connectivity Platform with integrated Brain AI system powered b
 
 File or Folder | Purpose
 ---------|----------
-`app/` | UI frontends (BW Cockpit, AICONX console, admin apps)
+`app/` | UI frontends (BTP Cockpit, AICONX console, admin apps)
 `db/` | Domain models — including `brain-schema.cds` for Brain AI entities
 `srv/` | CAP service handlers — including `brain-service.cds/.js`
 `srv/ai/` | Brain AI modules (LangGraph pipeline, vector store, config)

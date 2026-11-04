@@ -189,7 +189,7 @@ graph LR
 | Artifact | Technology | Deployment unit |
 |---|---|---|
 | SDAINT AI Brain platform (CAP, Node.js 20) | `mta.yaml` (ID `SDAINTAI`) | BAIP Cloud Foundry, MTA (MBT) |
-| Static web console (SDAINT-AI + BW/BTP cockpits) | `mta-sdaintai.yaml` (staticfile buildpack, 64M) | CF route `sdaintai.cfapps.us10.hana.ondemand.com` |
+| Static web console (SDAINT-AI BTP cockpit) | `mta-sdaintai.yaml` (staticfile buildpack, 64M) | CF route `sdaintai.cfapps.us10.hana.ondemand.com` |
 | HANA schema (CDS/HDI) | `db/*.cds` | HDI container via MTA |
 | iFlow templates (Patterns A/B/C) | IS artifacts | IS Content API / Figaf CI-CD |
 | Security descriptor | `xs-security.json` | XSUAA service instance |

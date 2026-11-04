@@ -101,7 +101,7 @@ cds.on('bootstrap', (app) => {
     res.json(readDesignRequests());
   });
 
-  // Serves the aiconx frontend (bw_cockpit.html etc.) from this same app/origin,
+  // Serves the aiconx frontend (btp_cockpit.html etc.) from this same app/origin,
   // so its relative fetch('/odata/v4/documents/...') calls reach this backend
   // instead of 404ing against a separate static-only host.
   app.use(express.static(path.join(__dirname, '..', 'app', 'aiconx', 'webapp')));

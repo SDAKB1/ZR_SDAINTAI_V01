@@ -1,7 +1,7 @@
 _schema-version: 3.3.0
 ID: sdaintai
 version: 0.0.14
-description: "SDA-INTAI Platform — Static Web Console (SDAINT-AI + BW Cockpits) + Brain AI (LangChain/LangGraph)"
+description: "SDA-INTAI Platform — Static Web Console (SDAINT-AI BTP Cockpit) + Brain AI (LangChain/LangGraph)"
 
 parameters:
   enable-parallel-deployments: true
