@@ -117,10 +117,12 @@ function generateBulkAssets(platform, count, startIndex, existingNames) {
     const type = vocab.types[Math.floor(rand() * vocab.types.length)];
     const id = `G${String(startIndex + i + 1).padStart(4, '0')}`;
     const tree = [
-      { kind: vocab.treeKind, name: `${name}-main`, ok: true, children: [
-        leafTree(vocab.leafKinds[0], `${name}-${vocab.leafKinds[0]}-1`, true),
-        leafTree(vocab.leafKinds[1], `${name}-${vocab.leafKinds[1]}-1`, !flagged)
-      ] }
+      {
+        kind: vocab.treeKind, name: `${name}-main`, ok: true, children: [
+          leafTree(vocab.leafKinds[0], `${name}-${vocab.leafKinds[0]}-1`, true),
+          leafTree(vocab.leafKinds[1], `${name}-${vocab.leafKinds[1]}-1`, !flagged)
+        ]
+      }
     ];
     if (tier === 'High') tree.push(leafTree(vocab.leafKinds[2] || vocab.leafKinds[0], `${name}-${vocab.leafKinds[2] || vocab.leafKinds[0]}-2`, !flagged));
     out.push({ id, name, type, tier, deps, status, flowCount, tree, bulk: true });
@@ -130,90 +132,128 @@ function generateBulkAssets(platform, count, startIndex, existingNames) {
 
 const ASSET_SETS = {
   mulesoft: [
-    { id: 'A001', name: 'order-process-api', type: 'App', tier: 'Medium', deps: 4, status: 'Ready',
+    {
+      id: 'A001', name: 'order-process-api', type: 'App', tier: 'Medium', deps: 4, status: 'Ready',
       tree: [
-        { kind: 'flow', name: 'order-process-main-flow', ok: true, children: [
-          leafTree('sub-flow', 'validate-order-subflow', true),
-          leafTree('connector', 'salesforce-connector (Opportunity)', true),
-          leafTree('connector', 'sap-erp-connector (BAPI_SALESORDER_CREATEFROMDAT2)', true),
-          leafTree('transform', 'order-to-sap.dwl', true)
-        ]},
+        {
+          kind: 'flow', name: 'order-process-main-flow', ok: true, children: [
+            leafTree('sub-flow', 'validate-order-subflow', true),
+            leafTree('connector', 'salesforce-connector (Opportunity)', true),
+            leafTree('connector', 'sap-erp-connector (BAPI_SALESORDER_CREATEFROMDAT2)', true),
+            leafTree('transform', 'order-to-sap.dwl', true)
+          ]
+        },
         leafTree('flow', 'order-error-handler-flow', true),
         leafTree('properties', 'order-process-api.properties.yaml', true),
         leafTree('schema', 'order-response.xsd', true)
-      ] },
-    { id: 'A002', name: 'customer-sync-flow', type: 'Flow', tier: 'Simple', deps: 2, status: 'Ready',
+      ]
+    },
+    {
+      id: 'A002', name: 'customer-sync-flow', type: 'Flow', tier: 'Simple', deps: 2, status: 'Ready',
       tree: [
-        { kind: 'flow', name: 'customer-sync-main-flow', ok: true, children: [
-          leafTree('connector', 'salesforce-connector (Account)', true),
-          leafTree('transform', 'account-to-bp.dwl', true)
-        ] }
-      ] },
-    { id: 'A003', name: 'invoice-router', type: 'Flow', tier: 'Medium', deps: 3, status: 'Ready',
+        {
+          kind: 'flow', name: 'customer-sync-main-flow', ok: true, children: [
+            leafTree('connector', 'salesforce-connector (Account)', true),
+            leafTree('transform', 'account-to-bp.dwl', true)
+          ]
+        }
+      ]
+    },
+    {
+      id: 'A003', name: 'invoice-router', type: 'Flow', tier: 'Medium', deps: 3, status: 'Ready',
       tree: [
-        { kind: 'flow', name: 'invoice-router-main-flow', ok: true, children: [
-          leafTree('connector', 'billing-db-connector', true),
-          leafTree('transform', 'invoice-to-billingdoc.dwl', true)
-        ] }
-      ] },
-    { id: 'A004', name: 'sap-erp-connector', type: 'Connector', tier: 'Medium', deps: 1, status: 'Warning',
-      tree: [ leafTree('connector', 'sap-erp-connector (shared lib)', true), leafTree('properties', 'sap-erp-connector.properties.yaml', false) ] },
-    { id: 'A005', name: 'payment-callback-api', type: 'App', tier: 'Simple', deps: 2, status: 'Ready',
+        {
+          kind: 'flow', name: 'invoice-router-main-flow', ok: true, children: [
+            leafTree('connector', 'billing-db-connector', true),
+            leafTree('transform', 'invoice-to-billingdoc.dwl', true)
+          ]
+        }
+      ]
+    },
+    {
+      id: 'A004', name: 'sap-erp-connector', type: 'Connector', tier: 'Medium', deps: 1, status: 'Warning',
+      tree: [leafTree('connector', 'sap-erp-connector (shared lib)', true), leafTree('properties', 'sap-erp-connector.properties.yaml', false)]
+    },
+    {
+      id: 'A005', name: 'payment-callback-api', type: 'App', tier: 'Simple', deps: 2, status: 'Ready',
       tree: [
-        { kind: 'flow', name: 'payment-callback-main-flow', ok: true, children: [
-          leafTree('connector', 'http-listener', true)
-        ] }
-      ] },
-    { id: 'A006', name: 'partner-edi-mapping', type: 'Mapping', tier: 'High', deps: 12, status: 'Review',
+        {
+          kind: 'flow', name: 'payment-callback-main-flow', ok: true, children: [
+            leafTree('connector', 'http-listener', true)
+          ]
+        }
+      ]
+    },
+    {
+      id: 'A006', name: 'partner-edi-mapping', type: 'Mapping', tier: 'High', deps: 12, status: 'Review',
       tree: [
-        { kind: 'flow', name: 'edi-inbound-flow', ok: true, children: [
-          leafTree('transform', 'edi-850-to-po.dwl', false)
-        ] },
+        {
+          kind: 'flow', name: 'edi-inbound-flow', ok: true, children: [
+            leafTree('transform', 'edi-850-to-po.dwl', false)
+          ]
+        },
         leafTree('schema', 'edi-envelope.xsd', false)
-      ] },
+      ]
+    },
     // Business Partner: one domain, three separate Kafka-carried events (created/updated/sync) —
     // the exact scenario walked through in the MuleSoft-SDA-Exit deck's Kafka slides. Flagged
     // Review by default so it lands in front of a reviewer, same as the deck's narrative.
-    { id: 'A007', name: 'business-partner-sync', type: 'App', tier: 'Medium', deps: 3, status: 'Review',
+    {
+      id: 'A007', name: 'business-partner-sync', type: 'App', tier: 'Medium', deps: 3, status: 'Review',
       tree: [
-        { kind: 'flow', name: 'business-partner-sync-main-flow', ok: true, children: [
-          leafTree('connector', 'sap-idoc-out', true),
-          kafkaLeaf('connector', 'kafka-bp-created', 'IS-KAFKA_E001', 'bp-events-created', true),
-          kafkaLeaf('connector', 'kafka-bp-updated', 'IS-KAFKA_E002', 'bp-events-updated', true),
-          kafkaLeaf('connector', 'kafka-bp-sync', 'IS-KAFKA_E003', 'bp-events-sync', true),
-          leafTree('transform', 'bp-mapping.dwl', true)
-        ] }
-      ] }
+        {
+          kind: 'flow', name: 'business-partner-sync-main-flow', ok: true, children: [
+            leafTree('connector', 'sap-idoc-out', true),
+            kafkaLeaf('connector', 'kafka-bp-created', 'IS-KAFKA_E001', 'bp-events-created', true),
+            kafkaLeaf('connector', 'kafka-bp-updated', 'IS-KAFKA_E002', 'bp-events-updated', true),
+            kafkaLeaf('connector', 'kafka-bp-sync', 'IS-KAFKA_E003', 'bp-events-sync', true),
+            leafTree('transform', 'bp-mapping.dwl', true)
+          ]
+        }
+      ]
+    }
   ],
   pipo: [
-    { id: 'I001', name: 'Material Master', type: 'ICO', tier: 'Simple', deps: 1, status: 'Ready',
-      tree: [ leafTree('sender-channel', 'MATMAS_Sender_File', true), leafTree('receiver-channel', 'MATMAS_Receiver_IDoc', true), leafTree('message-mapping', 'MATMAS07_to_MM01', true) ] },
-    { id: 'I002', name: 'Customer Master', type: 'ICO', tier: 'Simple', deps: 1, status: 'Ready',
-      tree: [ leafTree('sender-channel', 'DEBMAS_Sender_IDoc', true), leafTree('receiver-channel', 'DEBMAS_Receiver_Proxy', true), leafTree('message-mapping', 'DEBMAS08_to_BP', true) ] },
-    { id: 'I003', name: 'Sales Orders', type: 'ICO', tier: 'Medium', deps: 3, status: 'Ready',
-      tree: [ leafTree('sender-channel', 'ORDERS_Sender_HTTP', true), leafTree('operation-mapping', 'ORDERS05_to_VA01', true), leafTree('value-mapping', 'SalesOrg_ValueMap', true) ] },
-    { id: 'I004', name: 'Delivery', type: 'ICO', tier: 'Medium', deps: 2, status: 'Warning',
-      tree: [ leafTree('sender-channel', 'DESADV_Sender_IDoc', true), leafTree('message-mapping', 'DELVRY03_to_VL01N', false) ] },
-    { id: 'I005', name: 'Invoice', type: 'ICO', tier: 'Medium', deps: 2, status: 'Ready',
-      tree: [ leafTree('sender-channel', 'INVOIC_Sender_IDoc', true), leafTree('message-mapping', 'INVOIC02_to_VF01', true) ] },
-    { id: 'I006', name: 'FI Document', type: 'ICO', tier: 'High', deps: 6, status: 'Review',
-      tree: [ leafTree('sender-channel', 'FIDOC_Sender_Proxy', true), leafTree('message-mapping', 'FIDOC_to_BAPI_ACC_POST', false), leafTree('value-mapping', 'GLAccount_ValueMap', false) ] }
+    {
+      id: 'I001', name: 'Material Master', type: 'ICO', tier: 'Simple', deps: 1, status: 'Ready',
+      tree: [leafTree('sender-channel', 'MATMAS_Sender_File', true), leafTree('receiver-channel', 'MATMAS_Receiver_IDoc', true), leafTree('message-mapping', 'MATMAS07_to_MM01', true)]
+    },
+    {
+      id: 'I002', name: 'Customer Master', type: 'ICO', tier: 'Simple', deps: 1, status: 'Ready',
+      tree: [leafTree('sender-channel', 'DEBMAS_Sender_IDoc', true), leafTree('receiver-channel', 'DEBMAS_Receiver_Proxy', true), leafTree('message-mapping', 'DEBMAS08_to_BP', true)]
+    },
+    {
+      id: 'I003', name: 'Sales Orders', type: 'ICO', tier: 'Medium', deps: 3, status: 'Ready',
+      tree: [leafTree('sender-channel', 'ORDERS_Sender_HTTP', true), leafTree('operation-mapping', 'ORDERS05_to_VA01', true), leafTree('value-mapping', 'SalesOrg_ValueMap', true)]
+    },
+    {
+      id: 'I004', name: 'Delivery', type: 'ICO', tier: 'Medium', deps: 2, status: 'Warning',
+      tree: [leafTree('sender-channel', 'DESADV_Sender_IDoc', true), leafTree('message-mapping', 'DELVRY03_to_VL01N', false)]
+    },
+    {
+      id: 'I005', name: 'Invoice', type: 'ICO', tier: 'Medium', deps: 2, status: 'Ready',
+      tree: [leafTree('sender-channel', 'INVOIC_Sender_IDoc', true), leafTree('message-mapping', 'INVOIC02_to_VF01', true)]
+    },
+    {
+      id: 'I006', name: 'FI Document', type: 'ICO', tier: 'High', deps: 6, status: 'Review',
+      tree: [leafTree('sender-channel', 'FIDOC_Sender_Proxy', true), leafTree('message-mapping', 'FIDOC_to_BAPI_ACC_POST', false), leafTree('value-mapping', 'GLAccount_ValueMap', false)]
+    }
   ],
   informatica: [
-    { id: 'M001', name: 'material-master-mapping', type: 'Mapping', tier: 'Simple', deps: 1, status: 'Ready', tree: [ leafTree('mapping', 'm_material_master', true), leafTree('session', 's_material_master', true) ] },
-    { id: 'M002', name: 'customer-master-mapping', type: 'Mapping', tier: 'Simple', deps: 1, status: 'Ready', tree: [ leafTree('mapping', 'm_customer_master', true), leafTree('session', 's_customer_master', true) ] },
-    { id: 'M003', name: 'sales-order-workflow', type: 'Workflow', tier: 'Medium', deps: 3, status: 'Ready', tree: [ leafTree('workflow', 'wf_sales_order', true), leafTree('mapping', 'm_sales_order', true) ] },
-    { id: 'M004', name: 'delivery-workflow', type: 'Workflow', tier: 'Medium', deps: 2, status: 'Warning', tree: [ leafTree('workflow', 'wf_delivery', true), leafTree('mapping', 'm_delivery', false) ] },
-    { id: 'M005', name: 'invoice-mapping', type: 'Mapping', tier: 'Medium', deps: 2, status: 'Ready', tree: [ leafTree('mapping', 'm_invoice', true), leafTree('session', 's_invoice', true) ] },
-    { id: 'M006', name: 'fi-posting-workflow', type: 'Workflow', tier: 'High', deps: 5, status: 'Review', tree: [ leafTree('workflow', 'wf_fi_posting', true), leafTree('mapping', 'm_fi_posting', false) ] }
+    { id: 'M001', name: 'material-master-mapping', type: 'Mapping', tier: 'Simple', deps: 1, status: 'Ready', tree: [leafTree('mapping', 'm_material_master', true), leafTree('session', 's_material_master', true)] },
+    { id: 'M002', name: 'customer-master-mapping', type: 'Mapping', tier: 'Simple', deps: 1, status: 'Ready', tree: [leafTree('mapping', 'm_customer_master', true), leafTree('session', 's_customer_master', true)] },
+    { id: 'M003', name: 'sales-order-workflow', type: 'Workflow', tier: 'Medium', deps: 3, status: 'Ready', tree: [leafTree('workflow', 'wf_sales_order', true), leafTree('mapping', 'm_sales_order', true)] },
+    { id: 'M004', name: 'delivery-workflow', type: 'Workflow', tier: 'Medium', deps: 2, status: 'Warning', tree: [leafTree('workflow', 'wf_delivery', true), leafTree('mapping', 'm_delivery', false)] },
+    { id: 'M005', name: 'invoice-mapping', type: 'Mapping', tier: 'Medium', deps: 2, status: 'Ready', tree: [leafTree('mapping', 'm_invoice', true), leafTree('session', 's_invoice', true)] },
+    { id: 'M006', name: 'fi-posting-workflow', type: 'Workflow', tier: 'High', deps: 5, status: 'Review', tree: [leafTree('workflow', 'wf_fi_posting', true), leafTree('mapping', 'm_fi_posting', false)] }
   ],
   boomi: [
-    { id: 'P001', name: 'material-master-process', type: 'Process', tier: 'Simple', deps: 1, status: 'Ready', tree: [ leafTree('process', 'PRC_MaterialMaster', true), leafTree('connector', 'SAP Connector', true) ] },
-    { id: 'P002', name: 'customer-master-process', type: 'Process', tier: 'Simple', deps: 1, status: 'Ready', tree: [ leafTree('process', 'PRC_CustomerMaster', true), leafTree('connector', 'SAP Connector', true) ] },
-    { id: 'P003', name: 'sales-order-process', type: 'Process', tier: 'Medium', deps: 3, status: 'Ready', tree: [ leafTree('process', 'PRC_SalesOrder', true), leafTree('map', 'MAP_Order_to_VA01', true) ] },
-    { id: 'P004', name: 'delivery-process', type: 'Process', tier: 'Medium', deps: 2, status: 'Warning', tree: [ leafTree('process', 'PRC_Delivery', true), leafTree('map', 'MAP_Delivery_to_VL01N', false) ] },
-    { id: 'P005', name: 'invoice-process', type: 'Process', tier: 'Medium', deps: 2, status: 'Ready', tree: [ leafTree('process', 'PRC_Invoice', true), leafTree('map', 'MAP_Invoice_to_VF01', true) ] },
-    { id: 'P006', name: 'fi-posting-process', type: 'Process', tier: 'High', deps: 5, status: 'Review', tree: [ leafTree('process', 'PRC_FIPosting', true), leafTree('map', 'MAP_FI_to_BAPI', false) ] }
+    { id: 'P001', name: 'material-master-process', type: 'Process', tier: 'Simple', deps: 1, status: 'Ready', tree: [leafTree('process', 'PRC_MaterialMaster', true), leafTree('connector', 'SAP Connector', true)] },
+    { id: 'P002', name: 'customer-master-process', type: 'Process', tier: 'Simple', deps: 1, status: 'Ready', tree: [leafTree('process', 'PRC_CustomerMaster', true), leafTree('connector', 'SAP Connector', true)] },
+    { id: 'P003', name: 'sales-order-process', type: 'Process', tier: 'Medium', deps: 3, status: 'Ready', tree: [leafTree('process', 'PRC_SalesOrder', true), leafTree('map', 'MAP_Order_to_VA01', true)] },
+    { id: 'P004', name: 'delivery-process', type: 'Process', tier: 'Medium', deps: 2, status: 'Warning', tree: [leafTree('process', 'PRC_Delivery', true), leafTree('map', 'MAP_Delivery_to_VL01N', false)] },
+    { id: 'P005', name: 'invoice-process', type: 'Process', tier: 'Medium', deps: 2, status: 'Ready', tree: [leafTree('process', 'PRC_Invoice', true), leafTree('map', 'MAP_Invoice_to_VF01', true)] },
+    { id: 'P006', name: 'fi-posting-process', type: 'Process', tier: 'High', deps: 5, status: 'Review', tree: [leafTree('process', 'PRC_FIPosting', true), leafTree('map', 'MAP_FI_to_BAPI', false)] }
   ]
 };
 // Scale each hand-authored set up to a realistic large-migration size — SDAINTAI's whole
@@ -379,6 +419,354 @@ const $ = (id) => document.getElementById(id);
 const qs = (sel, root) => (root || document).querySelector(sel);
 const qsa = (sel, root) => Array.from((root || document).querySelectorAll(sel));
 
+// ==================== LANGUAGE / i18n SUPPORT ====================
+// Internationalization system supporting English (en), German (de), and French (fr).
+// Translations are loaded from app/_i18n/i18n*.properties files. The user's
+// language preference is persisted in localStorage so it survives page reloads.
+const LANGUAGE_KEY = 'sdaintai_language';
+const SUPPORTED_LANGUAGES = {
+  en: { label: 'English', nativeLabel: 'English', flag: '🇬🇧' },
+  de: { label: 'German', nativeLabel: 'Deutsch', flag: '🇩🇪' },
+  fr: { label: 'French', nativeLabel: 'Français', flag: '🇫🇷' }
+};
+// In-memory translation dictionary, keyed by language code
+const I18N_CACHE = {};
+// Current active language
+let currentLanguage = 'en';
+
+// UI text that needs translation (hardcoded strings in the app)
+// This maps element selectors/IDs to translation keys or direct translations
+const UI_TRANSLATIONS = {
+  en: {
+    // Landing
+    'landing-greeting-template': "Hi {name}! I'm Lumi.",
+    'landing-sub': "I'm your Integration Migration Orchestrator, powered by SAP Joule.",
+    'btn-start-new': 'Start a new migration',
+    'btn-open-cockpit-shortcut': 'Open my cockpit',
+    // Sidebar
+    'nav-section-active': 'Active projects',
+    'nav-section-archived': 'Archived projects',
+    'archived-empty': 'None yet',
+    'nav-admin': 'Settings',
+    'persona-label': 'Persona lens',
+    // Admin screen
+    'admin-title': 'Admin — Defaults',
+    'admin-subtitle': 'Org-wide defaults for new migrations — applied the next time you start one, saved for this session',
+    'admin-section-connection': 'Default Connection',
+    'admin-section-language': 'Language Preferences',
+    'admin-section-agents': 'Migration Acceleration — A2A Agents',
+    'admin-section-brain': 'AI Engine — SDAINTAI Brain (LangGraph / Claude)',
+    'admin-section-alm': 'Target Systems — ALM',
+    'admin-section-pipo': 'Source System — SAP PI/PO (Process Orchestration)',
+    'admin-section-team': 'Team Members',
+    'admin-section-ai-agents': 'AI Agents (A2A)',
+    'admin-section-s4': 'System Connection — SAP S/4HANA',
+    'admin-label-platform': 'Default Source Platform',
+    'admin-label-env': 'Default Environment',
+    'admin-label-auth': 'Default Authentication',
+    'admin-label-username': 'Default Integration Username',
+    'admin-label-password': 'Default Password',
+    'admin-label-tenant': 'Default Target — SAP Integration Suite Tenant',
+    'admin-label-region': 'Default Target Region',
+    'admin-label-language': 'Interface Language',
+    'admin-language-hint': 'Select your preferred language. The UI will update immediately. French keyboard input is supported in all text fields.',
+    'btn-save-admin-defaults': 'Save Defaults',
+    // Connection screen
+    'screen-connection-title': 'Set Connection',
+    'screen-connection-subtitle': 'Opened because Lumi asked, or because the last connection test needs review',
+    'label-source-platform': 'Source Platform',
+    'label-how-read-assets': 'How should I read your assets?',
+    'btn-direct-connect': 'Direct Connect',
+    'btn-upload-file': 'Upload File',
+    'label-platform-version': 'Platform Version / Runtime',
+    'label-environment': 'Environment',
+    'label-source-auth': 'Source Authentication',
+    'btn-userpass': 'Username / Password',
+    'btn-oauth': 'Client ID / Secret',
+    'label-int-username': 'Integration Username',
+    'label-password': 'Password',
+    'label-client-id': 'Client ID',
+    'label-client-secret': 'Client Secret',
+    'label-target-tenant': 'Target — SAP Integration Suite Tenant',
+    'label-target-region': 'Target Region',
+    'btn-test-connection': 'Test Connection',
+    'btn-save-continue': 'Save & Continue',
+    'btn-cancel': 'Cancel',
+    // Assets screen
+    'screen-assets-title': 'Import Assets',
+    'btn-start-scan': 'Start Asset Scan',
+    'btn-view-tree': 'View Asset Tree',
+    // Cockpit
+    'screen-cockpit-title': 'Migration Cockpit',
+    'cockpit-overall': 'Overall Progress',
+    'cockpit-inprogress': 'In Progress',
+    'cockpit-completed': 'Completed',
+    'cockpit-errors': 'Errors',
+    'cockpit-time': 'Est. Time Remaining',
+    // Common
+    'production': 'Production',
+    'sandbox': 'Sandbox',
+    'design': 'Design'
+  },
+  de: {
+    'landing-greeting-template': "Hallo {name}! Ich bin Lumi.",
+    'landing-sub': "Ich bin Ihr Integration Migration Orchestrator, unterstützt von SAP Joule.",
+    'btn-start-new': 'Neue Migration starten',
+    'btn-open-cockpit-shortcut': 'Mein Cockpit öffnen',
+    'nav-section-active': 'Aktive Projekte',
+    'nav-section-archived': 'Archivierte Projekte',
+    'archived-empty': 'Noch keine',
+    'nav-admin': 'Einstellungen',
+    'persona-label': 'Persona-Linse',
+    'admin-title': 'Admin — Standardwerte',
+    'admin-subtitle': 'Organisationsweite Standardwerte für neue Migrationen — werden bei der nächsten Migration angewendet',
+    'admin-section-connection': 'Standard-Verbindung',
+    'admin-section-language': 'Spracheinstellungen',
+    'admin-section-agents': 'Migrationsbeschleunigung — A2A-Agenten',
+    'admin-section-brain': 'KI-Engine — SDAINTAI Brain (LangGraph / Claude)',
+    'admin-section-alm': 'Zielsysteme — ALM',
+    'admin-section-pipo': 'Quellsystem — SAP PI/PO (Process Orchestration)',
+    'admin-section-team': 'Teammitglieder',
+    'admin-section-ai-agents': 'KI-Agenten (A2A)',
+    'admin-section-s4': 'Systemverbindung — SAP S/4HANA',
+    'admin-label-platform': 'Standard-Quellplattform',
+    'admin-label-env': 'Standardumgebung',
+    'admin-label-auth': 'Standard-Authentifizierung',
+    'admin-label-username': 'Standard-Integrationsbenutzername',
+    'admin-label-password': 'Standardpasswort',
+    'admin-label-tenant': 'Standardziel — SAP Integration Suite Tenant',
+    'admin-label-region': 'Standard-Zielregion',
+    'admin-label-language': 'Oberflächensprache',
+    'admin-language-hint': 'Wählen Sie Ihre bevorzugte Sprache. Die Benutzeroberfläche wird sofort aktualisiert. Französische Tastatureingabe wird in allen Textfeldern unterstützt.',
+    'btn-save-admin-defaults': 'Standardwerte speichern',
+    'screen-connection-title': 'Verbindung einrichten',
+    'screen-connection-subtitle': 'Geöffnet, weil Lumi fragte oder die letzte Verbindungsprüfung überprüft werden muss',
+    'label-source-platform': 'Quellplattform',
+    'label-how-read-assets': 'Wie soll ich Ihre Assets lesen?',
+    'btn-direct-connect': 'Direktverbindung',
+    'btn-upload-file': 'Datei hochladen',
+    'label-platform-version': 'Plattformversion / Laufzeit',
+    'label-environment': 'Umgebung',
+    'label-source-auth': 'Quell-Authentifizierung',
+    'btn-userpass': 'Benutzername / Passwort',
+    'btn-oauth': 'Client-ID / Geheimnis',
+    'label-int-username': 'Integrations-Benutzername',
+    'label-password': 'Passwort',
+    'label-client-id': 'Client-ID',
+    'label-client-secret': 'Client-Geheimnis',
+    'label-target-tenant': 'Ziel — SAP Integration Suite Tenant',
+    'label-target-region': 'Zielregion',
+    'btn-test-connection': 'Verbindung testen',
+    'btn-save-continue': 'Speichern & Weiter',
+    'btn-cancel': 'Abbrechen',
+    'screen-assets-title': 'Assets importieren',
+    'btn-start-scan': 'Asset-Scan starten',
+    'btn-view-tree': 'Asset-Baum anzeigen',
+    'screen-cockpit-title': 'Migrations-Cockpit',
+    'cockpit-overall': 'Gesamtfortschritt',
+    'cockpit-inprogress': 'In Bearbeitung',
+    'cockpit-completed': 'Abgeschlossen',
+    'cockpit-errors': 'Fehler',
+    'cockpit-time': 'Geschätzte Restzeit',
+    'production': 'Produktion',
+    'sandbox': 'Sandbox',
+    'design': 'Design'
+  },
+  fr: {
+    'landing-greeting-template': "Bonjour {name} ! Je suis Lumi.",
+    'landing-sub': "Je suis votre orchestrateur de migration d'intégration, alimenté par SAP Joule.",
+    'btn-start-new': 'Démarrer une nouvelle migration',
+    'btn-open-cockpit-shortcut': 'Ouvrir mon cockpit',
+    'nav-section-active': 'Projets actifs',
+    'nav-section-archived': 'Projets archivés',
+    'archived-empty': 'Aucun pour l\'instant',
+    'nav-admin': 'Paramètres',
+    'persona-label': 'Objectif persona',
+    'admin-title': 'Admin — Valeurs par défaut',
+    'admin-subtitle': 'Valeurs par défaut pour les nouvelles migrations — appliquées lors de la prochaine migration',
+    'admin-section-connection': 'Connexion par défaut',
+    'admin-section-language': 'Préférences de langue',
+    'admin-section-agents': 'Accélération de migration — Agents A2A',
+    'admin-section-brain': 'Moteur IA — SDAINTAI Brain (LangGraph / Claude)',
+    'admin-section-alm': 'Systèmes cibles — ALM',
+    'admin-section-pipo': 'Système source — SAP PI/PO (Process Orchestration)',
+    'admin-section-team': 'Membres de l\'équipe',
+    'admin-section-ai-agents': 'Agents IA (A2A)',
+    'admin-section-s4': 'Connexion système — SAP S/4HANA',
+    'admin-label-platform': 'Plateforme source par défaut',
+    'admin-label-env': 'Environnement par défaut',
+    'admin-label-auth': 'Authentification par défaut',
+    'admin-label-username': 'Nom d\'utilisateur d\'intégration par défaut',
+    'admin-label-password': 'Mot de passe par défaut',
+    'admin-label-tenant': 'Cible par défaut — Locataire SAP Integration Suite',
+    'admin-label-region': 'Région cible par défaut',
+    'admin-label-language': 'Langue de l\'interface',
+    'admin-language-hint': 'Sélectionnez votre langue préférée. L\'interface sera mise à jour immédiatement. La saisie au clavier français est prise en charge dans tous les champs de texte.',
+    'btn-save-admin-defaults': 'Enregistrer les paramètres',
+    'screen-connection-title': 'Configurer la connexion',
+    'screen-connection-subtitle': 'Ouvert parce que Lumi a demandé ou le dernier test de connexion doit être revu',
+    'label-source-platform': 'Plateforme source',
+    'label-how-read-assets': 'Comment dois-je lire vos actifs ?',
+    'btn-direct-connect': 'Connexion directe',
+    'btn-upload-file': 'Télécharger un fichier',
+    'label-platform-version': 'Version de la plateforme / Runtime',
+    'label-environment': 'Environnement',
+    'label-source-auth': 'Authentification source',
+    'btn-userpass': 'Nom d\'utilisateur / Mot de passe',
+    'btn-oauth': 'ID client / Secret',
+    'label-int-username': 'Nom d\'utilisateur d\'intégration',
+    'label-password': 'Mot de passe',
+    'label-client-id': 'ID client',
+    'label-client-secret': 'Secret client',
+    'label-target-tenant': 'Cible — Locataire SAP Integration Suite',
+    'label-target-region': 'Région cible',
+    'btn-test-connection': 'Tester la connexion',
+    'btn-save-continue': 'Enregistrer et continuer',
+    'btn-cancel': 'Annuler',
+    'screen-assets-title': 'Importer les actifs',
+    'btn-start-scan': 'Démarrer l\'analyse des actifs',
+    'btn-view-tree': 'Voir l\'arborescence des actifs',
+    'screen-cockpit-title': 'Cockpit de migration',
+    'cockpit-overall': 'Progression globale',
+    'cockpit-inprogress': 'En cours',
+    'cockpit-completed': 'Terminé',
+    'cockpit-errors': 'Erreurs',
+    'cockpit-time': 'Temps restant estimé',
+    'production': 'Production',
+    'sandbox': 'Bac à sable',
+    'design': 'Conception'
+  }
+};
+
+// Load saved language preference from localStorage
+function loadLanguage() {
+  try {
+    const saved = localStorage.getItem(LANGUAGE_KEY);
+    if (saved && SUPPORTED_LANGUAGES[saved]) {
+      currentLanguage = saved;
+    } else {
+      // Try to detect from browser language
+      const browserLang = navigator.language.split('-')[0];
+      if (SUPPORTED_LANGUAGES[browserLang]) {
+        currentLanguage = browserLang;
+      }
+    }
+  } catch (e) { /* default to 'en' */ }
+}
+
+// Save language preference to localStorage
+function saveLanguage(lang) {
+  if (!SUPPORTED_LANGUAGES[lang]) return;
+  currentLanguage = lang;
+  try {
+    localStorage.setItem(LANGUAGE_KEY, lang);
+  } catch (e) { /* non-persistent this session */ }
+}
+
+// Get a translation for a key
+function t(key, params) {
+  const translations = UI_TRANSLATIONS[currentLanguage] || UI_TRANSLATIONS.en;
+  let text = translations[key] || UI_TRANSLATIONS.en[key] || key;
+  // Replace placeholders like {name}
+  if (params) {
+    Object.keys(params).forEach(k => {
+      text = text.replace(new RegExp(`\\{${k}\\}`, 'g'), params[k]);
+    });
+  }
+  return text;
+}
+
+// Apply translations to the UI
+function applyLanguageToUI() {
+  // Update language selector if it exists
+  const langSelect = $('admin-language-select');
+  if (langSelect) {
+    langSelect.value = currentLanguage;
+  }
+
+  // Update document lang attribute for proper text rendering and keyboard support
+  document.documentElement.lang = currentLanguage;
+
+  // Apply specific translations to known elements
+  // Landing screen
+  const greeting = $('landing-greeting');
+  if (greeting) {
+    greeting.textContent = t('landing-greeting-template', { name: S.userName || '' }).replace('!', S.userName ? '!' : '');
+    if (!S.userName) greeting.textContent = greeting.textContent.replace(/ $/, '').trim() || "Hi! I'm Lumi.";
+  }
+
+  const landingSub = qs('.landing-sub');
+  if (landingSub) landingSub.textContent = t('landing-sub');
+
+  // Start migration button
+  const startBtn = $('btn-start-new');
+  if (startBtn) {
+    const icon = startBtn.querySelector('i');
+    startBtn.innerHTML = '';
+    if (icon) startBtn.appendChild(icon);
+    startBtn.insertAdjacentHTML('beforeend', ' ' + t('btn-start-new'));
+  }
+
+  // Cockpit shortcut
+  const cockpitShortcut = $('btn-open-cockpit-shortcut');
+  if (cockpitShortcut) cockpitShortcut.textContent = t('btn-open-cockpit-shortcut');
+
+  // Navigation labels
+  const navSectionActive = qs('.nav-section-label');
+  if (navSectionActive) navSectionActive.textContent = t('nav-section-active');
+
+  const archivedLabel = qs('.archived-label');
+  if (archivedLabel) archivedLabel.textContent = t('nav-section-archived');
+
+  const archivedEmpty = qs('.archived-empty');
+  if (archivedEmpty) archivedEmpty.textContent = t('archived-empty');
+
+  // Settings nav
+  const navAdmin = $('nav-admin');
+  if (navAdmin) {
+    const icon = navAdmin.querySelector('i');
+    navAdmin.innerHTML = '';
+    if (icon) navAdmin.appendChild(icon);
+    navAdmin.insertAdjacentHTML('beforeend', ' ' + t('nav-admin'));
+  }
+
+  // Persona label
+  const personaLabel = qs('.persona-switcher-label');
+  if (personaLabel) personaLabel.textContent = t('persona-label');
+
+  // Update any input fields to support French characters via proper lang attribute
+  qsa('input[type="text"], textarea').forEach(input => {
+    input.setAttribute('lang', currentLanguage);
+    // Ensure input accepts all unicode characters including French accented chars
+    input.setAttribute('accept-charset', 'UTF-8');
+  });
+
+  // Show toast notification about language change (only if not initial load)
+  if (document.readyState === 'complete') {
+    const langInfo = SUPPORTED_LANGUAGES[currentLanguage];
+    showToast(
+      currentLanguage === 'fr' ? 'Langue mise à jour' : currentLanguage === 'de' ? 'Sprache aktualisiert' : 'Language Updated',
+      `${langInfo.flag} ${langInfo.nativeLabel}`,
+      'cyan'
+    );
+  }
+}
+
+// Set the UI language
+function setLanguage(lang) {
+  if (!SUPPORTED_LANGUAGES[lang]) return;
+  saveLanguage(lang);
+  applyLanguageToUI();
+  // Also save to admin defaults so it persists with other settings
+  S.adminDefaults.language = lang;
+  saveBrainMemory();
+}
+
+// Get current language
+function getLanguage() {
+  return currentLanguage;
+}
+
 // ==================== PERSONA LENS (Admin / Approver / Viewer) ====================
 // Capability matrix, per UStory_w_Persona_Migration_v1.pptx slide 4:
 //   Setup/Select/Plan, Migration execution, Readiness, Errors/issues: Admin=Full, Approver=Full, Viewer=read-only
@@ -493,6 +881,14 @@ function populateAdminFormFromDefaults() {
   $('admin-alm-tenant-manual').checked = !!d.almTenantManual;
   $('admin-figaf-target').value = d.figafAlmTarget;
   $('admin-figaf-manual').checked = !!d.figafManual;
+  // Language preference
+  const langSelect = $('admin-language-select');
+  if (langSelect && d.language && SUPPORTED_LANGUAGES[d.language]) {
+    langSelect.value = d.language;
+    if (d.language !== currentLanguage) {
+      setLanguage(d.language);
+    }
+  }
   if (d.s4Host) $('admin-s4-host').value = d.s4Host;
   if (d.s4Client) $('admin-s4-client').value = d.s4Client;
   if (d.s4AuthMode) setAdminS4AuthMode(d.s4AuthMode);
@@ -847,7 +1243,7 @@ function unflagNav(id) { const el = $(id); if (el) el.classList.remove('flagged'
 function flagReview(navId, screenId, reasonHtml) {
   flagNav(navId);
   lumiSay(`⚠️ I think you should review this — ${reasonHtml}`, { alert: true });
-  lumiChoices([{ label: 'Review', cls: 'review', onClick: () => openScreen(screenId) }, { label: 'Not now', cls: 'ghost', onClick: () => {} }]);
+  lumiChoices([{ label: 'Review', cls: 'review', onClick: () => openScreen(screenId) }, { label: 'Not now', cls: 'ghost', onClick: () => { } }]);
 }
 
 // ==================== SCREEN NAV ====================
@@ -964,10 +1360,12 @@ function selectPlatform(key) {
     lumiSay(`Before we scan, I don't have a BTP Integration Suite target configured yet — it's marked Manual in Settings. Set it now, or I'll continue with the sandbox defaults for this walkthrough?`);
     lumiChoices([
       { label: 'Open Settings', onClick: () => openScreen('admin') },
-      { label: 'Use sandbox defaults', cls: 'primary', onClick: () => {
-        lumiSay(`No problem — sandbox it is. Which runtime or version — this is your ${p.hint}?`);
-        lumiChoices(p.versions.map(v => ({ label: v, onClick: () => setVersionAnswer(v) })));
-      } }
+      {
+        label: 'Use sandbox defaults', cls: 'primary', onClick: () => {
+          lumiSay(`No problem — sandbox it is. Which runtime or version — this is your ${p.hint}?`);
+          lumiChoices(p.versions.map(v => ({ label: v, onClick: () => setVersionAnswer(v) })));
+        }
+      }
     ]);
   }
 }
@@ -1334,10 +1732,12 @@ function buildDecompiledAsset(filename, kind) {
   decompiledCounter++;
   const baseName = filename.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9._-]/g, '-') || 'decompiled-asset';
   const tree = [
-    { kind: 'flow', name: `${baseName}-main-flow (recovered)`, ok: true, children: [
-      leafTree('connector', 'recovered-connector', true),
-      leafTree('transform', `${baseName}-mapping.dwl (reconstructed)`, true)
-    ] },
+    {
+      kind: 'flow', name: `${baseName}-main-flow (recovered)`, ok: true, children: [
+        leafTree('connector', 'recovered-connector', true),
+        leafTree('transform', `${baseName}-mapping.dwl (reconstructed)`, true)
+      ]
+    },
     leafTree('flow', `${baseName}-error-handler-flow (recovered)`, true),
     leafTree('properties', `${baseName}.properties.yaml (recovered)`, true),
     leafTree('schema', `${baseName}-schema.xsd (recovered — needs review)`, false)
@@ -1546,13 +1946,15 @@ function renderTeamBoard() {
     return `
     <div class="team-col">
       <div class="wave-col-head"><b>Wave ${w}</b><span>${S.teamByWave[w].length} members</span></div>
-      ${S.teamByWave[w].map(id => { const m = activeTeam().find(t => t.id === id); return `
+      ${S.teamByWave[w].map(id => {
+      const m = activeTeam().find(t => t.id === id); return `
         <div class="team-member-card">
           <div class="avatar-chip" style="background:${m.color};">${m.name.split(' ').map(x => x[0]).join('')}</div>
           <div class="info"><b>${m.name}</b><span>${m.role}</span></div>
           <div class="avail-bar"><div style="width:${m.avail}%;"></div></div>
           <button class="team-remove-btn" data-wave="${w}" data-id="${id}" title="Remove from Wave ${w}"><i class="fa-solid fa-xmark"></i></button>
-        </div>`; }).join('')}
+        </div>`;
+    }).join('')}
       <select class="team-add-select" data-wave="${w}">
         <option value="">+ Add member&hellip;</option>
         ${available.map(t => `<option value="${t.id}">${t.name} — ${t.role}</option>`).join('')}
@@ -1850,7 +2252,7 @@ async function saveBlob(blob, filename, description, acceptTypes) {
 function approveAndStart() {
   openModal('Approve Migration Plan', `You're about to approve <b>${S.projectName}</b> for execution. This will unlock the Migration Cockpit and notify the team.`,
     [{ label: 'Cancel', cls: 'btn-btp-cancel', onClick: closeModal },
-     { label: 'Approve & Start', cls: 'btn-btp-gold', onClick: () => { closeModal(); doApprove(); } }]);
+    { label: 'Approve & Start', cls: 'btn-btp-gold', onClick: () => { closeModal(); doApprove(); } }]);
 }
 function doApprove() {
   markDone('nav-approve');
@@ -1906,8 +2308,8 @@ function buildCockpitRows() {
       // one of the asset's expanded rows. Same deterministic idea as before.
       const advisory = a.status !== 'Ready' ? null
         : idx % 7 === 3 ? 'Timezone normalized to UTC during conversion — verify the receiver expects UTC.'
-        : idx % 11 === 5 ? 'Retry policy mapped to adapter defaults — confirm the interval before go-live.'
-        : null;
+          : idx % 11 === 5 ? 'Retry policy mapped to adapter defaults — confirm the interval before go-live.'
+            : null;
       for (let n = 1; n <= total; n++) {
         const rowName = total > 1 ? `${a.name} — Interface ${n}/${total}` : a.name;
         S.cockpitRows.push({
@@ -2819,13 +3221,13 @@ function renderReportAnalytics() {
         <h5>Top agents used for fix</h5>
         ${topAgents.length ? topAgents.map(([label, count]) => `
           <div class="report-bar-row"><span class="report-bar-label">A2A – ${label}</span><div class="report-bar-track"><div class="report-bar-fill" style="width:${(count / maxAgentCount) * 100}%;"></div></div><span class="report-bar-count">${count}</span></div>`).join('')
-          : '<div class="mock-note"><i class="fa-solid fa-circle-info"></i> No issues resolved by AI Agents yet.</div>'}
+      : '<div class="mock-note"><i class="fa-solid fa-circle-info"></i> No issues resolved by AI Agents yet.</div>'}
       </div>
       <div class="report-analytics-card">
         <h5>Top issues raised</h5>
         ${topIssues.length ? topIssues.map(([label, count]) => `
           <div class="report-bar-row"><span class="report-bar-label">${label}</span><div class="report-bar-track"><div class="report-bar-fill issue" style="width:${(count / maxIssueCount) * 100}%;"></div></div><span class="report-bar-count">${count}</span></div>`).join('')
-          : '<div class="mock-note"><i class="fa-solid fa-circle-info"></i> No conversion issues raised yet.</div>'}
+      : '<div class="mock-note"><i class="fa-solid fa-circle-info"></i> No conversion issues raised yet.</div>'}
       </div>
       <div class="report-analytics-card report-analytics-wide">
         <h5>Brain learning curve — auto-resolve rate across migrations</h5>
@@ -2926,7 +3328,7 @@ function showLumiInsight(id) {
   const p = PLATFORMS[S.platform];
   const riskWord = asset.tier === 'High' ? 'heavy custom logic and several dependencies'
     : asset.tier === 'Medium' ? 'some custom mapping/transform logic'
-    : 'straightforward, low-risk logic';
+      : 'straightforward, low-risk logic';
   lumiSay(`<b>Insight — ${row.name}</b>`);
   lumiHtml(`<div class="insight-card">
     <div><b>What it contains</b><p>${asset.type} converting via ${p.terms.mappingLabel}; ${riskWord}.</p></div>
@@ -2936,9 +3338,11 @@ function showLumiInsight(id) {
     <div><b>Worth knowing</b><p>${row.advisory || (asset.tier === 'High' ? 'Custom logic is regenerated as best-effort — test the transform output before promoting.' : 'No advisories on this item.')}</p></div>
   </div>`);
   lumiChoices([
-    { label: 'What could break?', onClick: () => lumiSay(asset.tier === 'High'
+    {
+      label: 'What could break?', onClick: () => lumiSay(asset.tier === 'High'
         ? `Mostly the parts marked "needs review" in the structure tree — those branches couldn't be mapped 1:1 and fall back to a manual pattern.`
-        : `Nothing flagged — this one converted cleanly with full coverage.`) },
+        : `Nothing flagged — this one converted cleanly with full coverage.`)
+    },
     { label: 'Show me the script', onClick: () => showTreeModal(id) }
   ]);
 }
@@ -2970,8 +3374,8 @@ function showIflowViewModal(id) {
     const node = s.kind === 'event'
       ? `<div class="iflow-node iflow-event ${s.label === 'End' ? 'iflow-event-end' : ''}"><i class="fa-solid fa-circle-dot"></i></div>`
       : s.kind === 'router'
-      ? `<div class="iflow-node iflow-router"><i class="fa-solid ${s.icon}"></i></div>`
-      : `<div class="iflow-node iflow-step"><i class="fa-solid ${s.icon}"></i></div>`;
+        ? `<div class="iflow-node iflow-router"><i class="fa-solid ${s.icon}"></i></div>`
+        : `<div class="iflow-node iflow-step"><i class="fa-solid ${s.icon}"></i></div>`;
     const arrow = i < steps.length - 1 ? '<div class="iflow-arrow"><i class="fa-solid fa-arrow-right"></i></div>' : '';
     return `<div class="iflow-canvas-col"><div class="iflow-canvas-node-wrap">${node}${arrow}</div><span class="iflow-node-label">${s.label}</span></div>`;
   }).join('');
@@ -3013,12 +3417,14 @@ function suggestKafkaConversion(asset, hostId) {
   const n = kafkaNodes.length;
   lumiSay(`${asset.name} carries ${n} Kafka event${n > 1 ? 's' : ''} — want me to wire the one${n > 1 ? 's' : ''} you need to IS-Kafka before this converts?`);
   if (!unpicked.length) return;
-  lumiChoices([{ label: `Select all ${n} Kafka event${n > 1 ? 's' : ''}`, cls: 'primary', onClick: () => {
-    kafkaNodes.forEach(node => { node.kafkaEvent.selected = true; });
-    const host = $(hostId);
-    if (host) { host.innerHTML = renderTreeEditorHtml(asset); wireTreeEditorEvents(host, asset); }
-    lumiSay(`Done — all ${n} event${n > 1 ? 's' : ''} picked. They'll generate ${n} IS-Kafka channel${n > 1 ? 's' : ''} in the .iflw the moment this converts.`);
-  } }]);
+  lumiChoices([{
+    label: `Select all ${n} Kafka event${n > 1 ? 's' : ''}`, cls: 'primary', onClick: () => {
+      kafkaNodes.forEach(node => { node.kafkaEvent.selected = true; });
+      const host = $(hostId);
+      if (host) { host.innerHTML = renderTreeEditorHtml(asset); wireTreeEditorEvents(host, asset); }
+      lumiSay(`Done — all ${n} event${n > 1 ? 's' : ''} picked. They'll generate ${n} IS-Kafka channel${n > 1 ? 's' : ''} in the .iflw the moment this converts.`);
+    }
+  }]);
 }
 
 function sendFixRequest(row) {
@@ -4184,7 +4590,7 @@ function confirmSavePackage() {
   lumiChoices([
     { label: 'Send to QA', cls: 'primary', onClick: () => openRetargetModal(pkg.id, 'QA') },
     { label: 'Send to Prod', onClick: () => openRetargetModal(pkg.id, 'Prod') },
-    { label: 'Not now', onClick: () => {} }
+    { label: 'Not now', onClick: () => { } }
   ]);
 }
 
@@ -4434,6 +4840,7 @@ function updateCockpitTimeStat() {
 function saveAdminDefaults() {
   const authMode = $('admin-auth-toggle').querySelector('button.active').dataset.mode;
   const s4AuthMode = $('admin-s4-auth-toggle').querySelector('button.active').dataset.mode;
+  const langSelect = $('admin-language-select');
   S.adminDefaults = {
     platform: $('admin-default-platform').value,
     env: $('admin-default-env').value,
@@ -4454,6 +4861,7 @@ function saveAdminDefaults() {
     almTenantManual: $('admin-alm-tenant-manual').checked,
     figafAlmTarget: $('admin-figaf-target').value,
     figafManual: $('admin-figaf-manual').checked,
+    language: langSelect ? langSelect.value : currentLanguage,
     s4Host: $('admin-s4-host').value,
     s4Client: $('admin-s4-client').value,
     s4AuthMode,
@@ -4473,7 +4881,7 @@ function saveAdminDefaults() {
     }
   };
   saveBrainMemory();
-  logBrainEvent('setting_changed', 'admin', S.adminDefaults, `Admin defaults saved — platform=${S.adminDefaults.platform || 'n/a'}, tenant=${S.adminDefaults.tenant}, subaccount=${S.adminDefaults.sdaSubaccount}${S.adminDefaults.prvTenant ? ' (sda-prv-tenant)' : ''}, PI/PO system=${S.adminDefaults.piPo.systemName}.`);
+  logBrainEvent('setting_changed', 'admin', S.adminDefaults, `Admin defaults saved — platform=${S.adminDefaults.platform || 'n/a'}, tenant=${S.adminDefaults.tenant}, subaccount=${S.adminDefaults.sdaSubaccount}${S.adminDefaults.prvTenant ? ' (sda-prv-tenant)' : ''}, language=${S.adminDefaults.language}, PI/PO system=${S.adminDefaults.piPo.systemName}.`);
   showToast('Defaults Saved', 'New migrations will start from these connection defaults, and the updated team roster is live for wave assignment.', 'purple');
 }
 // Same mock reachability check as testS4Connection — validates the Integration
@@ -4728,7 +5136,7 @@ function handleComposerSend() {
     const first = S.assets[0];
     lumiSay(`Here's the structure for <b>${first.name}</b>:`);
     lumiTree(renderInlineTree(first));
-    lumiChoices([{ label: 'Let me edit branches', onClick: () => showTreeModal(first.id) }, { label: 'Looks good', cls: 'primary', onClick: () => {} }]);
+    lumiChoices([{ label: 'Let me edit branches', onClick: () => showTreeModal(first.id) }, { label: 'Looks good', cls: 'primary', onClick: () => { } }]);
   } else if (t.includes('show') && t.includes('detail')) {
     if ($('screen-btp-assets').classList.contains('active')) showAssetDetails();
     else lumiSay(`Sure — which screen's details would you like? Try asking on the ${p.terms.sourceStepNoun} Selection or Migration Cockpit step.`);
@@ -4934,10 +5342,23 @@ function setupAccessLock() {
 document.addEventListener('DOMContentLoaded', () => {
   setupAccessLock();
   loadBrainMemory();
+  loadLanguage();
+  // Apply saved language from admin defaults if available
+  if (S.adminDefaults && S.adminDefaults.language && SUPPORTED_LANGUAGES[S.adminDefaults.language]) {
+    currentLanguage = S.adminDefaults.language;
+  }
   loadPersona();
   applyPersonaGating();
+  applyLanguageToUI();
   const personaSelect = $('persona-select');
   if (personaSelect) personaSelect.addEventListener('change', (e) => setPersona(e.target.value));
+
+  // Language selector in admin settings
+  const langSelect = $('admin-language-select');
+  if (langSelect) {
+    langSelect.value = currentLanguage;
+    langSelect.addEventListener('change', (e) => setLanguage(e.target.value));
+  }
 
   // sidebar accordion (kept from original prototype)
   qsa('.menu-accordion-title').forEach(title => {
