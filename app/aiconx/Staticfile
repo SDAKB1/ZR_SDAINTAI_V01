@@ -1,0 +1,3 @@
+root: webapp
+directory: false
+force_https: true

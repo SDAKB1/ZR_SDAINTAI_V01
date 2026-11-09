@@ -1,0 +1,9 @@
+{
+  "name": "sdaintai",
+  "version": "0.0.2",
+  "description": "SDA-INTAI Platform — Static Web Console",
+  "main": "webapp/index.html",
+  "scripts": {
+    "start": "cds serve --project ../.."
+  }
+}
