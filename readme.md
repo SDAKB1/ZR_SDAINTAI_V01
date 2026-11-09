@@ -145,3 +145,8 @@ route quota, so new per-developer CF routes aren't available right now).
    the `containerize.yaml` / `chart/` (Helm) / `Jenkinsfile` setup already
    in this repo, which is the real build-and-deploy pipeline for
    Kubernetes/CF, not a per-developer sandbox.
+
+See [`DOCKER-DEVELOPERS-PRODUCTION-ROUTE.md`](DOCKER-DEVELOPERS-PRODUCTION-ROUTE.md)
+for how this scales once *multiple* developers are doing the above at the
+same time, and what the one person who actually runs `cf deploy` needs to
+know about the shared production route before they do it.
