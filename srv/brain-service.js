@@ -5,44 +5,44 @@ const { getVectorStore } = require('./ai/vectorStore');
 // ── SAP Migration knowledge base (seeded into vector store) ──────────────────
 const MIGRATION_KNOWLEDGE = [
   // Master Data — Simple
-  { id: 'GLMAST',  desc: 'GL Account Master',      tier: 'simple',  tool: 'BAPI_GL_ACC_SAVE',                   hours: 4,  adapterType: 'idoc',  segmentCount: 5,  hasZFields: false },
-  { id: 'COSMAS',  desc: 'Cost Center Master',      tier: 'simple',  tool: 'BAPI_COSTCENTER_CREATEMULTIPLE',     hours: 4,  adapterType: 'idoc',  segmentCount: 6,  hasZFields: false },
-  { id: 'PRMAS',   desc: 'Profit Center Master',    tier: 'simple',  tool: 'BAPI_PROFITCENTER_CREATE',           hours: 4,  adapterType: 'idoc',  segmentCount: 5,  hasZFields: false },
-  { id: 'DEBMAS',  desc: 'Customer Master',         tier: 'simple',  tool: 'BAPI_CUSTOMER_CREATEFROMDATA1',      hours: 12, adapterType: 'idoc',  segmentCount: 15, hasZFields: false },
-  { id: 'CREMAS',  desc: 'Vendor/Supplier Master',  tier: 'simple',  tool: 'BAPI_VENDOR_CREATEFROMDATA',         hours: 12, adapterType: 'idoc',  segmentCount: 12, hasZFields: false },
+  { id: 'GLMAST', desc: 'GL Account Master', tier: 'simple', tool: 'BAPI_GL_ACC_SAVE', hours: 4, adapterType: 'idoc', segmentCount: 5, hasZFields: false },
+  { id: 'COSMAS', desc: 'Cost Center Master', tier: 'simple', tool: 'BAPI_COSTCENTER_CREATEMULTIPLE', hours: 4, adapterType: 'idoc', segmentCount: 6, hasZFields: false },
+  { id: 'PRMAS', desc: 'Profit Center Master', tier: 'simple', tool: 'BAPI_PROFITCENTER_CREATE', hours: 4, adapterType: 'idoc', segmentCount: 5, hasZFields: false },
+  { id: 'DEBMAS', desc: 'Customer Master', tier: 'simple', tool: 'BAPI_CUSTOMER_CREATEFROMDATA1', hours: 12, adapterType: 'idoc', segmentCount: 15, hasZFields: false },
+  { id: 'CREMAS', desc: 'Vendor/Supplier Master', tier: 'simple', tool: 'BAPI_VENDOR_CREATEFROMDATA', hours: 12, adapterType: 'idoc', segmentCount: 12, hasZFields: false },
   // Master Data — Medium
-  { id: 'MATMAS',  desc: 'Material Master',         tier: 'medium',  tool: 'iFlow_SAP_Material_Replication',    hours: 20, adapterType: 'idoc',  segmentCount: 38, hasZFields: true  },
-  { id: 'BPMAS',   desc: 'Business Partner',        tier: 'medium',  tool: 'iFlow_SAP_BP_Replication',          hours: 24, adapterType: 'soap',  segmentCount: 20, hasZFields: true  },
-  { id: 'KNVK',    desc: 'Customer Contact Master', tier: 'medium',  tool: 'iFlow_Customer_Replication',        hours: 10, adapterType: 'idoc',  segmentCount: 8,  hasZFields: true  },
+  { id: 'MATMAS', desc: 'Material Master', tier: 'medium', tool: 'iFlow_SAP_Material_Replication', hours: 20, adapterType: 'idoc', segmentCount: 38, hasZFields: true },
+  { id: 'BPMAS', desc: 'Business Partner', tier: 'medium', tool: 'iFlow_SAP_BP_Replication', hours: 24, adapterType: 'soap', segmentCount: 20, hasZFields: true },
+  { id: 'KNVK', desc: 'Customer Contact Master', tier: 'medium', tool: 'iFlow_Customer_Replication', hours: 10, adapterType: 'idoc', segmentCount: 8, hasZFields: true },
   // Master Data — Complex
-  { id: 'HRMAS',   desc: 'HR Master Data',          tier: 'complex', tool: 'iFlow_SuccessFactors_Replication',  hours: 60, adapterType: 'idoc',  segmentCount: 55, hasZFields: true  },
-  { id: 'ARTMAS',  desc: 'Retail Article Master',   tier: 'complex', tool: 'iFlow_Custom_ARTMAS',               hours: 80, adapterType: 'idoc',  segmentCount: 65, hasZFields: true  },
+  { id: 'HRMAS', desc: 'HR Master Data', tier: 'complex', tool: 'iFlow_SuccessFactors_Replication', hours: 60, adapterType: 'idoc', segmentCount: 55, hasZFields: true },
+  { id: 'ARTMAS', desc: 'Retail Article Master', tier: 'complex', tool: 'iFlow_Custom_ARTMAS', hours: 80, adapterType: 'idoc', segmentCount: 65, hasZFields: true },
   // Transactional — Medium
-  { id: 'ORDERS05',desc: 'Purchase Order',          tier: 'medium',  tool: 'iFlow_Ariba_S4_Integration',        hours: 24, adapterType: 'idoc',  segmentCount: 22, hasZFields: false },
-  { id: 'ORDCHG',  desc: 'PO Change',               tier: 'medium',  tool: 'iFlow_Ariba_S4_Integration',        hours: 16, adapterType: 'idoc',  segmentCount: 18, hasZFields: false },
-  { id: 'ORDRSP',  desc: 'Order Confirmation',      tier: 'medium',  tool: 'iFlow_Ariba_S4_Integration',        hours: 16, adapterType: 'idoc',  segmentCount: 15, hasZFields: false },
-  { id: 'DESADV',  desc: 'Delivery Note/ASN',       tier: 'medium',  tool: 'iFlow_SAP_WMS_Integration',         hours: 20, adapterType: 'idoc',  segmentCount: 20, hasZFields: false },
-  { id: 'WMMBXY',  desc: 'Goods Movement',          tier: 'medium',  tool: 'iFlow_SAP_WMS_Integration',         hours: 18, adapterType: 'idoc',  segmentCount: 12, hasZFields: false },
+  { id: 'ORDERS05', desc: 'Purchase Order', tier: 'medium', tool: 'iFlow_Ariba_S4_Integration', hours: 24, adapterType: 'idoc', segmentCount: 22, hasZFields: false },
+  { id: 'ORDCHG', desc: 'PO Change', tier: 'medium', tool: 'iFlow_Ariba_S4_Integration', hours: 16, adapterType: 'idoc', segmentCount: 18, hasZFields: false },
+  { id: 'ORDRSP', desc: 'Order Confirmation', tier: 'medium', tool: 'iFlow_Ariba_S4_Integration', hours: 16, adapterType: 'idoc', segmentCount: 15, hasZFields: false },
+  { id: 'DESADV', desc: 'Delivery Note/ASN', tier: 'medium', tool: 'iFlow_SAP_WMS_Integration', hours: 20, adapterType: 'idoc', segmentCount: 20, hasZFields: false },
+  { id: 'WMMBXY', desc: 'Goods Movement', tier: 'medium', tool: 'iFlow_SAP_WMS_Integration', hours: 18, adapterType: 'idoc', segmentCount: 12, hasZFields: false },
   // Transactional — Complex
-  { id: 'INVOIC02',desc: 'Invoice',                 tier: 'complex', tool: 'iFlow_Custom_Finance_INVOIC',       hours: 60, adapterType: 'as2',   segmentCount: 45, hasZFields: true  },
-  { id: 'SHPMNT04',desc: 'Shipment',                tier: 'complex', tool: 'iFlow_Custom_Logistics_SHPMNT',     hours: 50, adapterType: 'idoc',  segmentCount: 40, hasZFields: true  },
-  { id: 'FIDCCP02',desc: 'FI Document',             tier: 'complex', tool: 'iFlow_Custom_Finance_FIDCCP',       hours: 80, adapterType: 'rest',  segmentCount: 50, hasZFields: true  },
-  { id: 'PEXR2003',desc: 'Payment Advice',          tier: 'complex', tool: 'iFlow_Custom_Finance_PEXR',         hours: 60, adapterType: 'as2',   segmentCount: 35, hasZFields: true  },
+  { id: 'INVOIC02', desc: 'Invoice', tier: 'complex', tool: 'iFlow_Custom_Finance_INVOIC', hours: 60, adapterType: 'as2', segmentCount: 45, hasZFields: true },
+  { id: 'SHPMNT04', desc: 'Shipment', tier: 'complex', tool: 'iFlow_Custom_Logistics_SHPMNT', hours: 50, adapterType: 'idoc', segmentCount: 40, hasZFields: true },
+  { id: 'FIDCCP02', desc: 'FI Document', tier: 'complex', tool: 'iFlow_Custom_Finance_FIDCCP', hours: 80, adapterType: 'rest', segmentCount: 50, hasZFields: true },
+  { id: 'PEXR2003', desc: 'Payment Advice', tier: 'complex', tool: 'iFlow_Custom_Finance_PEXR', hours: 60, adapterType: 'as2', segmentCount: 35, hasZFields: true },
 ];
 
 // BAPI lookup for simple objects
 const BAPI_MAP = {
   GLMAST: 'BAPI_GL_ACC_SAVE', COSMAS: 'BAPI_COSTCENTER_CREATEMULTIPLE',
-  PRMAS:  'BAPI_PROFITCENTER_CREATE', DEBMAS: 'BAPI_CUSTOMER_CREATEFROMDATA1',
+  PRMAS: 'BAPI_PROFITCENTER_CREATE', DEBMAS: 'BAPI_CUSTOMER_CREATEFROMDATA1',
   CREMAS: 'BAPI_VENDOR_CREATEFROMDATA', MATMAS: 'BAPI_MATERIAL_SAVEDATA',
 };
 
 // SAP Business Accelerator Hub package lookup
 const HUB_PACKAGE_MAP = {
   MATMAS: 'SAP S/4HANA Material Replication', DEBMAS: 'SAP Customer Master Replication',
-  CREMAS: 'SAP Vendor Master Replication',    HRMAS:  'SAP SuccessFactors Employee Central',
+  CREMAS: 'SAP Vendor Master Replication', HRMAS: 'SAP SuccessFactors Employee Central',
   ORDERS05: 'SAP S/4HANA ↔ Ariba Integration', INVOIC02: 'SAP S/4HANA Finance Integration',
-  DESADV: 'SAP S/4HANA ↔ 3rd Party WMS',      WMMBXY: 'SAP S/4HANA ↔ 3rd Party WMS',
+  DESADV: 'SAP S/4HANA ↔ 3rd Party WMS', WMMBXY: 'SAP S/4HANA ↔ 3rd Party WMS',
   FIDCCP02: 'SAP S/4HANA Finance Integration', BPMAS: 'SAP BP Replication Add-On',
 };
 
@@ -53,7 +53,7 @@ async function buildMigrationGraph() {
   if (_migrationGraph) return _migrationGraph;
   try {
     const { StateGraph, END } = await import('@langchain/langgraph');
-    const { ChatAnthropic }   = await import('@langchain/anthropic');
+    const { ChatAnthropic } = await import('@langchain/anthropic');
 
     const model = new ChatAnthropic({ model: 'claude-sonnet-4-6', maxTokens: 1024 });
 
@@ -89,10 +89,10 @@ Reply with just the category name.`;
       score += input.segmentCount > 15 ? 6 : input.segmentCount > 5 ? 3 : 1;
       score += input.hasZFields ? 4 : 0;
       score += input.mappingType === 'java' || input.mappingType === 'abap' ? 6
-             : input.mappingType === 'xslt' ? 3 : 0;
+        : input.mappingType === 'xslt' ? 3 : 0;
       score += input.volumePerDay > 100000 ? 6 : input.volumePerDay > 10000 ? 3 : 0;
       score += input.adapterType === 'as2' || input.adapterType === 'jms' || input.adapterType === 'custom' ? 6
-             : input.adapterType === 'jdbc' || input.adapterType === 'rfc' ? 3 : 0;
+        : input.adapterType === 'jdbc' || input.adapterType === 'rfc' ? 3 : 0;
       score += input.isEdiBased ? 4 : 0;
       score += input.isBpmProcess ? 10 : 0;
       // Finance/HR always elevated
@@ -138,8 +138,8 @@ Reply with just the category name.`;
       let estimatedHours = known
         ? known.hours
         : tier === 'simple' ? 4 + (input.segmentCount * 0.3)
-        : tier === 'medium' ? 16 + (input.segmentCount * 0.5) + (input.hasZFields ? 8 : 0)
-        : 60 + (input.segmentCount * 0.8) + (input.isEdiBased ? 20 : 0) + (input.isBpmProcess ? 40 : 0);
+          : tier === 'medium' ? 16 + (input.segmentCount * 0.5) + (input.hasZFields ? 8 : 0)
+            : 60 + (input.segmentCount * 0.8) + (input.isEdiBased ? 20 : 0) + (input.isBpmProcess ? 40 : 0);
 
       estimatedHours = Math.round(estimatedHours);
       const riskLevel = tier === 'simple' ? 'low' : tier === 'medium' ? 'medium' : 'high';
@@ -185,32 +185,32 @@ Reply with valid JSON only.`;
 
     const graph = new StateGraph({
       channels: {
-        input:           { value: (x, y) => y ?? x, default: () => ({}) },
-        objectType:      { value: (x, y) => y ?? x, default: () => '' },
-        tier:            { value: (x, y) => y ?? x, default: () => 'medium' },
+        input: { value: (x, y) => y ?? x, default: () => ({}) },
+        objectType: { value: (x, y) => y ?? x, default: () => '' },
+        tier: { value: (x, y) => y ?? x, default: () => 'medium' },
         complexityScore: { value: (x, y) => y ?? x, default: () => 0 },
         recommendedTool: { value: (x, y) => y ?? x, default: () => '' },
-        specificTool:    { value: (x, y) => y ?? x, default: () => '' },
-        estimatedHours:  { value: (x, y) => y ?? x, default: () => 0 },
-        riskLevel:       { value: (x, y) => y ?? x, default: () => 'medium' },
-        waveAssignment:  { value: (x, y) => y ?? x, default: () => 2 },
-        rationale:       { value: (x, y) => y ?? x, default: () => '' },
-        steps:           { value: (x, y) => y ?? x, default: () => '[]' },
-        prereqs:         { value: (x, y) => y ?? x, default: () => '[]' },
+        specificTool: { value: (x, y) => y ?? x, default: () => '' },
+        estimatedHours: { value: (x, y) => y ?? x, default: () => 0 },
+        riskLevel: { value: (x, y) => y ?? x, default: () => 'medium' },
+        waveAssignment: { value: (x, y) => y ?? x, default: () => 2 },
+        rationale: { value: (x, y) => y ?? x, default: () => '' },
+        steps: { value: (x, y) => y ?? x, default: () => '[]' },
+        prereqs: { value: (x, y) => y ?? x, default: () => '[]' },
       },
     });
 
-    graph.addNode('classifyObject',  classifyObjectNode);
+    graph.addNode('classifyObject', classifyObjectNode);
     graph.addNode('scoreComplexity', scoreComplexityNode);
-    graph.addNode('recommendTool',   recommendToolNode);
-    graph.addNode('estimateEffort',  estimateEffortNode);
-    graph.addNode('buildPlan',       buildPlanNode);
+    graph.addNode('recommendTool', recommendToolNode);
+    graph.addNode('estimateEffort', estimateEffortNode);
+    graph.addNode('buildPlan', buildPlanNode);
 
-    graph.addEdge('classifyObject',  'scoreComplexity');
+    graph.addEdge('classifyObject', 'scoreComplexity');
     graph.addEdge('scoreComplexity', 'recommendTool');
-    graph.addEdge('recommendTool',   'estimateEffort');
-    graph.addEdge('estimateEffort',  'buildPlan');
-    graph.addEdge('buildPlan',       END);
+    graph.addEdge('recommendTool', 'estimateEffort');
+    graph.addEdge('estimateEffort', 'buildPlan');
+    graph.addEdge('buildPlan', END);
     graph.setEntryPoint('classifyObject');
 
     _migrationGraph = graph.compile();
@@ -227,7 +227,7 @@ function ruleMigrationAdvisor(input) {
   const known = MIGRATION_KNOWLEDGE.find(k => k.id === idUpper);
   const tier = known ? known.tier : input.isBpmProcess ? 'complex'
     : input.adapterType === 'as2' || input.adapterType === 'custom' ? 'complex'
-    : (input.segmentCount > 15 || input.hasZFields) ? 'medium' : 'simple';
+      : (input.segmentCount > 15 || input.hasZFields) ? 'medium' : 'simple';
 
   const recommendedTool = tier === 'simple' ? 'BAPI' : tier === 'medium' ? 'iFlow_SemiAuto' : 'iFlow_Custom';
   const specificTool = tier === 'simple' ? (BAPI_MAP[idUpper] || 'BAPI_SAVE')
@@ -308,16 +308,16 @@ Reply with valid JSON only.`;
 
     const graph = new StateGraph({
       channels: {
-        event:    { value: (x, y) => y ?? x, default: () => null },
+        event: { value: (x, y) => y ?? x, default: () => null },
         category: { value: (x, y) => y ?? x, default: () => '' },
-        insight:  { value: (x, y) => y ?? x, default: () => null },
+        insight: { value: (x, y) => y ?? x, default: () => null },
       },
     });
 
     graph.addNode('classify', classifyNode);
-    graph.addNode('insight',  insightNode);
+    graph.addNode('insight', insightNode);
     graph.addEdge('classify', 'insight');
-    graph.addEdge('insight',  END);
+    graph.addEdge('insight', END);
     graph.setEntryPoint('classify');
 
     _graph = graph.compile();
@@ -359,14 +359,14 @@ module.exports = class BrainService extends cds.ApplicationService {
       return {
         success: true,
         message: enabled ? 'Brain activated' : 'Brain deactivated',
-        state:   state.enabled,
+        state: state.enabled,
       };
     });
 
     // ── captureEvent ─────────────────────────────────────────────────────────
     this.on('captureEvent', async (req) => {
       const { key, eventType, source, payload, summary, sessionId } = req.data;
-      if (!verifyKey(key))    return req.error(403, 'Invalid master key');
+      if (!verifyKey(key)) return req.error(403, 'Invalid master key');
       if (!isBrainEnabled()) return req.error(400, 'Brain is not enabled');
 
       const vs = getVectorStore();
@@ -411,13 +411,13 @@ module.exports = class BrainService extends cds.ApplicationService {
             const eventId = eventRecord?.req?.data?.ID || eventRecord?.[0]?.ID || embeddingId;
             try {
               await INSERT.into(Insights).entries({
-                insightType:    result.insight.insightType || 'pattern',
-                title:          result.insight.title || 'Untitled insight',
-                description:    result.insight.description || '',
-                priority:       result.insight.priority || 'medium',
-                status:         'new',
+                insightType: result.insight.insightType || 'pattern',
+                title: result.insight.title || 'Untitled insight',
+                description: result.insight.description || '',
+                priority: result.insight.priority || 'medium',
+                status: 'new',
                 sourceEventIds: JSON.stringify([eventId]),
-                exportable:     true,
+                exportable: true,
               });
               insights = 1;
             } catch (err) {
@@ -435,17 +435,17 @@ module.exports = class BrainService extends cds.ApplicationService {
       }
 
       return {
-        eventId:  eventRecord?.[0]?.ID || embeddingId,
+        eventId: eventRecord?.[0]?.ID || embeddingId,
         category,
         insights,
-        message:  eventRecord ? 'Event captured' : 'Event captured (vector store only — DB unavailable)',
+        message: eventRecord ? 'Event captured' : 'Event captured (vector store only — DB unavailable)',
       };
     });
 
     // ── runAnalysis ──────────────────────────────────────────────────────────
     this.on('runAnalysis', async (req) => {
       const { key } = req.data;
-      if (!verifyKey(key))    return req.error(403, 'Invalid master key');
+      if (!verifyKey(key)) return req.error(403, 'Invalid master key');
       if (!isBrainEnabled()) return req.error(400, 'Brain is not enabled');
 
       const { Events, Insights } = this.entities;
@@ -459,25 +459,25 @@ module.exports = class BrainService extends cds.ApplicationService {
 
         for (const event of unprocessed) {
           let category = classifyRuleBased(event.eventType);
-          let insight  = null;
+          let insight = null;
 
           if (graph) {
             const result = await graph.invoke({ event });
             category = result.category || category;
-            insight  = result.insight;
+            insight = result.insight;
           }
 
           await UPDATE(Events).set({ processed: true, category }).where({ ID: event.ID });
 
           if (insight) {
             await INSERT.into(Insights).entries({
-              insightType:    insight.insightType || 'pattern',
-              title:          insight.title || 'Untitled insight',
-              description:    insight.description || '',
-              priority:       insight.priority || 'medium',
-              status:         'new',
+              insightType: insight.insightType || 'pattern',
+              title: insight.title || 'Untitled insight',
+              description: insight.description || '',
+              priority: insight.priority || 'medium',
+              status: 'new',
               sourceEventIds: JSON.stringify([event.ID]),
-              exportable:     true,
+              exportable: true,
             });
             insightsGenerated++;
           }
@@ -488,8 +488,8 @@ module.exports = class BrainService extends cds.ApplicationService {
 
       return {
         processed: unprocessed.length,
-        insights:  insightsGenerated,
-        message:   `Processed ${unprocessed.length} events, generated ${insightsGenerated} insights`,
+        insights: insightsGenerated,
+        message: `Processed ${unprocessed.length} events, generated ${insightsGenerated} insights`,
       };
     });
 
@@ -498,8 +498,8 @@ module.exports = class BrainService extends cds.ApplicationService {
       const { key } = req.data;
       if (!verifyKey(key)) return req.error(403, 'Invalid master key');
 
-      const state        = readState();
-      const vs           = getVectorStore();
+      const state = readState();
+      const vs = getVectorStore();
       // Same DB-optional posture as captureEvent — a HANA hiccup shouldn't make
       // the status dashboard itself unreachable; fall back to 0 and let
       // vectorCount (always available) carry the real signal.
@@ -509,13 +509,13 @@ module.exports = class BrainService extends cds.ApplicationService {
       const vectorCount = await vs.count();
 
       return {
-        enabled:       state.enabled,
-        eventsCount:   Number(eventsCount),
+        enabled: state.enabled,
+        eventsCount: Number(eventsCount),
         insightsCount: Number(insightsCount),
-        coherence:     Math.min(100, Math.floor((vectorCount / (Number(eventsCount) || 1)) * 100)),
-        enabledSince:  state.enabledAt || '',
+        coherence: Math.min(100, Math.floor((vectorCount / (Number(eventsCount) || 1)) * 100)),
+        enabledSince: state.enabledAt || '',
         vectorCount,
-        message:       state.enabled ? 'Brain is active' : 'Brain is inactive',
+        message: state.enabled ? 'Brain is active' : 'Brain is inactive',
       };
     });
 
@@ -524,13 +524,13 @@ module.exports = class BrainService extends cds.ApplicationService {
       const { key } = req.data;
       if (!verifyKey(key)) return req.error(403, 'Invalid master key');
 
-      const vs       = getVectorStore();
-      const events   = await SELECT.from(Events);
+      const vs = getVectorStore();
+      const events = await SELECT.from(Events);
       const insights = await SELECT.from(Insights);
       const sessions = await SELECT.from(Sessions);
 
       const archive = {
-        version:   '1.0',
+        version: '1.0',
         exportedAt: new Date().toISOString(),
         events,
         insights,
@@ -539,7 +539,7 @@ module.exports = class BrainService extends cds.ApplicationService {
       };
 
       const json = JSON.stringify(archive);
-      const b64  = Buffer.from(json).toString('base64');
+      const b64 = Buffer.from(json).toString('base64');
       const filename = `brain-export-${Date.now()}.sdab`;
 
       return { filename, data: b64, size: json.length };
@@ -573,17 +573,17 @@ module.exports = class BrainService extends cds.ApplicationService {
         if (graph) {
           const graphResult = await graph.invoke({ input });
           result = {
-            objectType:       graphResult.objectType      || result.objectType,
-            tier:             graphResult.tier            || result.tier,
-            complexityScore:  graphResult.complexityScore ?? result.complexityScore,
-            recommendedTool:  graphResult.recommendedTool || result.recommendedTool,
-            specificTool:     graphResult.specificTool    || result.specificTool,
-            estimatedHours:   graphResult.estimatedHours  ?? result.estimatedHours,
-            riskLevel:        graphResult.riskLevel       || result.riskLevel,
-            waveAssignment:   graphResult.waveAssignment  ?? result.waveAssignment,
-            rationale:        graphResult.rationale       || result.rationale,
-            steps:            graphResult.steps           || result.steps,
-            prereqs:          graphResult.prereqs         || result.prereqs,
+            objectType: graphResult.objectType || result.objectType,
+            tier: graphResult.tier || result.tier,
+            complexityScore: graphResult.complexityScore ?? result.complexityScore,
+            recommendedTool: graphResult.recommendedTool || result.recommendedTool,
+            specificTool: graphResult.specificTool || result.specificTool,
+            estimatedHours: graphResult.estimatedHours ?? result.estimatedHours,
+            riskLevel: graphResult.riskLevel || result.riskLevel,
+            waveAssignment: graphResult.waveAssignment ?? result.waveAssignment,
+            rationale: graphResult.rationale || result.rationale,
+            steps: graphResult.steps || result.steps,
+            prereqs: graphResult.prereqs || result.prereqs,
           };
         }
       } catch (err) {
@@ -613,19 +613,19 @@ module.exports = class BrainService extends cds.ApplicationService {
       }
 
       return {
-        objectId:        input.objectId,
-        objectType:      result.objectType,
-        tier:            result.tier,
+        objectId: input.objectId,
+        objectType: result.objectType,
+        tier: result.tier,
         complexityScore: result.complexityScore,
         recommendedTool: result.recommendedTool,
-        specificTool:    result.specificTool,
-        estimatedHours:  result.estimatedHours,
-        riskLevel:       result.riskLevel,
-        waveAssignment:  result.waveAssignment,
-        rationale:       result.rationale,
-        steps:           result.steps,
-        prereqs:         result.prereqs,
-        message:         `Migration analysis complete for ${input.objectId}`,
+        specificTool: result.specificTool,
+        estimatedHours: result.estimatedHours,
+        riskLevel: result.riskLevel,
+        waveAssignment: result.waveAssignment,
+        rationale: result.rationale,
+        steps: result.steps,
+        prereqs: result.prereqs,
+        message: `Migration analysis complete for ${input.objectId}`,
       };
     });
 
@@ -733,6 +733,43 @@ module.exports = class BrainService extends cds.ApplicationService {
         eventsImported,
         message: `Imported ${eventsImported} events from archive`,
       };
+    });
+
+    // ── testPipoDestinations ─────────────────────────────────────────────────
+    this.on('testPipoDestinations', async (req) => {
+      const { key } = req.data;
+      if (!verifyKey(key)) return req.error(403, 'Invalid master key');
+
+      const pipoClient = require('./utils/pipoClient');
+      let dirStatus = 'ERROR', esrStatus = 'ERROR';
+      let dirArtifacts = 0, esrArtifacts = 0;
+      let errors = [];
+
+      // Test DIR destination
+      try {
+        const dirResult = await pipoClient.listIcos();
+        dirStatus = 'OK';
+        dirArtifacts = Array.isArray(dirResult) ? dirResult.length : (dirResult?.count || 0);
+      } catch (err) {
+        dirStatus = `ERROR: ${err.message}`;
+        errors.push(`DIR: ${err.message}`);
+      }
+
+      // Test ESR destination
+      try {
+        const esrResult = await pipoClient.listPipoPackages();
+        esrStatus = 'OK';
+        esrArtifacts = Array.isArray(esrResult) ? esrResult.length : (esrResult?.count || 0);
+      } catch (err) {
+        esrStatus = `ERROR: ${err.message}`;
+        errors.push(`ESR: ${err.message}`);
+      }
+
+      const message = errors.length > 0
+        ? `Connectivity issues: ${errors.join('; ')}`
+        : `Both destinations reachable. DIR: ${dirArtifacts} ICOs, ESR: ${esrArtifacts} components`;
+
+      return { dirStatus, esrStatus, dirArtifacts, esrArtifacts, message };
     });
 
     return super.init();

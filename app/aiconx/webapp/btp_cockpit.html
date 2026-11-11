@@ -9,9 +9,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=lumi30">
-  <link rel="stylesheet" href="btp_style.css?v=lumi30">
-  <link rel="stylesheet" href="btp_lumi.css?v=lumi30">
+  <link rel="stylesheet" href="style.css?v=lumi31">
+  <link rel="stylesheet" href="btp_style.css?v=lumi31">
+  <link rel="stylesheet" href="btp_lumi.css?v=lumi31">
 </head>
 <body>
 
@@ -265,19 +265,6 @@
               </div>
 
               <div>
-                <h3 class="admin-section-title">Language Preferences</h3>
-                <div class="form-group-btp" style="max-width:420px;">
-                  <label>Interface Language</label>
-                  <select class="btp-input" id="admin-language-select">
-                    <option value="en">🇬🇧 English</option>
-                    <option value="de">🇩🇪 Deutsch (German)</option>
-                    <option value="fr">🇫🇷 Français (French)</option>
-                  </select>
-                  <div class="mock-note" style="margin-top:8px;"><i class="fa-solid fa-globe"></i> Select your preferred language. The UI will update immediately. All text input fields support international characters including French accented characters (é, è, ê, ë, à, â, ç, ù, û, ô, î, ï, œ, æ, etc.) — your keyboard's native input method is fully supported.</div>
-                </div>
-              </div>
-
-              <div>
                 <h3 class="admin-section-title">Migration Acceleration — A2A Agents</h3>
                 <p class="mock-note" style="margin-bottom:10px;"><i class="fa-solid fa-gauge-high"></i> These two agents are what take a conversion from a fully manual estimate down to the AI-accelerated one shown throughout the cockpit. Uncheck either (or both) to see every duration — wave timing, Plan approval, Readiness/Progress effort — fall back toward the manual baseline, live.</p>
                 <div class="admin-team-list" style="gap:10px;">
@@ -318,7 +305,7 @@
               <div>
                 <h3 class="admin-section-title">Source System — SAP PI/PO (Process Orchestration)</h3>
                 <div class="form-grid-btp" style="margin-bottom:16px;">
-                  <div class="form-group-btp"><label>System Name</label><input type="text" class="btp-input" id="admin-pipo-system-name" value="PJ1"></div>
+                  <div class="form-group-btp"><label>System Name</label><input type="text" class="btp-input" id="admin-pipo-system-name" value="PJ2"></div>
                   <div class="form-group-btp"><label>System Version</label><input type="text" class="btp-input" id="admin-pipo-version" value="7.50"></div>
                 </div>
                 <div class="form-group-btp" style="margin-bottom:16px;">
@@ -326,10 +313,10 @@
                   <input type="text" class="btp-input" id="admin-pipo-address" value="http://nwjava.consultsda.com:443">
                 </div>
                 <div class="form-grid-btp" style="margin-bottom:16px;">
-                  <div class="form-group-btp"><label>User ID</label><input type="text" class="btp-input" id="admin-pipo-userid" value="PI_TECH_MIG"></div>
+                  <div class="form-group-btp"><label>User ID</label><input type="text" class="btp-input" id="admin-pipo-userid" value="SDAINT"></div>
                   <div class="form-group-btp">
                     <label>Password</label>
-                    <input type="password" class="btp-input" id="admin-pipo-password" placeholder="Masked in source screenshot — enter it once here">
+                    <input type="password" class="btp-input" id="admin-pipo-password" placeholder="Not committed to git — enter it once here (Save Defaults persists it for the session)">
                   </div>
                 </div>
                 <div class="form-grid-btp">
@@ -341,10 +328,29 @@
                   </div>
                   <div class="form-group-btp"><label>Location ID</label><input type="text" class="btp-input" id="admin-pipo-location" value="SDA_LAB"></div>
                 </div>
-                <div class="mock-note"><i class="fa-solid fa-circle-info"></i> Configuration settings for Integration Directory and ES Repository are the same, matching the PI/PO NWA screen this was captured from.</div>
+                <div class="mock-note"><i class="fa-solid fa-circle-info"></i> This is PJ2, the same real PI/PO system proven live via PI8 below — System Name/User ID corrected to match what's actually configured in the live destination (previously mislabeled PJ1/PI_TECH_MIG from an earlier screenshot capture).</div>
                 <div class="conn-test-row">
                   <button class="btn-btp-action-solid" id="btn-admin-test-pipo"><i class="fa-solid fa-plug-circle-check"></i> Test Connection</button>
                   <div class="conn-status" id="admin-pipo-test-status" style="display:none;"></div>
+                </div>
+
+                <h4 class="admin-section-title" style="margin-top:22px;font-size:0.82rem;"><i class="fa-solid fa-bolt" style="color:var(--gold);"></i> PI8 (PJ2) — Live MCP Connectivity Test</h4>
+                <p class="mock-note" style="margin-bottom:12px;"><i class="fa-solid fa-circle-info"></i> Same PJ2 system as above, but reached a different way — over HTTP through a Cloud Connector, not direct NWA login, so there's no password field to fill in here either way. These two destination names must already exist in your BTP subaccount (see <code class="mono">mcp/pipo-rfc-server/README.md</code>); pre-filled here so any developer who clones this repo sees exactly what's required.</p>
+                <div class="form-grid-btp" style="margin-bottom:16px;">
+                  <div class="form-group-btp"><label>System ID</label><input type="text" class="btp-input" id="admin-pi8-system-id" value="PJ2" readonly></div>
+                  <div class="form-group-btp"><label>Via</label><input type="text" class="btp-input" id="admin-pi8-via" value="Cloud Connector (OnPremise)" readonly></div>
+                </div>
+                <div class="form-grid-btp" style="margin-bottom:16px;">
+                  <div class="form-group-btp"><label>Destination — ESR</label><input type="text" class="btp-input" id="admin-pi8-dest-esr" value="PO_PJ2_ESR" readonly></div>
+                  <div class="form-group-btp"><label>Destination — Directory</label><input type="text" class="btp-input" id="admin-pi8-dest-dir" value="PO_PJ2_DIR" readonly></div>
+                </div>
+                <div class="form-group-btp" style="margin-bottom:16px;">
+                  <label>MCP Server (mcp/pipo-rfc-server)</label>
+                  <input type="text" class="btp-input" id="admin-pi8-mcp-base" value="https://sdaintai-pipo-rfc-mcp.cfapps.us10.hana.ondemand.com">
+                </div>
+                <div class="conn-test-row">
+                  <button class="btn-btp-action-solid" id="btn-admin-test-pi8"><i class="fa-solid fa-plug-circle-check"></i> Test Live PI8 Connection</button>
+                  <div class="conn-status" id="admin-pi8-test-status" style="display:none;"></div>
                 </div>
               </div>
 
@@ -832,7 +838,18 @@
   </div>
 
   <div class="notification-container" id="toast-container"></div>
+
+  <!-- Configuration for backend vs demo mode -->
+  <script>
+    window.SDAINTAI_CONFIG = {
+      useBackend: true,  // Set to false for pure demo mode (no backend calls)
+      mockDelay: 1200    // Simulated latency for mock calls in demo mode
+    };
+  </script>
+
   <script src="jszip.min.js"></script>
-  <script src="btp_app.js?v=lumi30"></script>
+  <script src="api-client.js?v=1.0"></script>
+  <script src="ui-wiring.js?v=1.0"></script>
+  <script src="btp_app.js?v=lumi32"></script>
 </body>
 </html>
