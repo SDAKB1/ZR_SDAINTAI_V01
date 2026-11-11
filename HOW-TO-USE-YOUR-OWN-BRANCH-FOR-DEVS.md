@@ -27,7 +27,7 @@ construction, not by everyone remembering to be careful.
 ## 1. One-time setup
 
 You need: `git`, Docker (Desktop or Engine), and a GitHub account with
-**Write** access to this repo (ask whoever administers it — see §5 for why
+**Write** access to this repo (ask whoever administers it — see §6 (Write-access policy) for why
 this is safe to grant).
 
 ```bash
@@ -114,7 +114,33 @@ etc.) will behave as it does for any unauthenticated browser hitting those
 same public endpoints; it's the frontend/UX you're previewing, not a full
 backend stack.
 
-## 5. Push your branch and open a Pull Request
+## 5. Get it informally approved before you open the PR
+
+Before you push and open a PR, get a go-ahead on what you built — demo your
+local Docker preview (screen-share, screen recording, or screenshots) to
+whoever signs off on changes for this project.
+
+This matters because of how branch protection on `main` is actually
+configured here: **PR required, but 0 required approvals** (see §6, Write-access policy, below).
+That means once a PR is open, you can merge it yourself immediately — there
+is no GitHub reviewer gate stopping you. The review is meant to happen
+*before* that point, informally, exactly like this. "Go ahead, open a PR
+and merge" **is** the approval — it just happens outside GitHub instead of
+as a formal PR review.
+
+Two things worth knowing about this step:
+
+- **Nobody else can browse to your local Docker container** — it's bound to
+  `localhost` on your own machine (ports 8081/8082/...), not reachable from
+  anyone else's browser. That's why the demo has to be screen-shared,
+  recorded, or screenshotted — there's no URL you can just send someone.
+- **GitHub does not verify that this step happened.** It's a team-process
+  checkpoint, not a technical one — trust-based, by design, to keep this
+  low-friction. If the team ever wants that enforced technically instead of
+  by process, that's the point at which required approvals on `main` would
+  go from 0 to 1+.
+
+## 6. Push your branch and open a Pull Request
 
 ```bash
 git add -A
@@ -162,7 +188,7 @@ later wants a pre-merge safety net instead of (or in addition to) that
 trace-and-revert approach, come back to this setting and raise required
 approvals to 1+.
 
-## 6. How it all comes together — merging to `main` and going live
+## 7. How it all comes together — merging to `main` and going live
 
 This is the part that matters once there's more than one developer working
 at the same time.
@@ -225,7 +251,7 @@ A few things the production owner needs to know, learned the hard way:
   app. Hit a few known pages and confirm `200` + expected content before
   calling it done.
 
-## 7. Quick reference
+## 8. Quick reference
 
 ```bash
 # One-time
@@ -236,9 +262,10 @@ cd ZR_SDAINTAI_V01
 git checkout -b yourname/feature-name
 # ... edit app/aiconx/webapp/*, bump ?v=lumiN on every edit ...
 docker compose -f docker-compose.dev.yml up --build dev1   # preview at localhost:8081
+# ... demo that preview, get an informal go-ahead ...
 git add -A && git commit -m "..."
 git push -u origin yourname/feature-name
-# ... open PR into main on GitHub, get it reviewed, merged ...
+# ... open PR into main on GitHub, merge it yourself (0 required approvals) ...
 
 # Go-live (production owner only, from main, after confirming with the main SDAINTAI repo owner)
 mbt build -f mta-sdaintai.yaml
