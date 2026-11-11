@@ -1,56 +1,24 @@
 {
-  "name": "AICONX",
+  "name": "sdaintai",
   "version": "1.0.0",
-  "engines": {
-    "node": ">=18"
-  },
+  "private": true,
+  "description": "SAP Data & AI Migration Intelligence Cockpit",
+  "author": "SDA KBEs",
+  "license": "SAP Sample Code License",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.116.0",
-    "@modelcontextprotocol/sdk": "^1.0.0",
-    "@cap-js/audit-logging": ">=0",
-    "@cap-js/hana": "^2",
-    "@cap-js/postgres": "^2",
-    "@langchain/anthropic": "^1.5.1",
-    "@langchain/core": "^1.2.1",
-    "@langchain/langgraph": "^1.4.5",
-    "@sap/cds": "^9",
-    "@sap/cds-mtxs": "^3",
-    "@sap/xssec": "^4",
-    "kafkajs": "^2",
-    "langchain": "^1.5.2",
-    "redis": "^5.0.0"
+    "@sap/cds": "^7",
+    "express": "^4",
+    "sqlite3": "^5",
+    "xml2js": "^0.6"
   },
-  "devDependencies": {
-    "@cap-js/sqlite": "^2.4",
-    "@sap/cds-dk": "^9"
+  "engines": {
+    "node": "^20"
   },
   "scripts": {
-    "start": "cds-serve"
-  },
-  "private": true,
-  "cds": {
-    "requires": {
-      "db": {
-        "kind": "sqlite",
-        "credentials": { "url": "db/sdaintai.sqlite" }
-      },
-      "[production]": {
-        "auth": "xsuaa",
-        "db": "hana",
-        "multitenancy": true
-      },
-      "[with-mtx]": {
-        "multitenancy": true
-      },
-      "messaging": {
-        "kind": "enterprise-messaging"
-      },
-      "connectivity": true,
-      "destinations": true,
-      "html5-repo": true,
-      "portal": true,
-      "application-logging": true
-    },
-    "profile": "with-mtx-sidecar"
+    "start": "cds serve",
+    "test": "node test/api-client.test.js && node test/ui-wiring.test.js",
+    "test:api": "node test/api-client.test.js",
+    "test:ui": "node test/ui-wiring.test.js",
+    "test:integration": "node test/integration.test.js"
   }
 }
