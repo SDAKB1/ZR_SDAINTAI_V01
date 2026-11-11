@@ -577,6 +577,19 @@ async function brainCall(action, params) {
   if (!res.ok) throw new Error((data && data.error && data.error.message) || `HTTP ${res.status}`);
   return data;
 }
+// Same shape as brainCall, reused as-is for SignupService -- CAP's CSRF
+// token is global per session, not per-service, so the one fetched for
+// Brain works here too without a separate fetch.
+async function signupCall(action, params) {
+  if (!_brainCsrfToken) await fetchBrainCsrfToken();
+  const headers = { 'Content-Type': 'application/json' };
+  if (_brainCsrfToken) headers['x-csrf-token'] = _brainCsrfToken;
+  const res = await fetch(`/odata/v4/signup/${action}`, { method: 'POST', headers, credentials: 'same-origin', body: JSON.stringify(params) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data && data.error && data.error.message) || `HTTP ${res.status}`);
+  return data;
+}
+
 async function activateBrainEngine() {
   const keyInput = $('admin-brain-key');
   const key = keyInput ? keyInput.value.trim() : '';
@@ -4986,25 +4999,54 @@ function setupAccessLock() {
 
   $('signup-form').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const name = $('signup-name').value.trim();
     const identifier = $('signup-identifier').value.trim();
     const pass = $('signup-password').value;
     const confirm = $('signup-password-confirm').value;
     const errorEl = $('signup-error');
-    if (!identifier || !pass) { errorEl.textContent = 'Enter an email or username, and a password.'; return; }
+    if (!name) { errorEl.textContent = 'Enter your full name.'; return; }
+    if (!identifier || !pass) { errorEl.textContent = 'Enter a business email and a password.'; return; }
     if (pass !== confirm) { errorEl.textContent = 'Passwords don’t match.'; return; }
     errorEl.textContent = '';
-    S.pendingSignup = { identifier, pass };
+    S.pendingSignup = { name, identifier, pass, provider: 'business-email' };
     $('verify-identifier-label').textContent = identifier;
     showLockStep('verify-card');
+
+    // Try a real email via SignupService (SendGrid) — this needs the real
+    // CAP backend, so it simply fails/404s on a static Docker preview with
+    // no backend at all, same as any other backend call attempted there.
+    // Falls back to the existing mock note either way; the "Open
+    // Verification Link" button below still continues the in-app flow
+    // regardless, so a real send failing never blocks the demo.
+    const noteEl = $('verify-mode-note');
+    try {
+      const result = await signupCall('sendVerificationEmail', { name, email: identifier });
+      if (result.success && !result.simulated) {
+        noteEl.innerHTML = `<i class="fa-solid fa-circle-check"></i> A real verification email was just sent to <b>${identifier}</b> via SendGrid — check your inbox, or click below to continue here without waiting for it.`;
+      } else {
+        noteEl.innerHTML = `<i class="fa-solid fa-circle-info"></i> Email sending isn't configured yet (${result.message || 'SendGrid not set up'}) — simulating it instead. Click below to continue.`;
+      }
+    } catch (err) {
+      // Expected on the static Docker preview (no backend) — leave the
+      // original mock-note text in place, don't surface this as an error.
+      console.warn('[Signup] sendVerificationEmail unreachable (expected on a static preview):', err.message);
+    }
   });
 
   $('btn-verify-simulate').addEventListener('click', async () => {
     if (!S.pendingSignup) { showLockStep('signup-card'); return; }
-    const { identifier, pass } = S.pendingSignup;
+    const { name, identifier, pass } = S.pendingSignup;
     const hash = await sha256Hex(`${identifier}:${pass}`);
     addSignupHash(hash);
+    completeFederatedSignup(S.pendingSignup);
     showLockStep('onboard-card');
   });
+
+  // Federated Google sign-in itself (handleGoogleSignIn, called by
+  // Google's own library) is wired at top level, outside this function —
+  // see "FEDERATED GOOGLE SIGN-IN" below. Nothing to attach here; Google's
+  // own rendered button (the g_id_signin div in the HTML) handles its own
+  // click.
 
   $('onboard-form').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -5029,6 +5071,74 @@ function setupAccessLock() {
     unlockApp();
     showToast('Welcome to SDAINTAI', `Account created and your first migration settings are saved — ${PLATFORMS[S.adminDefaults.platform] ? PLATFORMS[S.adminDefaults.platform].label : S.adminDefaults.platform} on ${S.adminDefaults.sdaSubaccount}${S.adminDefaults.prvTenant ? ' (sda-prv-tenant)' : ''}. Ready when you are.`, 'purple');
   });
+}
+
+// ==================== FEDERATED GOOGLE SIGN-IN (real, not mocked) ====================
+// Google Identity Services (the <script src="https://accounts.google.com/
+// gsi/client"> tag + the g_id_onload/g_id_signin divs in btp_cockpit.html)
+// renders Google's own button and runs the whole OAuth popup flow itself —
+// nothing here drives that UI. All this does is receive the result: a
+// signed ID token (JWT) Google hands back once the user actually picks a
+// real Google account. Decoded client-side below for the email/name
+// claims; the signature itself is NOT verified here (that needs a backend
+// call to Google's tokeninfo endpoint or a server-side JWKS check — out of
+// scope until this moves off a static Docker preview) — good enough to
+// prove "a real Google sign-in happened" and read who it was, not yet a
+// substitute for a verified server-side session.
+//
+// Needs GOOGLE_CLIENT_ID below to be a real OAuth 2.0 Client ID from
+// Google Cloud Console (APIs & Services -> Credentials -> OAuth client ID
+// -> Web application), with this page's exact origin added under
+// "Authorized JavaScript origins" (http://localhost:8083 works for this
+// Docker preview; the production origin needs adding separately once this
+// ships). See docs/SDAINTAI-Federated-Google-Signin-Setup.md.
+const GOOGLE_CLIENT_ID = '866561366401-n90sqc0b2qb411ud18atf9rbf2g82qii.apps.googleusercontent.com';
+
+// Decodes a JWT's payload segment only (no signature check) -- base64url,
+// not plain base64, so '-'/'_' need remapping and padding restored first.
+function decodeJwtPayload(jwt) {
+  const payload = jwt.split('.')[1];
+  const b64 = payload.replace(/-/g, '+').replace(/_/g, '/').padEnd(payload.length + (4 - payload.length % 4) % 4, '=');
+  return JSON.parse(decodeURIComponent(atob(b64).split('').map(c => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join('')));
+}
+
+// Called by Google's library itself (referenced by name in the
+// data-callback attribute) once the user completes the real Google
+// account picker. Skips the Verify step entirely, same as a real
+// federated identity provider would — Google already vouches for the
+// email (claims.email_verified), nothing left to confirm.
+async function handleGoogleSignIn(response) {
+  let claims;
+  try {
+    claims = decodeJwtPayload(response.credential);
+  } catch (err) {
+    showToast('Google sign-in failed', 'Could not read the returned credential — see console.', 'danger');
+    console.error('[Google Sign-In] JWT decode failed:', err);
+    return;
+  }
+  const name = claims.name || [claims.given_name, claims.family_name].filter(Boolean).join(' ') || claims.email;
+  const email = claims.email;
+  if (!claims.email_verified) {
+    showToast('Google account not verified', `${email} hasn't been verified by Google — can't trust this sign-in.`, 'danger');
+    return;
+  }
+  const hash = await sha256Hex(`${email}:google-federated`);
+  addSignupHash(hash);
+  completeFederatedSignup({ name, identifier: email, provider: 'google' });
+  showToast('Signed in with Google', `${name} <${email}> — verified by Google.`, 'green');
+  showLockStep('onboard-card');
+}
+
+// Shared tail end of either signup path (business email or Google):
+// remembers who signed up (for Lumi's own greeting, so it doesn't re-ask
+// "what's your name" right after this) and logs the event — best-effort,
+// no-op until the Brain is actually activated elsewhere in the app, same
+// as every other logBrainEvent call site.
+function completeFederatedSignup({ name, identifier, provider }) {
+  if (name) setUserName(name);
+  logBrainEvent('user_signup', provider,
+    { name, identifier, provider },
+    `New account via ${provider === 'google' ? 'Google federated login' : 'business email'}: ${name} <${identifier}>.`);
 }
 
 // ==================== INIT ====================
