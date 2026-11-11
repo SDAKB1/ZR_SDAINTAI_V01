@@ -319,7 +319,36 @@ A few things the production owner needs to know, learned the hard way:
   app. Hit a few known pages and confirm `200` + expected content before
   calling it done.
 
-## 8. Quick reference
+## 8. Worked example: `BRANCHDEVELOPER0`
+
+This whole doc was proven end-to-end on a real branch, `BRANCHDEVELOPER0`,
+by the first developer actually onboarded this way — including hitting (and
+fixing, live, in this doc) every real-world snag along the way: Docker not
+installed, WSL missing, running commands in the wrong window, a stale
+build. If something in this doc doesn't quite work for you, this is the
+proof it works once those snags are cleared, and exactly what cleared them.
+
+**The fix demonstrated:** the Admin → Source System (SAP PI/PO) panel's
+**Password** field is blank on `main` by design (never commit a real
+secret to git without a deliberate reason — see §6). On `BRANCHDEVELOPER0`,
+that field was deliberately pre-filled as a visible, screenshot-able
+before/after — a real example of "branch has a fix, main doesn't yet,
+merging ships it."
+
+| | `main` (production) | `BRANCHDEVELOPER0` (local Docker) |
+|---|---|---|
+| URL | `https://sdaintai.cfapps.us10.hana.ondemand.com/btp_cockpit.html` | `http://localhost:8083/btp_cockpit.html` |
+| Admin → PI/PO → Password field | Empty | Pre-filled |
+| Where that comes from | Deployed `main` branch | This branch's own commit, not yet merged |
+
+Ask whoever ran this worked example (the main SDAINTAI repo's
+maintainer) for the companion screenshots and screen recording showing
+both URLs side by side, production's empty password field vs. this
+branch's filled one — they're not part of this repo (screenshots and video
+files aren't committed here), but they're what proves this exact table
+isn't theoretical.
+
+## 9. Quick reference
 
 ```bash
 # One-time
