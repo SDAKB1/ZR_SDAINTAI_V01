@@ -305,7 +305,7 @@
               <div>
                 <h3 class="admin-section-title">Source System — SAP PI/PO (Process Orchestration)</h3>
                 <div class="form-grid-btp" style="margin-bottom:16px;">
-                  <div class="form-group-btp"><label>System Name</label><input type="text" class="btp-input" id="admin-pipo-system-name" value="PJ1"></div>
+                  <div class="form-group-btp"><label>System Name</label><input type="text" class="btp-input" id="admin-pipo-system-name" value="PJ2"></div>
                   <div class="form-group-btp"><label>System Version</label><input type="text" class="btp-input" id="admin-pipo-version" value="7.50"></div>
                 </div>
                 <div class="form-group-btp" style="margin-bottom:16px;">
@@ -313,10 +313,10 @@
                   <input type="text" class="btp-input" id="admin-pipo-address" value="http://nwjava.consultsda.com:443">
                 </div>
                 <div class="form-grid-btp" style="margin-bottom:16px;">
-                  <div class="form-group-btp"><label>User ID</label><input type="text" class="btp-input" id="admin-pipo-userid" value="PI_TECH_MIG"></div>
+                  <div class="form-group-btp"><label>User ID</label><input type="text" class="btp-input" id="admin-pipo-userid" value="SDAINT"></div>
                   <div class="form-group-btp">
                     <label>Password</label>
-                    <input type="password" class="btp-input" id="admin-pipo-password" placeholder="Masked in source screenshot — enter it once here">
+                    <input type="password" class="btp-input" id="admin-pipo-password" placeholder="Not committed to git — enter it once here (Save Defaults persists it for the session)">
                   </div>
                 </div>
                 <div class="form-grid-btp">
@@ -328,14 +328,14 @@
                   </div>
                   <div class="form-group-btp"><label>Location ID</label><input type="text" class="btp-input" id="admin-pipo-location" value="SDA_LAB"></div>
                 </div>
-                <div class="mock-note"><i class="fa-solid fa-circle-info"></i> Configuration settings for Integration Directory and ES Repository are the same, matching the PI/PO NWA screen this was captured from.</div>
+                <div class="mock-note"><i class="fa-solid fa-circle-info"></i> This is PJ2, the same real PI/PO system proven live via PI8 below — System Name/User ID corrected to match what's actually configured in the live destination (previously mislabeled PJ1/PI_TECH_MIG from an earlier screenshot capture).</div>
                 <div class="conn-test-row">
                   <button class="btn-btp-action-solid" id="btn-admin-test-pipo"><i class="fa-solid fa-plug-circle-check"></i> Test Connection</button>
                   <div class="conn-status" id="admin-pipo-test-status" style="display:none;"></div>
                 </div>
 
                 <h4 class="admin-section-title" style="margin-top:22px;font-size:0.82rem;"><i class="fa-solid fa-bolt" style="color:var(--gold);"></i> PI8 (PJ2) — Live MCP Connectivity Test</h4>
-                <p class="mock-note" style="margin-bottom:12px;"><i class="fa-solid fa-circle-info"></i> Separate from the PJ1 system above — PJ2 is reached over HTTP through a Cloud Connector, not direct NWA login, so there's no password field to fill in. These two destination names must already exist in your BTP subaccount (see <code class="mono">mcp/pipo-rfc-server/README.md</code>); pre-filled here so any developer who clones this repo sees exactly what's required.</p>
+                <p class="mock-note" style="margin-bottom:12px;"><i class="fa-solid fa-circle-info"></i> Same PJ2 system as above, but reached a different way — over HTTP through a Cloud Connector, not direct NWA login, so there's no password field to fill in here either way. These two destination names must already exist in your BTP subaccount (see <code class="mono">mcp/pipo-rfc-server/README.md</code>); pre-filled here so any developer who clones this repo sees exactly what's required.</p>
                 <div class="form-grid-btp" style="margin-bottom:16px;">
                   <div class="form-group-btp"><label>System ID</label><input type="text" class="btp-input" id="admin-pi8-system-id" value="PJ2" readonly></div>
                   <div class="form-group-btp"><label>Via</label><input type="text" class="btp-input" id="admin-pi8-via" value="Cloud Connector (OnPremise)" readonly></div>

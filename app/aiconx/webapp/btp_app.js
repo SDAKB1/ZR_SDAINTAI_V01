@@ -355,15 +355,19 @@ const S = {
     almTenantManual: true,
     figafAlmTarget: '',
     figafManual: true,
-    // SAP PI/PO (Process Orchestration) source system — pulled from a real PJ1
-    // Integration Directory config screenshot. Address and User ID were legible
-    // in the source image; Password was masked there, so it starts blank rather
-    // than fabricated — enter it once and Save Defaults persists it for the session.
+    // SAP PI/PO (Process Orchestration) source system — PJ2, the same real
+    // system proven live via PI8 (see the Live MCP Connectivity Test panel
+    // below). System Name/User ID were originally mislabeled PJ1/PI_TECH_MIG
+    // from an earlier screenshot capture; corrected to match what's actually
+    // configured in the live PO_PJ2_ESR/PO_PJ2_DIR destination (verified via
+    // the Destination Configuration API: User SDAINT, same host/location).
+    // Password still starts blank — the destination's own stored password
+    // isn't surfaced here, enter it once and Save Defaults persists it.
     piPo: {
-      systemName: 'PJ1',
+      systemName: 'PJ2',
       systemVersion: '7.50',
       address: 'http://nwjava.consultsda.com:443',
-      userId: 'PI_TECH_MIG',
+      userId: 'SDAINT',
       password: '',
       authType: 'BasicAuthentication',
       proxyType: 'OnPremise',
@@ -4562,7 +4566,7 @@ function testPiPoConnection() {
     }
     if (!$('admin-pipo-password').value) {
       statusEl.className = 'conn-status fail';
-      statusEl.innerHTML = '<span class="dot"></span> PI_TECH_MIG password not set yet — enter it above';
+      statusEl.innerHTML = `<span class="dot"></span> ${$('admin-pipo-userid').value || 'User'} password not set yet — enter it above`;
       return;
     }
     statusEl.className = 'conn-status ok';
