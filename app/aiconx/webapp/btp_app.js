@@ -5059,7 +5059,7 @@ function setupAccessLock() {
 // "Authorized JavaScript origins" (http://localhost:8083 works for this
 // Docker preview; the production origin needs adding separately once this
 // ships). See docs/SDAINTAI-Federated-Google-Signin-Setup.md.
-const GOOGLE_CLIENT_ID = 'REPLACE_WITH_REAL_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com';
+const GOOGLE_CLIENT_ID = '866561366401-n90sqc0b2qb411ud18atf9rbf2g82qii.apps.googleusercontent.com';
 
 // Decodes a JWT's payload segment only (no signature check) -- base64url,
 // not plain base64, so '-'/'_' need remapping and padding restored first.
