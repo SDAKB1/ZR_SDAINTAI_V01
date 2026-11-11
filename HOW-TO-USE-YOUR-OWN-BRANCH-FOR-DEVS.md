@@ -30,6 +30,43 @@ You need: `git`, Docker (Desktop or Engine), and a GitHub account with
 **Write** access to this repo (ask whoever administers it — see §6 (Write-access policy) for why
 this is safe to grant).
 
+**All of the commands in this doc are typed into a regular terminal app on
+your own computer** (PowerShell on Windows, Terminal on Mac, any shell on
+Linux) — never into a chat tool, and never "inside" the Docker Desktop
+application window itself. Docker Desktop just needs to be installed and
+running in the background (check for its icon in your system tray/menu
+bar); the terminal is what actually drives it.
+
+### Installing Docker on Windows (first time only)
+
+1. Download **Docker Desktop** from https://www.docker.com/products/docker-desktop/
+   and run the installer.
+2. Launch **Docker Desktop** from the Start menu. If it shows an error like
+   **"WSL is not installed"**, do this one-time fix:
+   - Press the Windows key, type `powershell`, **right-click** "Windows
+     PowerShell" → **Run as administrator** → click **Yes** on the prompt.
+   - In that window, type `wsl --install` and press Enter. Let it finish
+     (a few minutes), then **restart your computer** when it asks.
+   - After restart, it may ask you to create a Unix username/password —
+     that's a brand-new, local-only account for the Linux environment WSL
+     just installed, unrelated to GitHub/Docker Hub/anything else. Anything
+     simple works; nobody else needs it.
+   - Open **Docker Desktop** again — the WSL error should be gone.
+3. Open a **new, regular (non-admin) PowerShell window** and confirm:
+   ```powershell
+   docker --version
+   docker compose version
+   ```
+   Both should print a version number. If "command not found" — close
+   every terminal window and open a brand new one (Windows sometimes needs
+   a fresh shell, occasionally a full reboot, to pick up the install).
+
+Mac/Linux: same idea, no WSL step — install Docker Desktop (Mac) or Docker
+Engine + Compose plugin (Linux) via your usual package manager, make sure
+it's running, then verify with the same two `docker ...` commands above.
+
+### Clone the repo
+
 ```bash
 git clone https://github.com/SDAKB1/ZR_SDAINTAI_V01.git
 cd ZR_SDAINTAI_V01
