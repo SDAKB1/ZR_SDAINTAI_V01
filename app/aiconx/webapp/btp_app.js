@@ -577,6 +577,19 @@ async function brainCall(action, params) {
   if (!res.ok) throw new Error((data && data.error && data.error.message) || `HTTP ${res.status}`);
   return data;
 }
+// Same shape as brainCall, reused as-is for SignupService -- CAP's CSRF
+// token is global per session, not per-service, so the one fetched for
+// Brain works here too without a separate fetch.
+async function signupCall(action, params) {
+  if (!_brainCsrfToken) await fetchBrainCsrfToken();
+  const headers = { 'Content-Type': 'application/json' };
+  if (_brainCsrfToken) headers['x-csrf-token'] = _brainCsrfToken;
+  const res = await fetch(`/odata/v4/signup/${action}`, { method: 'POST', headers, credentials: 'same-origin', body: JSON.stringify(params) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data && data.error && data.error.message) || `HTTP ${res.status}`);
+  return data;
+}
+
 async function activateBrainEngine() {
   const keyInput = $('admin-brain-key');
   const key = keyInput ? keyInput.value.trim() : '';
@@ -4998,6 +5011,26 @@ function setupAccessLock() {
     S.pendingSignup = { name, identifier, pass, provider: 'business-email' };
     $('verify-identifier-label').textContent = identifier;
     showLockStep('verify-card');
+
+    // Try a real email via SignupService (SendGrid) — this needs the real
+    // CAP backend, so it simply fails/404s on a static Docker preview with
+    // no backend at all, same as any other backend call attempted there.
+    // Falls back to the existing mock note either way; the "Open
+    // Verification Link" button below still continues the in-app flow
+    // regardless, so a real send failing never blocks the demo.
+    const noteEl = $('verify-mode-note');
+    try {
+      const result = await signupCall('sendVerificationEmail', { name, email: identifier });
+      if (result.success && !result.simulated) {
+        noteEl.innerHTML = `<i class="fa-solid fa-circle-check"></i> A real verification email was just sent to <b>${identifier}</b> via SendGrid — check your inbox, or click below to continue here without waiting for it.`;
+      } else {
+        noteEl.innerHTML = `<i class="fa-solid fa-circle-info"></i> Email sending isn't configured yet (${result.message || 'SendGrid not set up'}) — simulating it instead. Click below to continue.`;
+      }
+    } catch (err) {
+      // Expected on the static Docker preview (no backend) — leave the
+      // original mock-note text in place, don't surface this as an error.
+      console.warn('[Signup] sendVerificationEmail unreachable (expected on a static preview):', err.message);
+    }
   });
 
   $('btn-verify-simulate').addEventListener('click', async () => {
