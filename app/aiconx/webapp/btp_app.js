@@ -5009,44 +5009,11 @@ function setupAccessLock() {
     showLockStep('onboard-card');
   });
 
-  // ---- Federated login: Google (mocked — same "no real backend yet"
-  // posture as the email-verification step above; a static Docker preview
-  // has no OAuth client/consent screen or SMTP server to call). Skips the
-  // Verify step entirely, same as a real federated identity provider
-  // would — Google already vouches for the email, nothing left to confirm.
-  $('btn-signup-google').addEventListener('click', () => {
-    openModal(
-      'Continue with Google',
-      `<div class="mock-note" style="text-align:left;margin-bottom:14px;"><i class="fa-solid fa-circle-info"></i> Demo account chooser — this preview has no real Google OAuth client wired up (that needs a live backend, not this static Docker preview). Enter any name/Gmail address to simulate picking an account.</div>
-       <input type="text" class="btp-input" id="google-mock-name" placeholder="Full name" style="margin-bottom:10px;width:100%;">
-       <input type="email" class="btp-input" id="google-mock-email" placeholder="you@gmail.com" style="width:100%;">`,
-      [
-        { label: 'Cancel', cls: 'btn-btp-cancel', onClick: closeModal },
-        { label: 'Use this account', cls: 'btn-btp-gold', onClick: async () => {
-          const name = $('google-mock-name').value.trim();
-          const email = $('google-mock-email').value.trim();
-          if (!name || !email) return; // leave modal open — both fields required
-          closeModal();
-          const hash = await sha256Hex(`${email}:google-federated`);
-          addSignupHash(hash);
-          completeFederatedSignup({ name, identifier: email, provider: 'google' });
-          showLockStep('onboard-card');
-        } }
-      ]
-    );
-  });
-
-  // Shared tail end of either signup path: remembers who signed up (for
-  // Lumi's own greeting, so it doesn't re-ask "what's your name" right
-  // after this) and logs the event — best-effort, no-op until the Brain
-  // is actually activated elsewhere in the app, same as every other
-  // logBrainEvent call site.
-  function completeFederatedSignup({ name, identifier, provider }) {
-    if (name) setUserName(name);
-    logBrainEvent('user_signup', provider,
-      { name, identifier, provider },
-      `New account via ${provider === 'google' ? 'Google federated login' : 'business email'}: ${name} <${identifier}>.`);
-  }
+  // Federated Google sign-in itself (handleGoogleSignIn, called by
+  // Google's own library) is wired at top level, outside this function —
+  // see "FEDERATED GOOGLE SIGN-IN" below. Nothing to attach here; Google's
+  // own rendered button (the g_id_signin div in the HTML) handles its own
+  // click.
 
   $('onboard-form').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -5071,6 +5038,74 @@ function setupAccessLock() {
     unlockApp();
     showToast('Welcome to SDAINTAI', `Account created and your first migration settings are saved — ${PLATFORMS[S.adminDefaults.platform] ? PLATFORMS[S.adminDefaults.platform].label : S.adminDefaults.platform} on ${S.adminDefaults.sdaSubaccount}${S.adminDefaults.prvTenant ? ' (sda-prv-tenant)' : ''}. Ready when you are.`, 'purple');
   });
+}
+
+// ==================== FEDERATED GOOGLE SIGN-IN (real, not mocked) ====================
+// Google Identity Services (the <script src="https://accounts.google.com/
+// gsi/client"> tag + the g_id_onload/g_id_signin divs in btp_cockpit.html)
+// renders Google's own button and runs the whole OAuth popup flow itself —
+// nothing here drives that UI. All this does is receive the result: a
+// signed ID token (JWT) Google hands back once the user actually picks a
+// real Google account. Decoded client-side below for the email/name
+// claims; the signature itself is NOT verified here (that needs a backend
+// call to Google's tokeninfo endpoint or a server-side JWKS check — out of
+// scope until this moves off a static Docker preview) — good enough to
+// prove "a real Google sign-in happened" and read who it was, not yet a
+// substitute for a verified server-side session.
+//
+// Needs GOOGLE_CLIENT_ID below to be a real OAuth 2.0 Client ID from
+// Google Cloud Console (APIs & Services -> Credentials -> OAuth client ID
+// -> Web application), with this page's exact origin added under
+// "Authorized JavaScript origins" (http://localhost:8083 works for this
+// Docker preview; the production origin needs adding separately once this
+// ships). See docs/SDAINTAI-Federated-Google-Signin-Setup.md.
+const GOOGLE_CLIENT_ID = 'REPLACE_WITH_REAL_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com';
+
+// Decodes a JWT's payload segment only (no signature check) -- base64url,
+// not plain base64, so '-'/'_' need remapping and padding restored first.
+function decodeJwtPayload(jwt) {
+  const payload = jwt.split('.')[1];
+  const b64 = payload.replace(/-/g, '+').replace(/_/g, '/').padEnd(payload.length + (4 - payload.length % 4) % 4, '=');
+  return JSON.parse(decodeURIComponent(atob(b64).split('').map(c => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join('')));
+}
+
+// Called by Google's library itself (referenced by name in the
+// data-callback attribute) once the user completes the real Google
+// account picker. Skips the Verify step entirely, same as a real
+// federated identity provider would — Google already vouches for the
+// email (claims.email_verified), nothing left to confirm.
+async function handleGoogleSignIn(response) {
+  let claims;
+  try {
+    claims = decodeJwtPayload(response.credential);
+  } catch (err) {
+    showToast('Google sign-in failed', 'Could not read the returned credential — see console.', 'danger');
+    console.error('[Google Sign-In] JWT decode failed:', err);
+    return;
+  }
+  const name = claims.name || [claims.given_name, claims.family_name].filter(Boolean).join(' ') || claims.email;
+  const email = claims.email;
+  if (!claims.email_verified) {
+    showToast('Google account not verified', `${email} hasn't been verified by Google — can't trust this sign-in.`, 'danger');
+    return;
+  }
+  const hash = await sha256Hex(`${email}:google-federated`);
+  addSignupHash(hash);
+  completeFederatedSignup({ name, identifier: email, provider: 'google' });
+  showToast('Signed in with Google', `${name} <${email}> — verified by Google.`, 'green');
+  showLockStep('onboard-card');
+}
+
+// Shared tail end of either signup path (business email or Google):
+// remembers who signed up (for Lumi's own greeting, so it doesn't re-ask
+// "what's your name" right after this) and logs the event — best-effort,
+// no-op until the Brain is actually activated elsewhere in the app, same
+// as every other logBrainEvent call site.
+function completeFederatedSignup({ name, identifier, provider }) {
+  if (name) setUserName(name);
+  logBrainEvent('user_signup', provider,
+    { name, identifier, provider },
+    `New account via ${provider === 'google' ? 'Google federated login' : 'business email'}: ${name} <${identifier}>.`);
 }
 
 // ==================== INIT ====================

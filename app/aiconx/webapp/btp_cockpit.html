@@ -9,9 +9,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=lumi33">
-  <link rel="stylesheet" href="btp_style.css?v=lumi33">
-  <link rel="stylesheet" href="btp_lumi.css?v=lumi33">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <link rel="stylesheet" href="style.css?v=lumi34">
+  <link rel="stylesheet" href="btp_style.css?v=lumi34">
+  <link rel="stylesheet" href="btp_lumi.css?v=lumi34">
 </head>
 <body>
 
@@ -38,7 +39,27 @@
       <p>Sign up with your business email, or continue with Google — we'll send a verification link before setting up your first migration.</p>
       <div class="lock-error" id="signup-error"></div>
 
-      <button type="button" class="btn-btp" id="btn-signup-google" style="width:100%;justify-content:center;background:#fff;color:#3c4043;border:1px solid #dadce0;"><i class="fa-brands fa-google"></i> Continue with Google</button>
+      <!-- Real Google Identity Services sign-in -- not a mock. Returns a
+           genuine signed ID token (JWT) with a verified email/name,
+           decoded client-side in btp_app.js's handleGoogleSignIn(). Needs
+           a real OAuth Client ID below (GOOGLE_CLIENT_ID in btp_app.js) --
+           until one is set, Google's own button renders an error instead
+           of a picker. See docs/SDAINTAI-Federated-Google-Signin-Setup.md. -->
+      <div id="g_id_onload"
+           data-client_id="REPLACE_WITH_REAL_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com"
+           data-callback="handleGoogleSignIn"
+           data-auto_prompt="false">
+      </div>
+      <div class="g_id_signin"
+           data-type="standard"
+           data-size="large"
+           data-theme="outline"
+           data-text="continue_with"
+           data-shape="rectangular"
+           data-logo_alignment="left"
+           style="display:flex;justify-content:center;margin-bottom:6px;">
+      </div>
+      <div class="mock-note" style="text-align:left;margin-bottom:10px;"><i class="fa-solid fa-circle-info"></i> Real Google sign-in widget — shows a Google error until a real OAuth Client ID is configured (ask whoever manages SDA's Google Cloud project, or see the setup doc).</div>
       <div class="lock-switch" style="margin:14px 0;text-align:center;color:var(--btp-text-muted-dark,#888);">— or use a business email —</div>
 
       <form class="lock-fields" id="signup-form" autocomplete="off">
@@ -844,6 +865,6 @@
 
   <div class="notification-container" id="toast-container"></div>
   <script src="jszip.min.js"></script>
-  <script src="btp_app.js?v=lumi33"></script>
+  <script src="btp_app.js?v=lumi34"></script>
 </body>
 </html>
