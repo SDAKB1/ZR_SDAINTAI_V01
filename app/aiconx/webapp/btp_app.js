@@ -5,6 +5,12 @@
 
 // ==================== STATIC DATA ====================
 
+// PI8 (PJ2) PI/PO MCP bridge — migrated here from the SDADATAAI BW cockpit's
+// proof-of-concept (bw-rfc-server) now that it's proven live against the
+// real system. Open/CORS, no auth needed for these two read-only routes —
+// see mcp/pipo-rfc-server/README.md.
+const PIPO_MCP_API_BASE = 'https://sdaintai-pipo-rfc-mcp.cfapps.us10.hana.ondemand.com';
+
 const PLATFORMS = {
   mulesoft: {
     label: 'MuleSoft', icon: 'fa-diagram-project', assetNoun: 'app', assetNounPlural: 'apps',
@@ -1143,8 +1149,53 @@ function startAssetScan() {
   setLumiState('thinking');
   lumiSay('Scanning… this takes a few seconds.');
 
-  setTimeout(() => {
-    S.assets = (ASSET_SETS[S.platform] || ASSET_SETS.mulesoft).map(a => ({ ...a, convertPct: computeConversionPct(a) }));
+  if (S.platform === 'pipo') { scanPi8Live(btn); return; }
+  setTimeout(() => finishAssetScan(ASSET_SETS[S.platform] || ASSET_SETS.mulesoft, btn, {}), 1600);
+}
+
+// Live PI8 (PJ2) object scan — fetches the real ESR catalog through
+// mcp/pipo-rfc-server (migrated here from the SDADATAAI BW cockpit's proof
+// of concept, now that it's proven live). Falls back to the existing demo
+// ASSET_SETS.pipo (with a toast) on any failure — same fallback pattern
+// already proven on the BW cockpit's PI8 Objects tab — so a fresh clone
+// still demos cleanly even where the Cloud Connector chain isn't reachable.
+async function scanPi8Live(btn) {
+  try {
+    const res = await fetch(PIPO_MCP_API_BASE + '/api/pi8/objects');
+    const data = await res.json();
+    if (!data.verified || !(data.items || []).length) throw new Error(data.error || 'no live objects returned');
+    const assets = mapPi8ObjectsToAssets(data.items);
+    showToast('Connected to PI8 (PJ2)', `${data.totalCount || assets.length} real ESR objects found live (${assets.length} shown).`, 'success');
+    finishAssetScan(assets, btn, { live: true, totalCount: data.totalCount });
+  } catch (err) {
+    showToast('PI8 live scan failed', `${err.message || err} — showing demo data instead.`, 'danger');
+    finishAssetScan(ASSET_SETS.pipo, btn, { live: false });
+  }
+}
+
+// Maps real PI8 ESR objects ({type, typeLabel, name, namespace, swcv,
+// isCustom}, from mcp/pipo-rfc-server's /api/pi8/objects) into the same
+// asset shape populateAssetsTable()/computeConversionPct()/bucket grouping
+// already render for mock data — custom content gets a Review nudge since
+// it needs more scrutiny than SAP's own content.
+function mapPi8ObjectsToAssets(items) {
+  return items.map((o, i) => ({
+    id: `PI8-${String(i + 1).padStart(4, '0')}`,
+    name: o.name || o.namespace || o.type,
+    type: o.typeLabel || o.type,
+    tier: o.isCustom ? 'Medium' : 'Simple',
+    deps: o.isCustom ? 2 : 1,
+    status: o.isCustom ? 'Review' : 'Ready',
+    flowCount: o.isCustom ? 6 : 3,
+    live: true,
+    tree: [leafTree(o.type || 'esr-object', `${o.name || o.type} (${o.namespace || o.swcv || ''})`, true)]
+  }));
+}
+
+function finishAssetScan(rawAssets, btn, liveInfo) {
+  {
+    S.assets = rawAssets.map(a => ({ ...a, convertPct: computeConversionPct(a) }));
+    S.assetsLivePi8 = !!(liveInfo && liveInfo.live);
     btn.innerHTML = '<i class="fa-solid fa-check"></i> Scan complete';
     const ready = S.assets.filter(a => a.status === 'Ready').length;
     const review = S.assets.filter(a => a.status === 'Review').length;
@@ -1177,7 +1228,7 @@ function startAssetScan() {
     lumiSay(`Scan complete — ${S.assets.length} ${p.assetNounPlural} found (≈${totalIflows} interfaces/iFlows once each app's bundled flows are counted). ${ready} ready${warn ? `, ${warn} warning` : ''}${review ? `, ${review} need review` : ''}.`);
     if (review) flagNav('nav-buckets');
     lumiChoices([{ label: 'Show me the details', onClick: showAssetDetails }, { label: 'Continue to Plan', cls: 'primary', onClick: () => { markDone('nav-assets'); goToBuckets(); } }]);
-  }, 1600);
+  }
 }
 
 function computeConversionPct(app) {
@@ -4501,6 +4552,33 @@ function testPiPoConnection() {
     statusEl.innerHTML = `<span class="dot"></span> Connected — ${$('admin-pipo-system-name').value || 'PI/PO'} Integration Directory reachable`;
   }, 1200);
 }
+// Real check, unlike testPiPoConnection above — calls mcp/pipo-rfc-server's
+// /api/pi8/ping, which proves the Cloud Connector/destination chain to PJ2
+// (PO_PJ2_ESR/PO_PJ2_DIR) actually works, no mock timer involved.
+async function testPi8Connection() {
+  const statusEl = $('admin-pi8-test-status');
+  const base = $('admin-pi8-mcp-base').value.trim() || PIPO_MCP_API_BASE;
+  statusEl.style.display = 'flex';
+  statusEl.className = 'conn-status';
+  statusEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Checking PI8/PJ2 reachability via Cloud Connector…';
+  $('btn-admin-test-pi8').disabled = true;
+  try {
+    const res = await fetch(base + '/api/pi8/ping');
+    const data = await res.json();
+    $('btn-admin-test-pi8').disabled = false;
+    if (data.reachable) {
+      statusEl.className = 'conn-status ok';
+      statusEl.innerHTML = '<span class="dot"></span> LIVE — PI8 (PJ2) reachable through PO_PJ2_ESR/PO_PJ2_DIR.';
+    } else {
+      statusEl.className = 'conn-status fail';
+      statusEl.innerHTML = `<span class="dot"></span> PI8 not reachable (${(data.destinations && Object.values(data.destinations)[0] && Object.values(data.destinations)[0].error) || data.error || 'unknown error'}) — check the Destination/Cloud Connector mapping.`;
+    }
+  } catch (err) {
+    $('btn-admin-test-pi8').disabled = false;
+    statusEl.className = 'conn-status fail';
+    statusEl.innerHTML = `<span class="dot"></span> Could not reach ${base} (${err.message || err})`;
+  }
+}
 // Called from selectPlatform() so Admin's defaults actually reach the Set Connection
 // screen instead of just sitting unused in S.adminDefaults.
 function applyAdminConnectionDefaults() {
@@ -5042,6 +5120,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btn-admin-add-agent').addEventListener('click', addAdminAgent);
   $('btn-admin-test-s4').addEventListener('click', testS4Connection);
   $('btn-admin-test-pipo').addEventListener('click', testPiPoConnection);
+  $('btn-admin-test-pi8').addEventListener('click', testPi8Connection);
   $('admin-sda-subaccount').addEventListener('change', updatePrvTenantStatus);
   $('admin-prv-tenant').addEventListener('change', updatePrvTenantStatus);
   updatePrvTenantStatus();

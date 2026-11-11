@@ -333,6 +333,25 @@
                   <button class="btn-btp-action-solid" id="btn-admin-test-pipo"><i class="fa-solid fa-plug-circle-check"></i> Test Connection</button>
                   <div class="conn-status" id="admin-pipo-test-status" style="display:none;"></div>
                 </div>
+
+                <h4 class="admin-section-title" style="margin-top:22px;font-size:0.82rem;"><i class="fa-solid fa-bolt" style="color:var(--gold);"></i> PI8 (PJ2) — Live MCP Connectivity Test</h4>
+                <p class="mock-note" style="margin-bottom:12px;"><i class="fa-solid fa-circle-info"></i> Separate from the PJ1 system above — PJ2 is reached over HTTP through a Cloud Connector, not direct NWA login, so there's no password field to fill in. These two destination names must already exist in your BTP subaccount (see <code class="mono">mcp/pipo-rfc-server/README.md</code>); pre-filled here so any developer who clones this repo sees exactly what's required.</p>
+                <div class="form-grid-btp" style="margin-bottom:16px;">
+                  <div class="form-group-btp"><label>System ID</label><input type="text" class="btp-input" id="admin-pi8-system-id" value="PJ2" readonly></div>
+                  <div class="form-group-btp"><label>Via</label><input type="text" class="btp-input" id="admin-pi8-via" value="Cloud Connector (OnPremise)" readonly></div>
+                </div>
+                <div class="form-grid-btp" style="margin-bottom:16px;">
+                  <div class="form-group-btp"><label>Destination — ESR</label><input type="text" class="btp-input" id="admin-pi8-dest-esr" value="PO_PJ2_ESR" readonly></div>
+                  <div class="form-group-btp"><label>Destination — Directory</label><input type="text" class="btp-input" id="admin-pi8-dest-dir" value="PO_PJ2_DIR" readonly></div>
+                </div>
+                <div class="form-group-btp" style="margin-bottom:16px;">
+                  <label>MCP Server (mcp/pipo-rfc-server)</label>
+                  <input type="text" class="btp-input" id="admin-pi8-mcp-base" value="https://sdaintai-pipo-rfc-mcp.cfapps.us10.hana.ondemand.com">
+                </div>
+                <div class="conn-test-row">
+                  <button class="btn-btp-action-solid" id="btn-admin-test-pi8"><i class="fa-solid fa-plug-circle-check"></i> Test Live PI8 Connection</button>
+                  <div class="conn-status" id="admin-pi8-test-status" style="display:none;"></div>
+                </div>
               </div>
 
               <div>
