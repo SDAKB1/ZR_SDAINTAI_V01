@@ -348,7 +348,39 @@ branch's filled one — they're not part of this repo (screenshots and video
 files aren't committed here), but they're what proves this exact table
 isn't theoretical.
 
-## 9. Quick reference
+## 9. Opening and merging the worked-example PR
+
+This is the exact screen you'll see — GitHub's "compare" page, which opens
+automatically from the link `git push` prints after pushing a new branch
+(or by going to `https://github.com/SDAKB1/ZR_SDAINTAI_V01/compare/<your-branch>`
+yourself):
+
+- **Base: `main`** ← **compare: `BRANCHDEVELOPER0`** — GitHub shows
+  "✅ Able to merge. These branches can be automatically merged," confirming
+  there's no conflict.
+- **Title** — a short summary (e.g. "Fix the PJ2 missing password").
+- **Description** — what and why (e.g. "FIX the PJ2, missing password.").
+  Doesn't need to be long; it's the PR's permanent record of intent.
+- **Reviewers: No reviews** — expected, not a gap. This repo's `main` is
+  configured for "PR required, 0 required approvals" (§6) — nobody needs to
+  be added here for the merge button to work.
+- Below the description: **2 commits · 3 files changed · 1 contributor** —
+  GitHub's own summary of everything this branch adds, and the diff itself
+  is right there to scroll through before you commit to merging.
+
+Once the title/description look right, click the green **Create pull
+request** button. On the PR page that opens next, click **Merge pull
+request** (then **Confirm merge**) — since required approvals is 0, this
+works immediately, no waiting on anyone else. That merge commit is now the
+permanent, revertible record described in §6.
+
+**After merging:** the fix exists on `main`, but production
+(`sdaintai.cfapps.us10.hana.ondemand.com`) doesn't show it yet — merging a
+PR only updates the `main` branch on GitHub, it does **not** auto-deploy
+anything. Someone still has to do §7's `mbt build` + `cf deploy` step from
+the freshly-merged `main` before the live site reflects the change.
+
+## 10. Quick reference
 
 ```bash
 # One-time
