@@ -15,6 +15,17 @@ services:
     ports:
       - "8082:80"
 
+  # Worked-example branch (BRANCHDEVELOPER0) for the HOW-TO-USE-YOUR-OWN-
+  # BRANCH-FOR-DEVS.md walkthrough -- own name, own port, same pattern as
+  # dev1/dev2 above.
+  developer0:
+    build:
+      context: .
+      dockerfile: Dockerfile.webapp
+    container_name: sdaintai-docker-developer0
+    ports:
+      - "8083:80"
+
   # Copy this block for each additional developer, bump the name/port:
   # dev3:
   #   build:
@@ -22,4 +33,4 @@ services:
   #     dockerfile: Dockerfile.webapp
   #   container_name: sdaintai-docker3
   #   ports:
-  #     - "8083:80"
+  #     - "8084:80"
