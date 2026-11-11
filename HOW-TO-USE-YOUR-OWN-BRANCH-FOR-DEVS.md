@@ -151,6 +151,37 @@ etc.) will behave as it does for any unauthenticated browser hitting those
 same public endpoints; it's the frontend/UX you're previewing, not a full
 backend stack.
 
+### What success looks like — don't panic at this
+
+After `docker compose up --build`, your terminal keeps running and prints a
+wall of lines like this, then just sits there:
+
+```
+sdaintai-docker-developer0  | 2026/11/11 18:03:17 [notice] 1#1: start worker process 30
+sdaintai-docker-developer0  | 2026/11/11 18:03:17 [notice] 1#1: start worker process 31
+sdaintai-docker-developer0  | 2026/11/11 18:03:17 [notice] 1#1: start worker process 32
+...
+```
+
+**This is normal, not an error.** Those are nginx's own startup logs — it's
+just reporting that it spun up one worker process per CPU core your
+machine has (so if you have 8 cores, you'll see 8 of these lines). The
+terminal not returning to a prompt is also expected — the container is
+running in the foreground, actively serving your page. Leave that window
+open; don't close it or press Ctrl+C unless you're done previewing.
+
+You can also confirm it's running from **Docker Desktop's own GUI**
+instead of the terminal: open Docker Desktop → **Containers** (left
+sidebar) → you should see your project (e.g. `zr_sdaintai_v01`) with a
+**green dot** next to your container name — green means running/healthy.
+Docker Desktop even has its own built-in terminal/log viewer per container
+if you click into it, which is the exact same log output you saw in
+PowerShell.
+
+Once you see either of those (the log lines, or the green dot in Docker
+Desktop), the container is ready — go to your browser and open the
+`localhost:808X` URL from above.
+
 ## 5. Get it informally approved before you open the PR
 
 Before you push and open a PR, get a go-ahead on what you built — demo your
