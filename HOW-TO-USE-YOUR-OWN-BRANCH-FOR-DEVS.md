@@ -137,8 +137,7 @@ admin needs to confirm `main` has a **branch protection rule** configured
 (GitHub → repo **Settings → Branches → Branch protection rules → Add rule**,
 pattern `main`):
 
-- ✅ Require a pull request before merging
-- ✅ Require at least 1 approval
+- ✅ Require a pull request before merging — **required approvals: 0**
 - ✅ Do not allow bypassing the above settings (applies to admins too)
 - ✅ Block force pushes
 
@@ -147,6 +146,21 @@ With that rule in place, Write access only ever lets a developer push their
 it, is rejected by GitHub itself, not just by convention. If that rule
 isn't set up yet, set it up *before* onboarding the next developer, not
 after.
+
+**Required approvals is deliberately 0, not 1** — the point of this rule
+isn't to gate every change behind a reviewer (that's more friction than
+this team wants), it's to guarantee every change on `main` exists as a
+proper PR: isolated, diffed, with a visible commit history. A developer can
+open a PR and merge it themselves immediately with no one else signing off
+— that's expected, not a gap. What you get in exchange for that low
+friction is that nothing can land on `main` any other way (no raw push, no
+force push), so if a merged PR ever breaks something, reverting it is a
+single click — GitHub's **Revert** button on the merged PR, or
+`git revert <merge-commit-sha>` — because it's always a clean, identifiable
+commit (or set of commits), never an untracked direct push. If the team
+later wants a pre-merge safety net instead of (or in addition to) that
+trace-and-revert approach, come back to this setting and raise required
+approvals to 1+.
 
 ## 6. How it all comes together — merging to `main` and going live
 
