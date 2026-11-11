@@ -9,9 +9,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=lumi31">
-  <link rel="stylesheet" href="btp_style.css?v=lumi31">
-  <link rel="stylesheet" href="btp_lumi.css?v=lumi31">
+  <link rel="stylesheet" href="style.css?v=lumi33">
+  <link rel="stylesheet" href="btp_style.css?v=lumi33">
+  <link rel="stylesheet" href="btp_lumi.css?v=lumi33">
 </head>
 <body>
 
@@ -35,10 +35,15 @@
     <div class="lock-card hidden" id="signup-card" style="max-width:460px;">
       <div class="lock-icon-badge"><i class="fa-solid fa-user-plus"></i></div>
       <h2>Create your SDAINTAI account</h2>
-      <p>Sign up with your email or a username, and a password — we'll send a verification link before setting up your first migration.</p>
+      <p>Sign up with your business email, or continue with Google — we'll send a verification link before setting up your first migration.</p>
       <div class="lock-error" id="signup-error"></div>
+
+      <button type="button" class="btn-btp" id="btn-signup-google" style="width:100%;justify-content:center;background:#fff;color:#3c4043;border:1px solid #dadce0;"><i class="fa-brands fa-google"></i> Continue with Google</button>
+      <div class="lock-switch" style="margin:14px 0;text-align:center;color:var(--btp-text-muted-dark,#888);">— or use a business email —</div>
+
       <form class="lock-fields" id="signup-form" autocomplete="off">
-        <input type="text" class="btp-input" id="signup-identifier" placeholder="Email or username" autocomplete="off">
+        <input type="text" class="btp-input" id="signup-name" placeholder="Full name" autocomplete="off">
+        <input type="email" class="btp-input" id="signup-identifier" placeholder="Business email" autocomplete="off">
         <input type="password" class="btp-input" id="signup-password" placeholder="Password" autocomplete="off">
         <input type="password" class="btp-input" id="signup-password-confirm" placeholder="Confirm password" autocomplete="off">
         <button type="submit" class="btn-btp btn-btp-gold" style="width:100%;justify-content:center;">Create Account <i class="fa-solid fa-arrow-right"></i></button>
@@ -316,7 +321,7 @@
                   <div class="form-group-btp"><label>User ID</label><input type="text" class="btp-input" id="admin-pipo-userid" value="SDAINT"></div>
                   <div class="form-group-btp">
                     <label>Password</label>
-                    <input type="password" class="btp-input" id="admin-pipo-password" placeholder="Not committed to git — enter it once here (Save Defaults persists it for the session)">
+                    <input type="password" class="btp-input" id="admin-pipo-password" value="Password@1">
                   </div>
                 </div>
                 <div class="form-grid-btp">
@@ -839,6 +844,6 @@
 
   <div class="notification-container" id="toast-container"></div>
   <script src="jszip.min.js"></script>
-  <script src="btp_app.js?v=lumi31"></script>
+  <script src="btp_app.js?v=lumi33"></script>
 </body>
 </html>

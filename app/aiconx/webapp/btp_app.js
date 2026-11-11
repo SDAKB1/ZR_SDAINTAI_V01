@@ -4986,25 +4986,67 @@ function setupAccessLock() {
 
   $('signup-form').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const name = $('signup-name').value.trim();
     const identifier = $('signup-identifier').value.trim();
     const pass = $('signup-password').value;
     const confirm = $('signup-password-confirm').value;
     const errorEl = $('signup-error');
-    if (!identifier || !pass) { errorEl.textContent = 'Enter an email or username, and a password.'; return; }
+    if (!name) { errorEl.textContent = 'Enter your full name.'; return; }
+    if (!identifier || !pass) { errorEl.textContent = 'Enter a business email and a password.'; return; }
     if (pass !== confirm) { errorEl.textContent = 'Passwords don’t match.'; return; }
     errorEl.textContent = '';
-    S.pendingSignup = { identifier, pass };
+    S.pendingSignup = { name, identifier, pass, provider: 'business-email' };
     $('verify-identifier-label').textContent = identifier;
     showLockStep('verify-card');
   });
 
   $('btn-verify-simulate').addEventListener('click', async () => {
     if (!S.pendingSignup) { showLockStep('signup-card'); return; }
-    const { identifier, pass } = S.pendingSignup;
+    const { name, identifier, pass } = S.pendingSignup;
     const hash = await sha256Hex(`${identifier}:${pass}`);
     addSignupHash(hash);
+    completeFederatedSignup(S.pendingSignup);
     showLockStep('onboard-card');
   });
+
+  // ---- Federated login: Google (mocked — same "no real backend yet"
+  // posture as the email-verification step above; a static Docker preview
+  // has no OAuth client/consent screen or SMTP server to call). Skips the
+  // Verify step entirely, same as a real federated identity provider
+  // would — Google already vouches for the email, nothing left to confirm.
+  $('btn-signup-google').addEventListener('click', () => {
+    openModal(
+      'Continue with Google',
+      `<div class="mock-note" style="text-align:left;margin-bottom:14px;"><i class="fa-solid fa-circle-info"></i> Demo account chooser — this preview has no real Google OAuth client wired up (that needs a live backend, not this static Docker preview). Enter any name/Gmail address to simulate picking an account.</div>
+       <input type="text" class="btp-input" id="google-mock-name" placeholder="Full name" style="margin-bottom:10px;width:100%;">
+       <input type="email" class="btp-input" id="google-mock-email" placeholder="you@gmail.com" style="width:100%;">`,
+      [
+        { label: 'Cancel', cls: 'btn-btp-cancel', onClick: closeModal },
+        { label: 'Use this account', cls: 'btn-btp-gold', onClick: async () => {
+          const name = $('google-mock-name').value.trim();
+          const email = $('google-mock-email').value.trim();
+          if (!name || !email) return; // leave modal open — both fields required
+          closeModal();
+          const hash = await sha256Hex(`${email}:google-federated`);
+          addSignupHash(hash);
+          completeFederatedSignup({ name, identifier: email, provider: 'google' });
+          showLockStep('onboard-card');
+        } }
+      ]
+    );
+  });
+
+  // Shared tail end of either signup path: remembers who signed up (for
+  // Lumi's own greeting, so it doesn't re-ask "what's your name" right
+  // after this) and logs the event — best-effort, no-op until the Brain
+  // is actually activated elsewhere in the app, same as every other
+  // logBrainEvent call site.
+  function completeFederatedSignup({ name, identifier, provider }) {
+    if (name) setUserName(name);
+    logBrainEvent('user_signup', provider,
+      { name, identifier, provider },
+      `New account via ${provider === 'google' ? 'Google federated login' : 'business email'}: ${name} <${identifier}>.`);
+  }
 
   $('onboard-form').addEventListener('submit', (e) => {
     e.preventDefault();
