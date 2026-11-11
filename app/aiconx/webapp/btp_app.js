@@ -984,7 +984,10 @@ function selectPlatform(key) {
 // auth, target) into one confirmation message.
 function validateTargetThenAutoScan(p) {
   setLumiState('thinking');
-  lumiSay(`Great — <b>${p.label}</b> it is. Your target settings are already configured in Admin — validating the BTP Integration Suite tenant <b>${S.adminDefaults.tenant}</b> before we scan…`);
+  const sourceNote = S.platform === 'pipo'
+    ? ` Source side is PI8 (PJ2) — I'll pull the real ESR catalog live through the Cloud Connector, not demo data.`
+    : '';
+  lumiSay(`Great — <b>${p.label}</b> it is. Your target settings are already configured in Admin — validating the BTP Integration Suite tenant <b>${S.adminDefaults.tenant}</b> before we scan…${sourceNote}`);
   setTimeout(() => {
     const versionSel = $('connection-version');
     if (versionSel.options.length) versionSel.selectedIndex = 0;
@@ -1188,6 +1191,7 @@ function mapPi8ObjectsToAssets(items) {
     status: o.isCustom ? 'Review' : 'Ready',
     flowCount: o.isCustom ? 6 : 3,
     live: true,
+    isCustom: !!o.isCustom,
     tree: [leafTree(o.type || 'esr-object', `${o.name || o.type} (${o.namespace || o.swcv || ''})`, true)]
   }));
 }
@@ -1214,8 +1218,19 @@ function finishAssetScan(rawAssets, btn, liveInfo) {
       { assets: S.assets.map(a => ({ id: a.id, name: a.name, type: a.type, tier: a.tier, deps: a.deps, status: a.status, flowCount: a.flowCount, tree: a.tree })) },
       `Scanned ${S.assets.length} ${p.assetNounPlural} on ${p.label} — ${ready} ready, ${warn} warning, ${review} need review, ~${totalIflows} interfaces/iFlows total.`);
 
+    // Live PI8 (PJ2) data gets its own narrative — "found" in a demo-data sense
+    // reads wrong once Lumi is actually looking at a real ESR catalog pulled
+    // through the Cloud Connector, and the custom-vs-SAP split (isCustom,
+    // sorted first by scanPi8Live) is the one piece of real assessment this
+    // source can offer today, so it's surfaced explicitly rather than folded
+    // into the generic ready/warning/review tiering.
+    const livePrefix = S.assetsLivePi8
+      ? `Pulled <b>${S.assets.length} real objects</b> live from PI8 (PJ2)'s ESR catalog${liveInfo && liveInfo.totalCount ? ` (${liveInfo.totalCount} total in the system, ${S.assets.length} shown)` : ''} — no demo data. `
+      : `Scan complete. `;
+    const customCount = S.assets.filter(a => a.isCustom).length;
+
     $('assets-summary-msg').style.display = 'flex';
-    $('assets-summary-text').innerHTML = `<span class="who-label">Lumi</span>Scan complete. I found <b>${S.assets.length} ${p.assetNounPlural}</b>, bundling an estimated <b>${totalIflows}</b> individual interfaces/iFlows. ${ready} ${ready === 1 ? 'is' : 'are'} fully ready to convert${warn ? `, ${warn} has a warning` : ''}${review ? `, and ${review} needs your review` : ''}. Want the details, or should we move to grouping these into buckets?`;
+    $('assets-summary-text').innerHTML = `<span class="who-label">Lumi</span>${livePrefix}I found <b>${S.assets.length} ${p.assetNounPlural}</b>${S.assetsLivePi8 ? ` (${customCount} custom, ${S.assets.length - customCount} standard)` : `, bundling an estimated <b>${totalIflows}</b> individual interfaces/iFlows`}. ${ready} ${ready === 1 ? 'is' : 'are'} fully ready to convert${warn ? `, ${warn} has a warning` : ''}${review ? `, and ${review} needs your review` : ''}. Want the details, or should we move to grouping these into buckets?`;
     $('assets-summary-actions').style.display = 'flex';
     S.assetsFilter = 'all';
     populateAssetsTable();
@@ -1225,7 +1240,9 @@ function finishAssetScan(rawAssets, btn, liveInfo) {
     cont.textContent = 'Continue to Plan';
     cont.onclick = () => { markDone('nav-assets'); goToBuckets(); };
 
-    lumiSay(`Scan complete — ${S.assets.length} ${p.assetNounPlural} found (≈${totalIflows} interfaces/iFlows once each app's bundled flows are counted). ${ready} ready${warn ? `, ${warn} warning` : ''}${review ? `, ${review} need review` : ''}.`);
+    lumiSay(S.assetsLivePi8
+      ? `Live scan complete — ${S.assets.length} real PI8 (PJ2) ESR objects pulled (${customCount} custom, ${S.assets.length - customCount} standard). ${ready} ready${warn ? `, ${warn} warning` : ''}${review ? `, ${review} need review` : ''}. Custom objects are flagged for review first since they're the ones carrying this org's own logic.`
+      : `Scan complete — ${S.assets.length} ${p.assetNounPlural} found (≈${totalIflows} interfaces/iFlows once each app's bundled flows are counted). ${ready} ready${warn ? `, ${warn} warning` : ''}${review ? `, ${review} need review` : ''}.`);
     if (review) flagNav('nav-buckets');
     lumiChoices([{ label: 'Show me the details', onClick: showAssetDetails }, { label: 'Continue to Plan', cls: 'primary', onClick: () => { markDone('nav-assets'); goToBuckets(); } }]);
   }
@@ -1269,7 +1286,7 @@ function populateAssetsTable() {
   const rows = filter === 'all' ? S.assets : S.assets.filter(a => a.status === filter);
   tbody.innerHTML = rows.map(a => `
     <tr class="${a.status !== 'Ready' ? 'row-flagged' : ''}">
-      <td><code>${a.id}</code></td><td><code>${a.name}</code></td><td>${a.type}</td>
+      <td><code>${a.id}</code></td><td><code>${a.name}</code>${a.live ? ' <span class="status-pill done" style="font-size:0.6rem;padding:1px 6px;" title="Real object from PI8 (PJ2), not demo data">LIVE</span>' : ''}</td><td>${a.type}</td>
       <td>${a.tier}</td><td>${a.convertPct}%</td>
       <td><span class="status-pill ${a.status === 'Ready' ? 'done' : a.status === 'Warning' ? 'progress' : 'error'}">${a.status}</span></td>
       <td><button class="btn-btp-table-action" onclick="showTreeModal('${a.id}')">View Tree</button></td>
