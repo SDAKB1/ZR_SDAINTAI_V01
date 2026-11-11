@@ -374,11 +374,22 @@ request** (then **Confirm merge**) — since required approvals is 0, this
 works immediately, no waiting on anyone else. That merge commit is now the
 permanent, revertible record described in §6.
 
+After confirming the merge, GitHub shows **"Pull request successfully
+merged and closed"**, with a **Delete branch** button (optional cleanup —
+the branch's job is done once merged, but deleting it isn't required) and
+a **Revert** button right next to the merge commit, which is exactly the
+one-click rollback described in §6 if this ever needs undoing.
+
 **After merging:** the fix exists on `main`, but production
 (`sdaintai.cfapps.us10.hana.ondemand.com`) doesn't show it yet — merging a
 PR only updates the `main` branch on GitHub, it does **not** auto-deploy
 anything. Someone still has to do §7's `mbt build` + `cf deploy` step from
-the freshly-merged `main` before the live site reflects the change.
+the freshly-merged `main` before the live site reflects the change. This
+was then done for real — PJ2's password field went live on production
+within minutes of the merge, verified with the same `curl` check §7
+recommends, and mirrored into the main `SDAINTAI` repo (§7 explains why
+that repo needs to stay in sync, since it shares the same production CF
+app).
 
 ## 10. Quick reference
 
