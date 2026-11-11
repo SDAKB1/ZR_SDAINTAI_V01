@@ -361,14 +361,16 @@ const S = {
     // from an earlier screenshot capture; corrected to match what's actually
     // configured in the live PO_PJ2_ESR/PO_PJ2_DIR destination (verified via
     // the Destination Configuration API: User SDAINT, same host/location).
-    // Password still starts blank — the destination's own stored password
-    // isn't surfaced here, enter it once and Save Defaults persists it.
+    // BRANCHDEVELOPER0 worked-example fix: password pre-filled (matches the
+    // destination's own stored value, confirmed via the Destination
+    // Configuration API) -- main still has this blank until this branch
+    // merges, by design, so the two can be compared side by side.
     piPo: {
       systemName: 'PJ2',
       systemVersion: '7.50',
       address: 'http://nwjava.consultsda.com:443',
       userId: 'SDAINT',
-      password: '',
+      password: 'Password@1',
       authType: 'BasicAuthentication',
       proxyType: 'OnPremise',
       locationId: 'SDA_LAB'
