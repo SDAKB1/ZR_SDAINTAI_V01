@@ -1,9 +1,9 @@
 /**
  * API Client Module - Centralized backend communication for SDAINT-AI Migration Cockpit
- * 
+ *
  * Replaces scattered setTimeout mocks with real OData V4 service calls.
  * Provides consistent error handling, CSRF token management, and retry logic.
- * 
+ *
  * @module ApiClient
  * @version 1.0.0
  */
@@ -21,11 +21,39 @@ const ApiClient = {
         },
         timeout: 30000,
         retryAttempts: 3,
-        retryDelay: 1000
+        retryDelay: 1000,
+        logLevel: 'info' // BUG-L1 fix: configurable log level
+    },
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // BUG-L1 fix: Structured Logger
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** @type {Array<string>} Log levels in order of severity */
+    _logLevels: ['debug', 'info', 'warn', 'error'],
+
+    /**
+     * Structured logging method that replaces console.* calls
+     * @param {string} level - Log level (debug, info, warn, error)
+     * @param {...any} args - Arguments to log
+     */
+    _log(level, ...args) {
+        const levelIndex = this._logLevels.indexOf(level);
+        const configLevelIndex = this._logLevels.indexOf(this.config.logLevel);
+        if (levelIndex >= configLevelIndex) {
+            const timestamp = new Date().toISOString();
+            const prefix = `[${timestamp}] [ApiClient] [${level.toUpperCase()}]`;
+            if (typeof console !== 'undefined' && console[level]) {
+                console[level](prefix, ...args);
+            }
+        }
     },
 
     /** @type {Object.<string, string>} CSRF tokens cached per service path */
     csrfTokens: {},
+
+    /** @type {Object.<string, Promise<string|null>>} BUG-M6 fix: Pending CSRF token fetches to deduplicate concurrent requests */
+    _pendingCsrfFetches: {},
 
     // ─────────────────────────────────────────────────────────────────────────
     // CSRF Token Management
@@ -33,6 +61,7 @@ const ApiClient = {
 
     /**
      * Fetches and caches a CSRF token for the given service path.
+     * BUG-M6 fix: Uses pending-promise cache to deduplicate concurrent token fetches
      * @param {string} servicePath - The OData service base path
      * @returns {Promise<string|null>} The CSRF token or null if unavailable
      */
@@ -40,21 +69,34 @@ const ApiClient = {
         if (this.csrfTokens[servicePath]) {
             return this.csrfTokens[servicePath];
         }
-        try {
-            const res = await fetch(`${servicePath}/$metadata`, {
-                method: 'HEAD',
-                headers: { 'x-csrf-token': 'fetch' },
-                credentials: 'same-origin'
-            });
-            const token = res.headers.get('x-csrf-token');
-            if (token) {
-                this.csrfTokens[servicePath] = token;
-            }
-            return token;
-        } catch (error) {
-            console.warn('[ApiClient] CSRF token fetch failed:', error.message);
-            return null;
+
+        // BUG-M6 fix: Return existing pending promise if one exists
+        if (this._pendingCsrfFetches[servicePath]) {
+            return this._pendingCsrfFetches[servicePath];
         }
+
+        // BUG-M6 fix: Create and cache the pending promise
+        this._pendingCsrfFetches[servicePath] = (async () => {
+            try {
+                const res = await fetch(`${servicePath}/$metadata`, {
+                    method: 'HEAD',
+                    headers: { 'x-csrf-token': 'fetch' },
+                    credentials: 'same-origin'
+                });
+                const token = res.headers.get('x-csrf-token');
+                if (token) {
+                    this.csrfTokens[servicePath] = token;
+                }
+                return token;
+            } catch (error) {
+                this._log('warn', '[ApiClient] CSRF token fetch failed:', error.message);
+                return null;
+            } finally {
+                delete this._pendingCsrfFetches[servicePath];
+            }
+        })();
+
+        return this._pendingCsrfFetches[servicePath];
     },
 
     /**
@@ -79,7 +121,7 @@ const ApiClient = {
      */
     async callAction(servicePath, actionName, params = {}) {
         const url = `${servicePath}/${actionName}`;
-        
+
         const makeRequest = async (retryCount = 0) => {
             const token = await this.fetchCsrfToken(servicePath);
             const headers = {
@@ -99,7 +141,7 @@ const ApiClient = {
 
             // Handle CSRF token expiration
             if (res.status === 403 && retryCount === 0) {
-                console.log('[ApiClient] CSRF token expired, refreshing...');
+                this._log('info', 'CSRF token expired, refreshing...');
                 this.invalidateCsrfToken(servicePath);
                 return makeRequest(1);
             }
@@ -129,7 +171,7 @@ const ApiClient = {
             .map(([k, v]) => `${k}=${encodeURIComponent(typeof v === 'object' ? JSON.stringify(v) : v)}`)
             .join('&');
         const url = `${servicePath}/${functionName}${queryString ? '?' + queryString : ''}`;
-        
+
         const res = await fetch(url, {
             method: 'GET',
             headers: { 'Accept': 'application/json' },
@@ -161,7 +203,7 @@ const ApiClient = {
         if (options.$expand) queryParts.push(`$expand=${encodeURIComponent(options.$expand)}`);
 
         const url = `${servicePath}/${entitySet}${queryParts.length ? '?' + queryParts.join('&') : ''}`;
-        
+
         const res = await fetch(url, {
             method: 'GET',
             headers: { 'Accept': 'application/json' },
@@ -387,7 +429,7 @@ const ApiClient = {
          * @returns {Promise<Object>} List of artifacts
          */
         async getArtifacts(systemId, options = {}) {
-            const filter = options.$filter 
+            const filter = options.$filter
                 ? `system_ID eq ${systemId} and ${options.$filter}`
                 : `system_ID eq ${systemId}`;
             return ApiClient.fetchEntities(

@@ -14,7 +14,7 @@
 
 const cds = require('@sap/cds');
 const { PIPoSoapClient, ESR_OBJECT_TYPES, XI_NAMESPACES } = require('./utils/pipoSoapClient');
-const { randomUUID } = require('crypto');
+const { randomUUID } = require('node:crypto');
 const sseHandler = require('./sse-handler');
 const destinationService = require('./utils/destinationService');
 
@@ -35,6 +35,12 @@ const DISCOVERY_PHASES = [
 // CDS Logger for this module - per North Star "use cds logs in the entire repo"
 const LOG = cds.log('discovery-service');
 
+function _resolveUserRole(roles) {
+  if (roles?.admin) return 'Admin';
+  if (roles?.approver) return 'Approver';
+  return 'Viewer';
+}
+
 module.exports = class DiscoveryService extends cds.ApplicationService {
   async init() {
     LOG.info('Service init starting');
@@ -44,6 +50,27 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
     this.on('addPISystem', async (req) => {
       const { systemName, description, virtualHost, virtualPort, protocol, locationId, techUser, techPassword, piVersion } = req.data;
       const tenantId = req.user.tenant || 'default';
+
+      // SEC-3 fix: Input length validation for string fields
+      const MAX_STRING_LENGTH = 1000;
+      const validateStringLength = (value, fieldName) => {
+        if (value && typeof value === 'string' && value.length > MAX_STRING_LENGTH) {
+          return req.error(400, `${fieldName} exceeds maximum length of ${MAX_STRING_LENGTH} characters`);
+        }
+        return null;
+      };
+
+      const validationError =
+        validateStringLength(systemName, 'systemName') ||
+        validateStringLength(description, 'description') ||
+        validateStringLength(virtualHost, 'virtualHost') ||
+        validateStringLength(locationId, 'locationId') ||
+        validateStringLength(techUser, 'techUser') ||
+        validateStringLength(techPassword, 'techPassword') ||
+        validateStringLength(piVersion, 'piVersion') ||
+        validateStringLength(protocol, 'protocol');
+
+      if (validationError) return validationError;
 
       // Generate destination names
       const destSuffix = `${systemName}_${tenantId}`.toUpperCase().replace(/[^A-Z0-9]/g, '_');
@@ -187,8 +214,21 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
       // Log audit
       await this._audit(req, 'discovery_started', 'DiscoveryJob', jobId, system.systemName, { options: req.data });
 
-      // Start async discovery (non-blocking)
-      this._runDiscoveryAsync(jobId, system, { includeInactive, includeHistory, artifactTypes }, tenantId);
+      // Start async discovery (non-blocking) - BUG-H1 fix: track Promise and handle errors
+      const discoveryPromise = this._runDiscoveryAsync(jobId, system, { includeInactive, includeHistory, artifactTypes }, tenantId)
+        .catch(err => {
+          LOG.error('Discovery job failed', { jobId, error: err.message, stack: err.stack });
+          // Update job status on unhandled failure
+          return UPDATE(DiscoveryJob).where({ ID: jobId }).set({
+            status: 'failed',
+            completedAt: new Date(),
+            errorLog: JSON.stringify([{ phase: 'unhandled', error: err.message }]),
+          }).then(() => undefined);
+        });
+      // Store in active jobs map for potential cancellation/tracking
+      if (!this._activeJobs) this._activeJobs = new Map();
+      this._activeJobs.set(jobId, discoveryPromise);
+      discoveryPromise.finally(() => this._activeJobs?.delete(jobId));
 
       return {
         jobId,
@@ -292,29 +332,33 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
           matchedTemplate: assessment.matchedTemplate,
         }));
 
-        // Create ArtifactLimitation records if any limitations detected
+        // BUG-H2 fix: Create ArtifactLimitation records within same transaction for atomicity
         if (assessment.limitations) {
+          let limitations;
           try {
-            const limitations = JSON.parse(assessment.limitations);
-            const { ArtifactLimitation } = this.entities;
-            for (const lim of limitations) {
-              await tx.run(INSERT.into(ArtifactLimitation).entries({
-                tenant_ID: tenantId,
-                artifact_ID: artifactId,
-                limitation_code: lim.code,
-                detectedAt: new Date(),
-                detectedBy: 'auto',
-                context: JSON.stringify({
-                  severity: lim.severity,
-                  category: lim.category,
-                  workaroundType: lim.workaroundType,
-                  workaroundDesc: lim.workaroundDesc,
-                }),
-                resolutionStatus: 'open',
-              }));
-            }
-          } catch (limErr) {
-            LOG.warn('Failed to persist limitations', { error: limErr.message });
+            limitations = JSON.parse(assessment.limitations);
+          } catch (parseErr) {
+            LOG.warn('Failed to parse limitations JSON', { error: parseErr.message, artifactId });
+            limitations = [];
+          }
+
+          const { ArtifactLimitation } = this.entities;
+          // Insert all limitations - any failure will rollback the entire transaction
+          for (const lim of limitations) {
+            await tx.run(INSERT.into(ArtifactLimitation).entries({
+              tenant_ID: tenantId,
+              artifact_ID: artifactId,
+              limitation_code: lim.code,
+              detectedAt: new Date(),
+              detectedBy: 'auto',
+              context: JSON.stringify({
+                severity: lim.severity,
+                category: lim.category,
+                workaroundType: lim.workaroundType,
+                workaroundDesc: lim.workaroundDesc,
+              }),
+              resolutionStatus: 'open',
+            }));
           }
         }
 
@@ -330,9 +374,11 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
         });
 
       } catch (error) {
-        LOG.error('Queued assessment failed', { artifactId, error: error.message });
+        // BUG-M5 fix: Preserve stack trace using cause option
+        LOG.error('Queued assessment failed', { artifactId, error: error.message, stack: error.stack });
         await tx.rollback();
-        throw error; // Re-throw to let CAP outbox handle retry
+        const wrappedError = new Error(`Assessment failed for artifact ${artifactId}: ${error.message}`, { cause: error });
+        throw wrappedError; // Re-throw to let CAP outbox handle retry
       }
     });
 
@@ -403,28 +449,32 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
         });
 
         // Gap #3: Create ArtifactLimitation records if any limitations detected
+        // BUG-H2 fix: Log parse errors properly but continue with empty array
         if (assessment.limitations) {
+          let limitations;
           try {
-            const limitations = JSON.parse(assessment.limitations);
-            const { ArtifactLimitation } = this.entities;
-            for (const lim of limitations) {
-              await INSERT.into(ArtifactLimitation).entries({
-                tenant_ID: tenantId,
-                artifact_ID: artifactId,  // Association to Artifact
-                limitation_code: lim.code,  // Association key to MigrationLimitationRef
-                detectedAt: new Date(),
-                detectedBy: 'auto',
-                context: JSON.stringify({
-                  severity: lim.severity,
-                  category: lim.category,
-                  workaroundType: lim.workaroundType,
-                  workaroundDesc: lim.workaroundDesc,
-                }),
-                resolutionStatus: 'open',
-              });
-            }
-          } catch (limErr) {
-            LOG.warn('Failed to persist limitations', { error: limErr.message });
+            limitations = JSON.parse(assessment.limitations);
+          } catch (parseErr) {
+            LOG.warn('Failed to parse limitations JSON', { error: parseErr.message, artifactId });
+            limitations = [];
+          }
+
+          const { ArtifactLimitation } = this.entities;
+          for (const lim of limitations) {
+            await INSERT.into(ArtifactLimitation).entries({
+              tenant_ID: tenantId,
+              artifact_ID: artifactId,  // Association to Artifact
+              limitation_code: lim.code,  // Association key to MigrationLimitationRef
+              detectedAt: new Date(),
+              detectedBy: 'auto',
+              context: JSON.stringify({
+                severity: lim.severity,
+                category: lim.category,
+                workaroundType: lim.workaroundType,
+                workaroundDesc: lim.workaroundDesc,
+              }),
+              resolutionStatus: 'open',
+            });
           }
         }
 
@@ -453,6 +503,11 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
     this.on('approveArtifact', async (req) => {
       const { artifactId, wave, notes } = req.data;
       const tenantId = req.user.tenant || 'default';
+
+      // SEC-3 fix: Input length validation
+      if (notes && typeof notes === 'string' && notes.length > 5000) {
+        return req.error(400, 'notes exceeds maximum length of 5000 characters');
+      }
 
       const artifact = await SELECT.one.from(Artifact).where({ ID: artifactId, tenantId });
       if (!artifact) {
@@ -512,7 +567,7 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
     // ---------------------------------------------------------------------------
 
     this.on('extractChannelDetails', async (req) => {
-      const { systemId, channelIds, includeModules = true, includeSecurityConfig = true } = req.data;
+      const { systemId, channelIds } = req.data;
       const tenantId = req.user.tenant || 'default';
 
       const system = await SELECT.one.from(PISystem).where({ ID: systemId, tenantId });
@@ -673,7 +728,7 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
         .columns('objectId')
         .where({ system_ID: systemId, tenantId, artifactType: 'CommunicationChannel' });
 
-      const channelIds = artifacts.map(a => a.objectId);
+      const channelIdSet = new Set(artifacts.map(a => a.objectId));
 
       // Get credentials - referenced by these channels
       const credentials = await SELECT.from(CredentialInventory)
@@ -683,7 +738,7 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
       const relevantCreds = credentials.filter(c => {
         try {
           const refs = JSON.parse(c.referencedBy || '[]');
-          return refs.some(r => channelIds.includes(r));
+          return refs.some(r => channelIdSet.has(r));
         } catch {
           return false;
         }
@@ -719,9 +774,8 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
     this._runDiscoveryAsync = async (jobId, system, options, tenantId) => {
       const tx = cds.transaction({ user: { id: 'system', tenant: tenantId } });
 
-      // Track discovered channels and ICOs for post-processing
+      // Track discovered channels for post-processing
       const discoveredChannels = [];
-      const discoveredIcos = [];
 
       try {
         await tx.run(UPDATE(DiscoveryJob).where({ ID: jobId }).set({
@@ -741,12 +795,14 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
           const phase = DISCOVERY_PHASES[i];
 
           // Check if job was cancelled
+          // eslint-disable-next-line no-await-in-loop
           const currentJob = await tx.run(SELECT.one.from(DiscoveryJob).where({ ID: jobId }));
           if (currentJob.status === 'cancelled') {
             break;
           }
 
           // Update progress
+          // eslint-disable-next-line no-await-in-loop
           await tx.run(UPDATE(DiscoveryJob).where({ ID: jobId }).set({
             currentPhase: i + 1,
             currentPhaseName: phase.name,
@@ -761,84 +817,12 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
             artifactsFound: totalArtifacts,
           });
 
-          // Handle post-processing phases
-          if (phase.category === 'post') {
-            if (phase.types.includes('_ModuleExtraction') && discoveredChannels.length > 0) {
-              try {
-                LOG.info('Extracting modules from channels', { count: discoveredChannels.length });
-                const moduleResult = await this._extractChannelModules(tx, dirClient, tenantId, discoveredChannels);
-                LOG.info('Module extraction complete', { moduleCount: moduleResult.moduleCount, credentialCount: moduleResult.credentialCount });
-              } catch (error) {
-                errors.push({ phase: phase.name, type: '_ModuleExtraction', error: error.message });
-                LOG.error('Module extraction error', { error: error.message });
-              }
-            }
-            totalProgress += phase.weight;
-            continue;
-          }
-
-          // Discover artifacts for this phase
-          for (const type of phase.types) {
-            try {
-              const client = phase.category === 'dir' ? dirClient : esrClient;
-              const items = await this._discoverArtifactType(client, type, { use750Service: phase.use750 });
-
-              // Store artifacts
-              for (const item of items) {
-                const artifactId = randomUUID();
-
-                // Extract additional fields for 7.50 ICOs
-                const extraFields = {};
-                if (type === 'IntegratedConfiguration' && item.ReceiverWildcardIndicator) {
-                  extraFields.dependencies = JSON.stringify({
-                    receiverWildcardIndicator: item.ReceiverWildcardIndicator,
-                    _is750: true,
-                  });
-                }
-
-                await tx.run(INSERT.into(Artifact).entries({
-                  ID: artifactId,
-                  tenantId,
-                  system_ID: system.ID,
-                  discoveryJob_ID: jobId,
-                  artifactType: type,
-                  artifactKey: JSON.stringify(item.key || item),
-                  objectId: item.ObjectID || item.Name || item.name,
-                  name: item.Name || item.name || item.ObjectID,
-                  description: item.Description || item.description,
-                  namespace: item.Namespace || item.namespace,
-                  swcv: item.SoftwareComponentVersionID || item.swcv,
-                  adapterType: item.AdapterType || item.adapterType,
-                  senderComponent: item.SenderComponentID || item.senderComponent,
-                  senderInterface: item.SenderInterfaceName || item.senderInterface,
-                  receiverComponent: item.ReceiverComponentID || item.receiverComponent,
-                  receiverInterface: item.ReceiverInterfaceName || item.receiverInterface,
-                  piStatus: item.Status || 'active',
-                  rawDefinition: JSON.stringify(item),
-                  migrationStatus: 'discovered',
-                  ...extraFields,
-                }));
-                totalArtifacts++;
-
-                // Track for post-processing
-                if (type === 'CommunicationChannel') {
-                  discoveredChannels.push({ ...item, ID: artifactId });
-                } else if (type === 'IntegratedConfiguration') {
-                  discoveredIcos.push({ ...item, ID: artifactId });
-                }
-              }
-
-              // Update count
-              await tx.run(UPDATE(DiscoveryJob).where({ ID: jobId }).set({
-                artifactsFound: totalArtifacts,
-              }));
-
-            } catch (error) {
-              errors.push({ phase: phase.name, type, error: error.message });
-              LOG.error('Discovery error', { type, error: error.message });
-            }
-          }
-
+          // eslint-disable-next-line no-await-in-loop
+          const phaseResult = await this._processDiscoveryPhase(
+            tx, dirClient, esrClient, phase, jobId, system.ID, tenantId, discoveredChannels
+          );
+          errors.push(...phaseResult.errors);
+          totalArtifacts += phaseResult.artifactsAdded;
           totalProgress += phase.weight;
         }
 
@@ -882,6 +866,86 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
         }));
         await tx.commit();
       }
+    };
+
+    /**
+     * Process a single discovery phase — handles post-processing and artifact discovery.
+     * Extracted from _runDiscoveryAsync to reduce cognitive complexity.
+     */
+    this._processDiscoveryPhase = async (tx, dirClient, esrClient, phase, jobId, systemId, tenantId, discoveredChannels) => {
+      const { Artifact } = cds.entities('tenant');
+      const errors = [];
+      let artifactsAdded = 0;
+
+      if (phase.category === 'post') {
+        if (phase.types.includes('_ModuleExtraction') && discoveredChannels.length > 0) {
+          try {
+            LOG.info('Extracting modules from channels', { count: discoveredChannels.length });
+            const moduleResult = await this._extractChannelModules(tx, dirClient, tenantId, discoveredChannels);
+            LOG.info('Module extraction complete', moduleResult);
+          } catch (error) {
+            errors.push({ phase: phase.name, type: '_ModuleExtraction', error: error.message });
+            LOG.error('Module extraction error', { error: error.message });
+          }
+        }
+        return { errors, artifactsAdded };
+      }
+
+      for (const type of phase.types) {
+        try {
+          const client = phase.category === 'dir' ? dirClient : esrClient;
+          // eslint-disable-next-line no-await-in-loop
+          const items = await this._discoverArtifactType(client, type, { use750Service: phase.use750 });
+
+          for (const item of items) {
+            const artifactId = randomUUID();
+            const extraFields = {};
+            if (type === 'IntegratedConfiguration' && item.ReceiverWildcardIndicator) {
+              extraFields.dependencies = JSON.stringify({
+                receiverWildcardIndicator: item.ReceiverWildcardIndicator,
+                _is750: true,
+              });
+            }
+
+            // eslint-disable-next-line no-await-in-loop
+            await tx.run(INSERT.into(Artifact).entries({
+              ID: artifactId,
+              tenantId,
+              system_ID: systemId,
+              discoveryJob_ID: jobId,
+              artifactType: type,
+              artifactKey: JSON.stringify(item.key || item),
+              objectId: item.ObjectID || item.Name || item.name,
+              name: item.Name || item.name || item.ObjectID,
+              description: item.Description || item.description,
+              namespace: item.Namespace || item.namespace,
+              swcv: item.SoftwareComponentVersionID || item.swcv,
+              adapterType: item.AdapterType || item.adapterType,
+              senderComponent: item.SenderComponentID || item.senderComponent,
+              senderInterface: item.SenderInterfaceName || item.senderInterface,
+              receiverComponent: item.ReceiverComponentID || item.receiverComponent,
+              receiverInterface: item.ReceiverInterfaceName || item.receiverInterface,
+              piStatus: item.Status || 'active',
+              rawDefinition: JSON.stringify(item),
+              migrationStatus: 'discovered',
+              ...extraFields,
+            }));
+            artifactsAdded++;
+
+            if (type === 'CommunicationChannel') {
+              discoveredChannels.push({ ...item, ID: artifactId });
+            }
+          }
+
+          // eslint-disable-next-line no-await-in-loop
+          await tx.run(UPDATE('tenant.DiscoveryJob').where({ ID: jobId }).set({ artifactsFound: artifactsAdded }));
+        } catch (error) {
+          errors.push({ phase: phase.name, type, error: error.message });
+          LOG.error('Discovery error', { type, error: error.message });
+        }
+      }
+
+      return { errors, artifactsAdded };
     };
 
     /**
@@ -945,56 +1009,10 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
           if (!fullChannel) continue;
 
           // Extract and store module chain
-          if (fullChannel.moduleChain && fullChannel.moduleChain.length > 0) {
-            for (const mod of fullChannel.moduleChain) {
-              await tx.run(INSERT.into(ModuleConfiguration).entries({
-                tenant_ID: tenantId,
-                channelId: channelKey,
-                moduleKey: mod.moduleKey,
-                moduleName: mod.moduleName,
-                moduleType: mod.moduleType,
-                parameters: JSON.stringify(mod.parameters || {}),
-                processingSequence: mod.sequence,
-                isEquivalent: mod.isEquivalent,
-                migrationNotes: mod.isEquivalent
-                  ? `IS equivalent: ${mod.isEquivalent}`
-                  : 'Requires manual analysis',
-                migrationStatus: mod.isEquivalent ? 'analyzed' : 'pending',
-              }));
-              moduleCount++;
-            }
-          }
+          moduleCount += await this._storeModuleChain(tx, ModuleConfiguration, tenantId, channelKey, fullChannel.moduleChain);
 
           // Extract and store security/credential references
-          if (fullChannel.securityConfig) {
-            const sec = fullChannel.securityConfig;
-            if (sec.credentialAlias) {
-              await tx.run(INSERT.into(CredentialInventory).entries({
-                tenant_ID: tenantId,
-                credentialAlias: sec.credentialAlias,
-                credentialType: 'Password',
-                authType: sec.authMethod || 'Basic',
-                referencedBy: JSON.stringify([channelKey]),
-                migrationStatus: 'pending',
-              }).onConflictIgnore());
-              credentialCount++;
-            }
-
-            if (sec.certificates && sec.certificates.length > 0) {
-              for (const cert of sec.certificates) {
-                await tx.run(INSERT.into(CredentialInventory).entries({
-                  tenant_ID: tenantId,
-                  credentialAlias: cert.alias || cert.value,
-                  credentialType: 'Certificate',
-                  authType: 'Certificate',
-                  referencedBy: JSON.stringify([channelKey]),
-                  notes: `Keystore view: ${sec.keystoreView || 'default'}`,
-                  migrationStatus: 'pending',
-                }).onConflictIgnore());
-                credentialCount++;
-              }
-            }
-          }
+          credentialCount += await this._storeCredentials(tx, CredentialInventory, tenantId, channelKey, fullChannel.securityConfig);
         } catch (error) {
           LOG.warn('Failed to extract modules for channel', { channelId: channel.ObjectID, error: error.message });
         }
@@ -1002,6 +1020,68 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
 
       LOG.info('Channel module extraction completed', { moduleCount, credentialCount });
       return { moduleCount, credentialCount };
+    };
+
+    /**
+     * Store module chain entries for a channel. Extracted from _extractChannelModules.
+     */
+    this._storeModuleChain = async (tx, ModuleConfiguration, tenantId, channelKey, moduleChain) => {
+      if (!moduleChain || moduleChain.length === 0) return 0;
+      let count = 0;
+      for (const mod of moduleChain) {
+        // eslint-disable-next-line no-await-in-loop
+        await tx.run(INSERT.into(ModuleConfiguration).entries({
+          tenant_ID: tenantId,
+          channelId: channelKey,
+          moduleKey: mod.moduleKey,
+          moduleName: mod.moduleName,
+          moduleType: mod.moduleType,
+          parameters: JSON.stringify(mod.parameters || {}),
+          processingSequence: mod.sequence,
+          isEquivalent: mod.isEquivalent,
+          migrationNotes: mod.isEquivalent ? `IS equivalent: ${mod.isEquivalent}` : 'Requires manual analysis',
+          migrationStatus: mod.isEquivalent ? 'analyzed' : 'pending',
+        }));
+        count++;
+      }
+      return count;
+    };
+
+    /**
+     * Store credential inventory entries for a channel. Extracted from _extractChannelModules.
+     */
+    this._storeCredentials = async (tx, CredentialInventory, tenantId, channelKey, securityConfig) => {
+      if (!securityConfig) return 0;
+      const sec = securityConfig;
+      let count = 0;
+      if (sec.credentialAlias) {
+        // eslint-disable-next-line no-await-in-loop
+        await tx.run(INSERT.into(CredentialInventory).entries({
+          tenant_ID: tenantId,
+          credentialAlias: sec.credentialAlias,
+          credentialType: 'Password',
+          authType: sec.authMethod || 'Basic',
+          referencedBy: JSON.stringify([channelKey]),
+          migrationStatus: 'pending',
+        }).onConflictIgnore());
+        count++;
+      }
+      if (sec.certificates && sec.certificates.length > 0) {
+        for (const cert of sec.certificates) {
+          // eslint-disable-next-line no-await-in-loop
+          await tx.run(INSERT.into(CredentialInventory).entries({
+            tenant_ID: tenantId,
+            credentialAlias: cert.alias || cert.value,
+            credentialType: 'Certificate',
+            authType: 'Certificate',
+            referencedBy: JSON.stringify([channelKey]),
+            notes: `Keystore view: ${sec.keystoreView || 'default'}`,
+            migrationStatus: 'pending',
+          }).onConflictIgnore());
+          count++;
+        }
+      }
+      return count;
     };
 
     /**
@@ -1020,15 +1100,16 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
           if (!icoKey) continue;
 
           // Read full ICO with 7.50 fields
+          // eslint-disable-next-line no-await-in-loop
           const fullIco = await client.readIntegratedConfiguration750(icoKey);
           if (!fullIco) continue;
 
           // Update artifact with 7.50-specific fields
+          // eslint-disable-next-line no-await-in-loop
           await tx.run(UPDATE('tenant.Artifact')
             .where({ objectId: icoKey, tenantId })
             .set({
               rawDefinition: JSON.stringify(fullIco),
-              // Add 7.50-specific metadata
               dependencies: JSON.stringify({
                 receiverWildcardIndicator: fullIco.receiverWildcardIndicator,
                 is750: fullIco._is750,
@@ -1054,7 +1135,7 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
         tenantId,
         userId: req.user.id,
         userName: req.user.name || req.user.id,
-        userRole: req.user.roles?.admin ? 'Admin' : req.user.roles?.approver ? 'Approver' : 'Viewer',
+        userRole: _resolveUserRole(req.user.roles),
         action,
         entityType,
         entityId,

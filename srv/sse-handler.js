@@ -7,7 +7,6 @@
  */
 const cds = require('@sap/cds');
 const { SELECT } = cds;
-const { PassThrough } = require('stream');
 
 // CDS Logger - per North Star "use cds logs in the entire repo"
 const LOG = cds.log('sse-handler');
@@ -228,7 +227,13 @@ function broadcastError(tenantId, jobId, error) {
  */
 async function getJobStatus(jobId, tenantId) {
   const db = await cds.connect.to('db');
-  const { DiscoveryJob } = cds.entities;
+  // BUG-M2 fix: Defensive check for cds.entities availability
+  const entities = cds.entities('tenant') || cds.entities;
+  const DiscoveryJob = entities?.DiscoveryJob;
+  if (!DiscoveryJob) {
+    LOG.warn('DiscoveryJob entity not available');
+    return null;
+  }
 
   const job = await db.run(
     SELECT.one.from(DiscoveryJob)
@@ -257,7 +262,13 @@ async function getJobStatus(jobId, tenantId) {
  */
 async function getActiveJobs(tenantId) {
   const db = await cds.connect.to('db');
-  const { DiscoveryJob } = cds.entities;
+  // BUG-M2 fix: Defensive check for cds.entities availability
+  const entities = cds.entities('tenant') || cds.entities;
+  const DiscoveryJob = entities?.DiscoveryJob;
+  if (!DiscoveryJob) {
+    LOG.warn('DiscoveryJob entity not available');
+    return [];
+  }
 
   const jobs = await db.run(
     SELECT.from(DiscoveryJob)
