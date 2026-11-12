@@ -1,6 +1,9 @@
-const path = require('path');
-const fs   = require('fs');
-const crypto = require('crypto');
+const cds = require('@sap/cds');
+const path = require('node:path');
+const fs = require('node:fs');
+const crypto = require('node:crypto');
+
+const LOG = cds.log('brain-vectorstore');
 
 const STORE_FILE = path.join(__dirname, '../../.brain-vectors.json');
 const HANA_SERVICE_NAME = 'AICONX-brain-hana';
@@ -37,11 +40,11 @@ class LocalVectorStore {
   _load() {
     try {
       if (fs.existsSync(STORE_FILE)) return JSON.parse(fs.readFileSync(STORE_FILE, 'utf8'));
-    } catch {}
+    } catch { }
     return [];
   }
   _save() {
-    try { fs.writeFileSync(STORE_FILE, JSON.stringify(this._vectors)); } catch {}
+    try { fs.writeFileSync(STORE_FILE, JSON.stringify(this._vectors)); } catch { }
   }
   async add(content, metadata = {}) {
     const id = `v_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -90,7 +93,7 @@ class HanaVectorStore {
       password: this._creds.password,
       useTLS: true,
     });
-    client.on('error', (err) => { console.error('[BrainVectorStore] connection error:', err.message); this._client = null; });
+    client.on('error', (err) => { LOG.error('connection error', { error: err.message }); this._client = null; });
     this._connecting = new Promise((resolve, reject) => {
       client.connect((err) => {
         this._connecting = null;
@@ -133,8 +136,8 @@ class HanaVectorStore {
     const rows = await this._exec(`SELECT ID, CONTENT, EMBEDDING, METADATA, TS FROM ${this._table()}`);
     return rows.map(r => {
       let embedding = [], metadata = {};
-      try { embedding = JSON.parse(HanaVectorStore._text(r.EMBEDDING) || '[]'); } catch {}
-      try { metadata = JSON.parse(HanaVectorStore._text(r.METADATA) || '{}'); } catch {}
+      try { embedding = JSON.parse(HanaVectorStore._text(r.EMBEDDING) || '[]'); } catch { }
+      try { metadata = JSON.parse(HanaVectorStore._text(r.METADATA) || '{}'); } catch { }
       return { id: r.ID, content: HanaVectorStore._text(r.CONTENT), embedding, metadata, ts: r.TS };
     });
   }
@@ -172,7 +175,7 @@ function getVectorStore() {
   if (!_instance) {
     const creds = findBrainHanaCredentials();
     _instance = creds ? new HanaVectorStore(creds) : new LocalVectorStore();
-    console.log(`[BrainVectorStore] using ${creds ? 'HANA-backed (AICONX-brain-hana, persists across redeploys)' : 'local-file (ephemeral)'} store.`);
+    LOG.info('vector store initialized', { type: creds ? 'HANA-backed (AICONX-brain-hana, persists across redeploys)' : 'local-file (ephemeral)' });
   }
   return _instance;
 }

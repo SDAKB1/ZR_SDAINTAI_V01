@@ -20,5 +20,15 @@
     "test:api": "node test/api-client.test.js",
     "test:ui": "node test/ui-wiring.test.js",
     "test:integration": "node test/integration.test.js"
+  },
+  "cds": {
+    "requires": {
+      "outbox": {
+        "kind": "persistent-outbox",
+        "maxAttempts": 10,
+        "chunkSize": 100,
+        "parallelism": 5
+      }
+    }
   }
 }

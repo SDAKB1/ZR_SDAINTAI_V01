@@ -245,8 +245,99 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
     // ARTIFACT OPERATIONS
     // ---------------------------------------------------------------------------
 
+    /**
+     * AssessmentRequested event handler - processes assessment asynchronously via CAP outbox
+     * This handler is invoked by CAP's background runner when assessArtifact emits the event
+     */
+    this.on('AssessmentRequested', async (data) => {
+      const { artifactId, tenantId, userId } = data.data || data;
+      LOG.info('Processing queued assessment', { artifactId, tenantId });
+
+      const tx = cds.transaction({ user: { id: userId || 'system', tenant: tenantId } });
+
+      try {
+        const artifact = await tx.run(SELECT.one.from(Artifact).where({ ID: artifactId, tenantId }));
+        if (!artifact) {
+          LOG.warn('Artifact not found for queued assessment', { artifactId });
+          return;
+        }
+
+        // Call the brain service for AI assessment
+        const brainService = await cds.connect.to('BrainService');
+        const assessment = await brainService.send('migrationAdvisor', {
+          key: process.env.BRAIN_MASTER_KEY || 'AYMAN2026',
+          objectId: artifact.objectId || artifact.name,
+          objectDesc: artifact.description || artifact.name,
+          segmentCount: 10,
+          hasZFields: false,
+          mappingType: artifact.mappingType || 'graphical',
+          adapterType: artifact.adapterType || 'soap',
+          volumePerDay: 1000,
+          isBpmProcess: false,
+          isEdiBased: artifact.adapterType === 'as2',
+          sourceSystem: 'SAP_PI_PO',
+        });
+
+        // Update artifact with assessment including SAP-aligned fields
+        await tx.run(UPDATE(Artifact).where({ ID: artifactId }).set({
+          migrationTier: assessment.tier,
+          complexityScore: assessment.complexityScore,
+          recommendedTool: assessment.recommendedTool,
+          estimatedHours: assessment.estimatedHours,
+          assessedAt: new Date(),
+          assessmentNotes: assessment.rationale,
+          migrationStatus: 'assessed',
+          scenarioPattern: assessment.scenarioPattern,
+          sapMigrationStatus: assessment.sapMigrationStatus,
+          matchedTemplate: assessment.matchedTemplate,
+        }));
+
+        // Create ArtifactLimitation records if any limitations detected
+        if (assessment.limitations) {
+          try {
+            const limitations = JSON.parse(assessment.limitations);
+            const { ArtifactLimitation } = this.entities;
+            for (const lim of limitations) {
+              await tx.run(INSERT.into(ArtifactLimitation).entries({
+                tenant_ID: tenantId,
+                artifact_ID: artifactId,
+                limitation_code: lim.code,
+                detectedAt: new Date(),
+                detectedBy: 'auto',
+                context: JSON.stringify({
+                  severity: lim.severity,
+                  category: lim.category,
+                  workaroundType: lim.workaroundType,
+                  workaroundDesc: lim.workaroundDesc,
+                }),
+                resolutionStatus: 'open',
+              }));
+            }
+          } catch (limErr) {
+            LOG.warn('Failed to persist limitations', { error: limErr.message });
+          }
+        }
+
+        await tx.commit();
+        LOG.info('Assessment completed', { artifactId, tier: assessment.tier });
+
+        // Broadcast completion via SSE
+        sseHandler.broadcastProgress(tenantId, artifactId, {
+          type: 'assessment_complete',
+          artifactId,
+          tier: assessment.tier,
+          recommendedTool: assessment.recommendedTool,
+        });
+
+      } catch (error) {
+        LOG.error('Queued assessment failed', { artifactId, error: error.message });
+        await tx.rollback();
+        throw error; // Re-throw to let CAP outbox handle retry
+      }
+    });
+
     this.on('assessArtifact', async (req) => {
-      const { artifactId } = req.data;
+      const { artifactId, async: runAsync = true } = req.data;
       const tenantId = req.user.tenant || 'default';
 
       const artifact = await SELECT.one.from(Artifact).where({ ID: artifactId, tenantId });
@@ -254,7 +345,31 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
         return req.error(404, 'Artifact not found');
       }
 
-      // Call the brain service for AI assessment
+      // For async processing (default), queue the assessment via CAP outbox
+      if (runAsync) {
+        // Use cds.queued() to emit event transactionally
+        const queuedService = cds.queued(this);
+        await queuedService.emit('AssessmentRequested', {
+          artifactId,
+          tenantId,
+          userId: req.user.id,
+        });
+
+        // Update status to indicate assessment is queued
+        await UPDATE(Artifact).where({ ID: artifactId }).set({
+          migrationStatus: 'assessing',
+        });
+
+        LOG.info('Assessment queued', { artifactId, tenantId });
+
+        return {
+          artifactId,
+          status: 'queued',
+          message: 'Assessment queued for async processing. Monitor via SSE or polling.',
+        };
+      }
+
+      // Synchronous processing (when async=false)
       try {
         const brainService = await cds.connect.to('BrainService');
         const assessment = await brainService.send('migrationAdvisor', {
