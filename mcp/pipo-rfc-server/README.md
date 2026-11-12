@@ -99,6 +99,40 @@ Four tools are available:
 - **`call_rfc`** — `{ system: "SDAINTAI", rfc_name: "...", import_parameters: {...} }`
 - **`get_rfc_metadata`** — `{ system: "SDAINTAI", rfc_name: "..." }`
 
+### Small fetch/discovery script (Node.js 20+)
+
+From `mcp/pipo-rfc-server`, install the existing dependencies with `npm ci`.
+Put these client settings in a local, Git-ignored `.env` file:
+- `PIPO_MCP_URL`: your route (base URL or `/mcp` URL); defaults to the deployed route above.
+- `PIPO_MCP_USER`: the deployed MCP server's current Basic Auth username.
+- `PIPO_MCP_PASS`: the deployed MCP server's current Basic Auth password.
+
+The script never assumes the server's placeholder credentials. Use HTTPS except
+when testing against localhost. Load `.env` explicitly with Node's `--env-file`
+option (Node.js 20.6+); existing process environment variables take precedence.
+
+```bash
+node --env-file=.env fetch-pipo.js                 # discover tools, fetch PI8 status + ESR objects
+node --env-file=.env fetch-pipo.js --tools-only    # live tool names, descriptions and input schemas
+node --env-file=.env fetch-pipo.js > pipo.json     # save the JSON result locally
+node --env-file=.env fetch-pipo.js --rest          # public status + objects; no credentials or npm install needed
+node fetch-pipo.js --help
+```
+
+Default output contains `tools`, `status` and `objects` (including `totalCount`,
+`returned` and `items`). `--rest` uses the equivalent public endpoints below,
+but cannot discover MCP tools. This script does **not** execute `call_rfc` or
+`get_rfc_metadata`: those require a separately configured RFC connection, and
+arbitrary RFCs may change data. ESR results are catalog metadata, not complete
+object definitions; the server caps them at 150 with no pagination parameter.
+
+An unreachable destination may still return a successful HTTP/MCP response:
+inspect `status.reachable` and `status.destinations`. Authentication, HTTP and
+MCP tool errors exit nonzero with a deliberately generic message to avoid
+printing sensitive server error bodies. Without `--env-file`, supply the settings
+directly through the process environment; `.env` is not loaded automatically.
+Run the offline client tests with `node --test fetch-pipo.test.js`.
+
 ## Option B — Call the plain REST endpoints directly (what btp_cockpit.html does)
 
 These are **unauthenticated and CORS-open** on purpose — read-only,

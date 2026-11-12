@@ -111,13 +111,25 @@ async function withRfcConnection(systemName, fn) {
 // SDADATAAI BW cockpit's bw-rfc-server, migrated here) -- see README.md.
 const PI8_DESTINATIONS = ['PO_PJ2_ESR', 'PO_PJ2_DIR'];
 
+// Build explicit Basic Auth header for OnPremise destinations -- the
+// @sap-cloud-sdk/http-client does not reliably forward credentials for
+// OnPremise destinations via Cloud Connector, causing 401 responses.
+function buildPipoAuthHeaders() {
+  const pipoUser = process.env.PIPO_USER;
+  const pipoPass = process.env.PIPO_PASS;
+  return pipoUser && pipoPass
+    ? { 'Authorization': 'Basic ' + Buffer.from(`${pipoUser}:${pipoPass}`).toString('base64') }
+    : {};
+}
+
 async function pingPi8() {
   const destinations = {};
+  const authHeaders = buildPipoAuthHeaders();
   for (const destinationName of PI8_DESTINATIONS) {
     try {
       const response = await executeHttpRequest(
         { destinationName },
-        { method: 'get', url: '/', timeout: 10000 }
+        { method: 'get', url: '/', timeout: 10000, headers: authHeaders }
       );
       destinations[destinationName] = { reachable: true, status: response.status };
     } catch (err) {
@@ -158,7 +170,8 @@ function buildSimpleQueryBody() {
   params.append('qc', 'All software components');
   params.append('underL', 'true');
   params.append('changeL', 'true');
-  params.append('userL', 'SDAINT');
+  // userL filter removed -- was restricting to SDAINT user artifacts only,
+  // causing 0 results while direct curl returned 38 objects
   params.append('syncTabL', 'true');
   params.append('deletedL', 'N');
   params.append('xmlReleaseL', '7.1');
@@ -195,13 +208,14 @@ function parseSimpleQueryResults(html) {
 }
 
 async function listPi8EsrObjects() {
+  const authHeaders = buildPipoAuthHeaders();
   const response = await executeHttpRequest(
     { destinationName: 'PO_PJ2_ESR' },
     {
       method: 'post',
       url: '/rep/support/SimpleQuery',
       data: buildSimpleQueryBody(),
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...authHeaders },
       timeout: 20000
     }
   );
