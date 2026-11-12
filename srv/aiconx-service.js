@@ -81,7 +81,7 @@ module.exports = class AiconxService extends cds.ApplicationService {
   async init() {
     const { DbActivityLogs, SystemMetrics, MigrationAssets } = this.entities;
 
-    this.on('simulateEvent', async (req) => {
+    this.on('simulateEvent', async req => {
       const eventType = req.data.eventType || 'api_fetch';
       const tpl = SIMULATE_TEMPLATES[eventType] || SIMULATE_TEMPLATES.api_fetch;
 
@@ -96,10 +96,10 @@ module.exports = class AiconxService extends cds.ApplicationService {
       return SELECT.one.from(DbActivityLogs).where({ ID: entry.ID });
     });
 
-    this.on('importBtpAssets', async (req) => {
+    this.on('importBtpAssets', async req => {
       await DELETE.from(MigrationAssets).where({ projectId: 'Mule2BTP' });
 
-      const entries = MOCK_ASSETS.map((a) => ({ ID: cds.utils.uuid(), ...a }));
+      const entries = MOCK_ASSETS.map(a => ({ ID: cds.utils.uuid(), ...a }));
       await INSERT.into(MigrationAssets).entries(entries);
 
       return SELECT.from(MigrationAssets).where({ projectId: 'Mule2BTP' });
@@ -109,7 +109,7 @@ module.exports = class AiconxService extends cds.ApplicationService {
     this.before('READ', SystemMetrics, async () => {
       const count = await SELECT.one`count(*) as n`.from(SystemMetrics);
       if (!count || count.n === 0) {
-        await INSERT.into(SystemMetrics).entries(DEFAULT_METRICS.map((m) => ({ ID: cds.utils.uuid(), ...m })));
+        await INSERT.into(SystemMetrics).entries(DEFAULT_METRICS.map(m => ({ ID: cds.utils.uuid(), ...m })));
       }
     });
 

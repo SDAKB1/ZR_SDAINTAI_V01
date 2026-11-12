@@ -24,7 +24,7 @@ const LOG = cds.log('mtx-provisioning');
  *
  * @param {cds.Service} service - The MTX sidecar service instance
  */
-module.exports = (service) => {
+module.exports = service => {
   /**
    * Handle tenant subscription (onboarding)
    *
@@ -64,7 +64,7 @@ module.exports = (service) => {
   /**
    * Alternative handler for explicit subscribe event
    */
-  service.on('subscribe', async (req) => {
+  service.on('subscribe', async req => {
     const { subscribedTenantId, subscribedSubdomain } = req.data;
 
     LOG.info('Explicit subscribe event received', {
@@ -78,7 +78,7 @@ module.exports = (service) => {
   /**
    * Alternative handler for explicit unsubscribe event
    */
-  service.on('unsubscribe', async (req) => {
+  service.on('unsubscribe', async req => {
     const { subscribedTenantId, subscribedSubdomain } = req.data;
 
     LOG.info('Explicit unsubscribe event received', {
