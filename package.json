@@ -5,14 +5,30 @@
   "description": "SAP Data & AI Migration Intelligence Cockpit",
   "author": "SDA KBEs",
   "license": "SAP Sample Code License",
+  "engines": {
+    "node": "^20"
+  },
   "dependencies": {
-    "@sap/cds": "^7",
+    "@anthropic-ai/sdk": "^0.116.0",
+    "@cap-js/audit-logging": ">=0",
+    "@cap-js/hana": "^2",
+    "@langchain/anthropic": "^1.5.1",
+    "@langchain/core": "^1.2.1",
+    "@langchain/langgraph": "^1.4.5",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@sap/cds": "^9",
+    "@sap/cds-mtxs": "^3",
+    "@sap/xssec": "^4",
     "express": "^4",
+    "kafkajs": "^2",
+    "langchain": "^1.5.2",
+    "redis": "^5.0.0",
     "sqlite3": "^5",
     "xml2js": "^0.6"
   },
-  "engines": {
-    "node": "^20"
+  "devDependencies": {
+    "@cap-js/sqlite": "^2.4",
+    "@sap/cds-dk": "^9"
   },
   "scripts": {
     "start": "cds serve",
