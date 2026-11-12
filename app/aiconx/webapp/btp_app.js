@@ -123,10 +123,12 @@ function generateBulkAssets(platform, count, startIndex, existingNames) {
     const type = vocab.types[Math.floor(rand() * vocab.types.length)];
     const id = `G${String(startIndex + i + 1).padStart(4, '0')}`;
     const tree = [
-      { kind: vocab.treeKind, name: `${name}-main`, ok: true, children: [
-        leafTree(vocab.leafKinds[0], `${name}-${vocab.leafKinds[0]}-1`, true),
-        leafTree(vocab.leafKinds[1], `${name}-${vocab.leafKinds[1]}-1`, !flagged)
-      ] }
+      {
+        kind: vocab.treeKind, name: `${name}-main`, ok: true, children: [
+          leafTree(vocab.leafKinds[0], `${name}-${vocab.leafKinds[0]}-1`, true),
+          leafTree(vocab.leafKinds[1], `${name}-${vocab.leafKinds[1]}-1`, !flagged)
+        ]
+      }
     ];
     if (tier === 'High') tree.push(leafTree(vocab.leafKinds[2] || vocab.leafKinds[0], `${name}-${vocab.leafKinds[2] || vocab.leafKinds[0]}-2`, !flagged));
     out.push({ id, name, type, tier, deps, status, flowCount, tree, bulk: true });
@@ -136,90 +138,128 @@ function generateBulkAssets(platform, count, startIndex, existingNames) {
 
 const ASSET_SETS = {
   mulesoft: [
-    { id: 'A001', name: 'order-process-api', type: 'App', tier: 'Medium', deps: 4, status: 'Ready',
+    {
+      id: 'A001', name: 'order-process-api', type: 'App', tier: 'Medium', deps: 4, status: 'Ready',
       tree: [
-        { kind: 'flow', name: 'order-process-main-flow', ok: true, children: [
-          leafTree('sub-flow', 'validate-order-subflow', true),
-          leafTree('connector', 'salesforce-connector (Opportunity)', true),
-          leafTree('connector', 'sap-erp-connector (BAPI_SALESORDER_CREATEFROMDAT2)', true),
-          leafTree('transform', 'order-to-sap.dwl', true)
-        ]},
+        {
+          kind: 'flow', name: 'order-process-main-flow', ok: true, children: [
+            leafTree('sub-flow', 'validate-order-subflow', true),
+            leafTree('connector', 'salesforce-connector (Opportunity)', true),
+            leafTree('connector', 'sap-erp-connector (BAPI_SALESORDER_CREATEFROMDAT2)', true),
+            leafTree('transform', 'order-to-sap.dwl', true)
+          ]
+        },
         leafTree('flow', 'order-error-handler-flow', true),
         leafTree('properties', 'order-process-api.properties.yaml', true),
         leafTree('schema', 'order-response.xsd', true)
-      ] },
-    { id: 'A002', name: 'customer-sync-flow', type: 'Flow', tier: 'Simple', deps: 2, status: 'Ready',
+      ]
+    },
+    {
+      id: 'A002', name: 'customer-sync-flow', type: 'Flow', tier: 'Simple', deps: 2, status: 'Ready',
       tree: [
-        { kind: 'flow', name: 'customer-sync-main-flow', ok: true, children: [
-          leafTree('connector', 'salesforce-connector (Account)', true),
-          leafTree('transform', 'account-to-bp.dwl', true)
-        ] }
-      ] },
-    { id: 'A003', name: 'invoice-router', type: 'Flow', tier: 'Medium', deps: 3, status: 'Ready',
+        {
+          kind: 'flow', name: 'customer-sync-main-flow', ok: true, children: [
+            leafTree('connector', 'salesforce-connector (Account)', true),
+            leafTree('transform', 'account-to-bp.dwl', true)
+          ]
+        }
+      ]
+    },
+    {
+      id: 'A003', name: 'invoice-router', type: 'Flow', tier: 'Medium', deps: 3, status: 'Ready',
       tree: [
-        { kind: 'flow', name: 'invoice-router-main-flow', ok: true, children: [
-          leafTree('connector', 'billing-db-connector', true),
-          leafTree('transform', 'invoice-to-billingdoc.dwl', true)
-        ] }
-      ] },
-    { id: 'A004', name: 'sap-erp-connector', type: 'Connector', tier: 'Medium', deps: 1, status: 'Warning',
-      tree: [ leafTree('connector', 'sap-erp-connector (shared lib)', true), leafTree('properties', 'sap-erp-connector.properties.yaml', false) ] },
-    { id: 'A005', name: 'payment-callback-api', type: 'App', tier: 'Simple', deps: 2, status: 'Ready',
+        {
+          kind: 'flow', name: 'invoice-router-main-flow', ok: true, children: [
+            leafTree('connector', 'billing-db-connector', true),
+            leafTree('transform', 'invoice-to-billingdoc.dwl', true)
+          ]
+        }
+      ]
+    },
+    {
+      id: 'A004', name: 'sap-erp-connector', type: 'Connector', tier: 'Medium', deps: 1, status: 'Warning',
+      tree: [leafTree('connector', 'sap-erp-connector (shared lib)', true), leafTree('properties', 'sap-erp-connector.properties.yaml', false)]
+    },
+    {
+      id: 'A005', name: 'payment-callback-api', type: 'App', tier: 'Simple', deps: 2, status: 'Ready',
       tree: [
-        { kind: 'flow', name: 'payment-callback-main-flow', ok: true, children: [
-          leafTree('connector', 'http-listener', true)
-        ] }
-      ] },
-    { id: 'A006', name: 'partner-edi-mapping', type: 'Mapping', tier: 'High', deps: 12, status: 'Review',
+        {
+          kind: 'flow', name: 'payment-callback-main-flow', ok: true, children: [
+            leafTree('connector', 'http-listener', true)
+          ]
+        }
+      ]
+    },
+    {
+      id: 'A006', name: 'partner-edi-mapping', type: 'Mapping', tier: 'High', deps: 12, status: 'Review',
       tree: [
-        { kind: 'flow', name: 'edi-inbound-flow', ok: true, children: [
-          leafTree('transform', 'edi-850-to-po.dwl', false)
-        ] },
+        {
+          kind: 'flow', name: 'edi-inbound-flow', ok: true, children: [
+            leafTree('transform', 'edi-850-to-po.dwl', false)
+          ]
+        },
         leafTree('schema', 'edi-envelope.xsd', false)
-      ] },
+      ]
+    },
     // Business Partner: one domain, three separate Kafka-carried events (created/updated/sync) ???
     // the exact scenario walked through in the MuleSoft-SDA-Exit deck's Kafka slides. Flagged
     // Review by default so it lands in front of a reviewer, same as the deck's narrative.
-    { id: 'A007', name: 'business-partner-sync', type: 'App', tier: 'Medium', deps: 3, status: 'Review',
+    {
+      id: 'A007', name: 'business-partner-sync', type: 'App', tier: 'Medium', deps: 3, status: 'Review',
       tree: [
-        { kind: 'flow', name: 'business-partner-sync-main-flow', ok: true, children: [
-          leafTree('connector', 'sap-idoc-out', true),
-          kafkaLeaf('connector', 'kafka-bp-created', 'IS-KAFKA_E001', 'bp-events-created', true),
-          kafkaLeaf('connector', 'kafka-bp-updated', 'IS-KAFKA_E002', 'bp-events-updated', true),
-          kafkaLeaf('connector', 'kafka-bp-sync', 'IS-KAFKA_E003', 'bp-events-sync', true),
-          leafTree('transform', 'bp-mapping.dwl', true)
-        ] }
-      ] }
+        {
+          kind: 'flow', name: 'business-partner-sync-main-flow', ok: true, children: [
+            leafTree('connector', 'sap-idoc-out', true),
+            kafkaLeaf('connector', 'kafka-bp-created', 'IS-KAFKA_E001', 'bp-events-created', true),
+            kafkaLeaf('connector', 'kafka-bp-updated', 'IS-KAFKA_E002', 'bp-events-updated', true),
+            kafkaLeaf('connector', 'kafka-bp-sync', 'IS-KAFKA_E003', 'bp-events-sync', true),
+            leafTree('transform', 'bp-mapping.dwl', true)
+          ]
+        }
+      ]
+    }
   ],
   pipo: [
-    { id: 'I001', name: 'Material Master', type: 'ICO', tier: 'Simple', deps: 1, status: 'Ready',
-      tree: [ leafTree('sender-channel', 'MATMAS_Sender_File', true), leafTree('receiver-channel', 'MATMAS_Receiver_IDoc', true), leafTree('message-mapping', 'MATMAS07_to_MM01', true) ] },
-    { id: 'I002', name: 'Customer Master', type: 'ICO', tier: 'Simple', deps: 1, status: 'Ready',
-      tree: [ leafTree('sender-channel', 'DEBMAS_Sender_IDoc', true), leafTree('receiver-channel', 'DEBMAS_Receiver_Proxy', true), leafTree('message-mapping', 'DEBMAS08_to_BP', true) ] },
-    { id: 'I003', name: 'Sales Orders', type: 'ICO', tier: 'Medium', deps: 3, status: 'Ready',
-      tree: [ leafTree('sender-channel', 'ORDERS_Sender_HTTP', true), leafTree('operation-mapping', 'ORDERS05_to_VA01', true), leafTree('value-mapping', 'SalesOrg_ValueMap', true) ] },
-    { id: 'I004', name: 'Delivery', type: 'ICO', tier: 'Medium', deps: 2, status: 'Warning',
-      tree: [ leafTree('sender-channel', 'DESADV_Sender_IDoc', true), leafTree('message-mapping', 'DELVRY03_to_VL01N', false) ] },
-    { id: 'I005', name: 'Invoice', type: 'ICO', tier: 'Medium', deps: 2, status: 'Ready',
-      tree: [ leafTree('sender-channel', 'INVOIC_Sender_IDoc', true), leafTree('message-mapping', 'INVOIC02_to_VF01', true) ] },
-    { id: 'I006', name: 'FI Document', type: 'ICO', tier: 'High', deps: 6, status: 'Review',
-      tree: [ leafTree('sender-channel', 'FIDOC_Sender_Proxy', true), leafTree('message-mapping', 'FIDOC_to_BAPI_ACC_POST', false), leafTree('value-mapping', 'GLAccount_ValueMap', false) ] }
+    {
+      id: 'I001', name: 'Material Master', type: 'ICO', tier: 'Simple', deps: 1, status: 'Ready',
+      tree: [leafTree('sender-channel', 'MATMAS_Sender_File', true), leafTree('receiver-channel', 'MATMAS_Receiver_IDoc', true), leafTree('message-mapping', 'MATMAS07_to_MM01', true)]
+    },
+    {
+      id: 'I002', name: 'Customer Master', type: 'ICO', tier: 'Simple', deps: 1, status: 'Ready',
+      tree: [leafTree('sender-channel', 'DEBMAS_Sender_IDoc', true), leafTree('receiver-channel', 'DEBMAS_Receiver_Proxy', true), leafTree('message-mapping', 'DEBMAS08_to_BP', true)]
+    },
+    {
+      id: 'I003', name: 'Sales Orders', type: 'ICO', tier: 'Medium', deps: 3, status: 'Ready',
+      tree: [leafTree('sender-channel', 'ORDERS_Sender_HTTP', true), leafTree('operation-mapping', 'ORDERS05_to_VA01', true), leafTree('value-mapping', 'SalesOrg_ValueMap', true)]
+    },
+    {
+      id: 'I004', name: 'Delivery', type: 'ICO', tier: 'Medium', deps: 2, status: 'Warning',
+      tree: [leafTree('sender-channel', 'DESADV_Sender_IDoc', true), leafTree('message-mapping', 'DELVRY03_to_VL01N', false)]
+    },
+    {
+      id: 'I005', name: 'Invoice', type: 'ICO', tier: 'Medium', deps: 2, status: 'Ready',
+      tree: [leafTree('sender-channel', 'INVOIC_Sender_IDoc', true), leafTree('message-mapping', 'INVOIC02_to_VF01', true)]
+    },
+    {
+      id: 'I006', name: 'FI Document', type: 'ICO', tier: 'High', deps: 6, status: 'Review',
+      tree: [leafTree('sender-channel', 'FIDOC_Sender_Proxy', true), leafTree('message-mapping', 'FIDOC_to_BAPI_ACC_POST', false), leafTree('value-mapping', 'GLAccount_ValueMap', false)]
+    }
   ],
   informatica: [
-    { id: 'M001', name: 'material-master-mapping', type: 'Mapping', tier: 'Simple', deps: 1, status: 'Ready', tree: [ leafTree('mapping', 'm_material_master', true), leafTree('session', 's_material_master', true) ] },
-    { id: 'M002', name: 'customer-master-mapping', type: 'Mapping', tier: 'Simple', deps: 1, status: 'Ready', tree: [ leafTree('mapping', 'm_customer_master', true), leafTree('session', 's_customer_master', true) ] },
-    { id: 'M003', name: 'sales-order-workflow', type: 'Workflow', tier: 'Medium', deps: 3, status: 'Ready', tree: [ leafTree('workflow', 'wf_sales_order', true), leafTree('mapping', 'm_sales_order', true) ] },
-    { id: 'M004', name: 'delivery-workflow', type: 'Workflow', tier: 'Medium', deps: 2, status: 'Warning', tree: [ leafTree('workflow', 'wf_delivery', true), leafTree('mapping', 'm_delivery', false) ] },
-    { id: 'M005', name: 'invoice-mapping', type: 'Mapping', tier: 'Medium', deps: 2, status: 'Ready', tree: [ leafTree('mapping', 'm_invoice', true), leafTree('session', 's_invoice', true) ] },
-    { id: 'M006', name: 'fi-posting-workflow', type: 'Workflow', tier: 'High', deps: 5, status: 'Review', tree: [ leafTree('workflow', 'wf_fi_posting', true), leafTree('mapping', 'm_fi_posting', false) ] }
+    { id: 'M001', name: 'material-master-mapping', type: 'Mapping', tier: 'Simple', deps: 1, status: 'Ready', tree: [leafTree('mapping', 'm_material_master', true), leafTree('session', 's_material_master', true)] },
+    { id: 'M002', name: 'customer-master-mapping', type: 'Mapping', tier: 'Simple', deps: 1, status: 'Ready', tree: [leafTree('mapping', 'm_customer_master', true), leafTree('session', 's_customer_master', true)] },
+    { id: 'M003', name: 'sales-order-workflow', type: 'Workflow', tier: 'Medium', deps: 3, status: 'Ready', tree: [leafTree('workflow', 'wf_sales_order', true), leafTree('mapping', 'm_sales_order', true)] },
+    { id: 'M004', name: 'delivery-workflow', type: 'Workflow', tier: 'Medium', deps: 2, status: 'Warning', tree: [leafTree('workflow', 'wf_delivery', true), leafTree('mapping', 'm_delivery', false)] },
+    { id: 'M005', name: 'invoice-mapping', type: 'Mapping', tier: 'Medium', deps: 2, status: 'Ready', tree: [leafTree('mapping', 'm_invoice', true), leafTree('session', 's_invoice', true)] },
+    { id: 'M006', name: 'fi-posting-workflow', type: 'Workflow', tier: 'High', deps: 5, status: 'Review', tree: [leafTree('workflow', 'wf_fi_posting', true), leafTree('mapping', 'm_fi_posting', false)] }
   ],
   boomi: [
-    { id: 'P001', name: 'material-master-process', type: 'Process', tier: 'Simple', deps: 1, status: 'Ready', tree: [ leafTree('process', 'PRC_MaterialMaster', true), leafTree('connector', 'SAP Connector', true) ] },
-    { id: 'P002', name: 'customer-master-process', type: 'Process', tier: 'Simple', deps: 1, status: 'Ready', tree: [ leafTree('process', 'PRC_CustomerMaster', true), leafTree('connector', 'SAP Connector', true) ] },
-    { id: 'P003', name: 'sales-order-process', type: 'Process', tier: 'Medium', deps: 3, status: 'Ready', tree: [ leafTree('process', 'PRC_SalesOrder', true), leafTree('map', 'MAP_Order_to_VA01', true) ] },
-    { id: 'P004', name: 'delivery-process', type: 'Process', tier: 'Medium', deps: 2, status: 'Warning', tree: [ leafTree('process', 'PRC_Delivery', true), leafTree('map', 'MAP_Delivery_to_VL01N', false) ] },
-    { id: 'P005', name: 'invoice-process', type: 'Process', tier: 'Medium', deps: 2, status: 'Ready', tree: [ leafTree('process', 'PRC_Invoice', true), leafTree('map', 'MAP_Invoice_to_VF01', true) ] },
-    { id: 'P006', name: 'fi-posting-process', type: 'Process', tier: 'High', deps: 5, status: 'Review', tree: [ leafTree('process', 'PRC_FIPosting', true), leafTree('map', 'MAP_FI_to_BAPI', false) ] }
+    { id: 'P001', name: 'material-master-process', type: 'Process', tier: 'Simple', deps: 1, status: 'Ready', tree: [leafTree('process', 'PRC_MaterialMaster', true), leafTree('connector', 'SAP Connector', true)] },
+    { id: 'P002', name: 'customer-master-process', type: 'Process', tier: 'Simple', deps: 1, status: 'Ready', tree: [leafTree('process', 'PRC_CustomerMaster', true), leafTree('connector', 'SAP Connector', true)] },
+    { id: 'P003', name: 'sales-order-process', type: 'Process', tier: 'Medium', deps: 3, status: 'Ready', tree: [leafTree('process', 'PRC_SalesOrder', true), leafTree('map', 'MAP_Order_to_VA01', true)] },
+    { id: 'P004', name: 'delivery-process', type: 'Process', tier: 'Medium', deps: 2, status: 'Warning', tree: [leafTree('process', 'PRC_Delivery', true), leafTree('map', 'MAP_Delivery_to_VL01N', false)] },
+    { id: 'P005', name: 'invoice-process', type: 'Process', tier: 'Medium', deps: 2, status: 'Ready', tree: [leafTree('process', 'PRC_Invoice', true), leafTree('map', 'MAP_Invoice_to_VF01', true)] },
+    { id: 'P006', name: 'fi-posting-process', type: 'Process', tier: 'High', deps: 5, status: 'Review', tree: [leafTree('process', 'PRC_FIPosting', true), leafTree('map', 'MAP_FI_to_BAPI', false)] }
   ]
 };
 // Scale each hand-authored set up to a realistic large-migration size ??? SDAINTAI's whole
@@ -857,7 +897,7 @@ function unflagNav(id) { const el = $(id); if (el) el.classList.remove('flagged'
 function flagReview(navId, screenId, reasonHtml) {
   flagNav(navId);
   lumiSay(`?????? I think you should review this ??? ${reasonHtml}`, { alert: true });
-  lumiChoices([{ label: 'Review', cls: 'review', onClick: () => openScreen(screenId) }, { label: 'Not now', cls: 'ghost', onClick: () => {} }]);
+  lumiChoices([{ label: 'Review', cls: 'review', onClick: () => openScreen(screenId) }, { label: 'Not now', cls: 'ghost', onClick: () => { } }]);
 }
 
 // ==================== SCREEN NAV ====================
@@ -974,10 +1014,12 @@ function selectPlatform(key) {
     lumiSay(`Before we scan, I don't have a BTP Integration Suite target configured yet ??? it's marked Manual in Settings. Set it now, or I'll continue with the sandbox defaults for this walkthrough?`);
     lumiChoices([
       { label: 'Open Settings', onClick: () => openScreen('admin') },
-      { label: 'Use sandbox defaults', cls: 'primary', onClick: () => {
-        lumiSay(`No problem ??? sandbox it is. Which runtime or version ??? this is your ${p.hint}?`);
-        lumiChoices(p.versions.map(v => ({ label: v, onClick: () => setVersionAnswer(v) })));
-      } }
+      {
+        label: 'Use sandbox defaults', cls: 'primary', onClick: () => {
+          lumiSay(`No problem ??? sandbox it is. Which runtime or version ??? this is your ${p.hint}?`);
+          lumiChoices(p.versions.map(v => ({ label: v, onClick: () => setVersionAnswer(v) })));
+        }
+      }
     ]);
   }
 }
@@ -1167,6 +1209,28 @@ function startAssetScan() {
 // already proven on the BW cockpit's PI8 Objects tab ??? so a fresh clone
 // still demos cleanly even where the Cloud Connector chain isn't reachable.
 async function scanPi8Live(btn) {
+  // Try backend discovery first if we have a registered system
+  if (S.registeredSystemId) {
+    try {
+      const discoveryJob = await triggerBackendDiscovery(S.registeredSystemId);
+      if (discoveryJob && discoveryJob.ID) {
+        showToast('Backend Discovery Started', 'Triggering PI/PO discovery via backend service...', 'info');
+        const progress = await pollDiscoveryProgress(discoveryJob.ID);
+        if (progress && progress.status === 'completed') {
+          const artifacts = await fetchDiscoveredArtifacts(S.registeredSystemId);
+          if (artifacts && artifacts.length) {
+            showToast('Backend Discovery Complete', `${artifacts.length} artifacts discovered and cached.`, 'success');
+            finishAssetScan(artifacts, btn, { live: true, backend: true, totalCount: artifacts.length });
+            return;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[Discovery] Backend discovery failed, falling back to MCP:', err.message);
+    }
+  }
+
+  // Fallback to MCP API scan
   try {
     const res = await fetch(PIPO_MCP_API_BASE + '/api/pi8/objects');
     const data = await res.json();
@@ -1406,10 +1470,12 @@ function buildDecompiledAsset(filename, kind) {
   decompiledCounter++;
   const baseName = filename.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9._-]/g, '-') || 'decompiled-asset';
   const tree = [
-    { kind: 'flow', name: `${baseName}-main-flow (recovered)`, ok: true, children: [
-      leafTree('connector', 'recovered-connector', true),
-      leafTree('transform', `${baseName}-mapping.dwl (reconstructed)`, true)
-    ] },
+    {
+      kind: 'flow', name: `${baseName}-main-flow (recovered)`, ok: true, children: [
+        leafTree('connector', 'recovered-connector', true),
+        leafTree('transform', `${baseName}-mapping.dwl (reconstructed)`, true)
+      ]
+    },
     leafTree('flow', `${baseName}-error-handler-flow (recovered)`, true),
     leafTree('properties', `${baseName}.properties.yaml (recovered)`, true),
     leafTree('schema', `${baseName}-schema.xsd (recovered ??? needs review)`, false)
@@ -1618,13 +1684,15 @@ function renderTeamBoard() {
     return `
     <div class="team-col">
       <div class="wave-col-head"><b>Wave ${w}</b><span>${S.teamByWave[w].length} members</span></div>
-      ${S.teamByWave[w].map(id => { const m = activeTeam().find(t => t.id === id); return `
+      ${S.teamByWave[w].map(id => {
+      const m = activeTeam().find(t => t.id === id); return `
         <div class="team-member-card">
           <div class="avatar-chip" style="background:${m.color};">${m.name.split(' ').map(x => x[0]).join('')}</div>
           <div class="info"><b>${m.name}</b><span>${m.role}</span></div>
           <div class="avail-bar"><div style="width:${m.avail}%;"></div></div>
           <button class="team-remove-btn" data-wave="${w}" data-id="${id}" title="Remove from Wave ${w}"><i class="fa-solid fa-xmark"></i></button>
-        </div>`; }).join('')}
+        </div>`;
+    }).join('')}
       <select class="team-add-select" data-wave="${w}">
         <option value="">+ Add member&hellip;</option>
         ${available.map(t => `<option value="${t.id}">${t.name} ??? ${t.role}</option>`).join('')}
@@ -1922,7 +1990,7 @@ async function saveBlob(blob, filename, description, acceptTypes) {
 function approveAndStart() {
   openModal('Approve Migration Plan', `You're about to approve <b>${S.projectName}</b> for execution. This will unlock the Migration Cockpit and notify the team.`,
     [{ label: 'Cancel', cls: 'btn-btp-cancel', onClick: closeModal },
-     { label: 'Approve & Start', cls: 'btn-btp-gold', onClick: () => { closeModal(); doApprove(); } }]);
+    { label: 'Approve & Start', cls: 'btn-btp-gold', onClick: () => { closeModal(); doApprove(); } }]);
 }
 function doApprove() {
   markDone('nav-approve');
@@ -1978,8 +2046,8 @@ function buildCockpitRows() {
       // one of the asset's expanded rows. Same deterministic idea as before.
       const advisory = a.status !== 'Ready' ? null
         : idx % 7 === 3 ? 'Timezone normalized to UTC during conversion ??? verify the receiver expects UTC.'
-        : idx % 11 === 5 ? 'Retry policy mapped to adapter defaults ??? confirm the interval before go-live.'
-        : null;
+          : idx % 11 === 5 ? 'Retry policy mapped to adapter defaults ??? confirm the interval before go-live.'
+            : null;
       for (let n = 1; n <= total; n++) {
         const rowName = total > 1 ? `${a.name} ??? Interface ${n}/${total}` : a.name;
         S.cockpitRows.push({
@@ -2891,13 +2959,13 @@ function renderReportAnalytics() {
         <h5>Top agents used for fix</h5>
         ${topAgents.length ? topAgents.map(([label, count]) => `
           <div class="report-bar-row"><span class="report-bar-label">A2A ??? ${label}</span><div class="report-bar-track"><div class="report-bar-fill" style="width:${(count / maxAgentCount) * 100}%;"></div></div><span class="report-bar-count">${count}</span></div>`).join('')
-          : '<div class="mock-note"><i class="fa-solid fa-circle-info"></i> No issues resolved by AI Agents yet.</div>'}
+      : '<div class="mock-note"><i class="fa-solid fa-circle-info"></i> No issues resolved by AI Agents yet.</div>'}
       </div>
       <div class="report-analytics-card">
         <h5>Top issues raised</h5>
         ${topIssues.length ? topIssues.map(([label, count]) => `
           <div class="report-bar-row"><span class="report-bar-label">${label}</span><div class="report-bar-track"><div class="report-bar-fill issue" style="width:${(count / maxIssueCount) * 100}%;"></div></div><span class="report-bar-count">${count}</span></div>`).join('')
-          : '<div class="mock-note"><i class="fa-solid fa-circle-info"></i> No conversion issues raised yet.</div>'}
+      : '<div class="mock-note"><i class="fa-solid fa-circle-info"></i> No conversion issues raised yet.</div>'}
       </div>
       <div class="report-analytics-card report-analytics-wide">
         <h5>Brain learning curve ??? auto-resolve rate across migrations</h5>
@@ -2998,7 +3066,7 @@ function showLumiInsight(id) {
   const p = PLATFORMS[S.platform];
   const riskWord = asset.tier === 'High' ? 'heavy custom logic and several dependencies'
     : asset.tier === 'Medium' ? 'some custom mapping/transform logic'
-    : 'straightforward, low-risk logic';
+      : 'straightforward, low-risk logic';
   lumiSay(`<b>Insight ??? ${row.name}</b>`);
   lumiHtml(`<div class="insight-card">
     <div><b>What it contains</b><p>${asset.type} converting via ${p.terms.mappingLabel}; ${riskWord}.</p></div>
@@ -3008,9 +3076,11 @@ function showLumiInsight(id) {
     <div><b>Worth knowing</b><p>${row.advisory || (asset.tier === 'High' ? 'Custom logic is regenerated as best-effort ??? test the transform output before promoting.' : 'No advisories on this item.')}</p></div>
   </div>`);
   lumiChoices([
-    { label: 'What could break?', onClick: () => lumiSay(asset.tier === 'High'
+    {
+      label: 'What could break?', onClick: () => lumiSay(asset.tier === 'High'
         ? `Mostly the parts marked "needs review" in the structure tree ??? those branches couldn't be mapped 1:1 and fall back to a manual pattern.`
-        : `Nothing flagged ??? this one converted cleanly with full coverage.`) },
+        : `Nothing flagged ??? this one converted cleanly with full coverage.`)
+    },
     { label: 'Show me the script', onClick: () => showTreeModal(id) }
   ]);
 }
@@ -3042,8 +3112,8 @@ function showIflowViewModal(id) {
     const node = s.kind === 'event'
       ? `<div class="iflow-node iflow-event ${s.label === 'End' ? 'iflow-event-end' : ''}"><i class="fa-solid fa-circle-dot"></i></div>`
       : s.kind === 'router'
-      ? `<div class="iflow-node iflow-router"><i class="fa-solid ${s.icon}"></i></div>`
-      : `<div class="iflow-node iflow-step"><i class="fa-solid ${s.icon}"></i></div>`;
+        ? `<div class="iflow-node iflow-router"><i class="fa-solid ${s.icon}"></i></div>`
+        : `<div class="iflow-node iflow-step"><i class="fa-solid ${s.icon}"></i></div>`;
     const arrow = i < steps.length - 1 ? '<div class="iflow-arrow"><i class="fa-solid fa-arrow-right"></i></div>' : '';
     return `<div class="iflow-canvas-col"><div class="iflow-canvas-node-wrap">${node}${arrow}</div><span class="iflow-node-label">${s.label}</span></div>`;
   }).join('');
@@ -3085,12 +3155,14 @@ function suggestKafkaConversion(asset, hostId) {
   const n = kafkaNodes.length;
   lumiSay(`${asset.name} carries ${n} Kafka event${n > 1 ? 's' : ''} ??? want me to wire the one${n > 1 ? 's' : ''} you need to IS-Kafka before this converts?`);
   if (!unpicked.length) return;
-  lumiChoices([{ label: `Select all ${n} Kafka event${n > 1 ? 's' : ''}`, cls: 'primary', onClick: () => {
-    kafkaNodes.forEach(node => { node.kafkaEvent.selected = true; });
-    const host = $(hostId);
-    if (host) { host.innerHTML = renderTreeEditorHtml(asset); wireTreeEditorEvents(host, asset); }
-    lumiSay(`Done ??? all ${n} event${n > 1 ? 's' : ''} picked. They'll generate ${n} IS-Kafka channel${n > 1 ? 's' : ''} in the .iflw the moment this converts.`);
-  } }]);
+  lumiChoices([{
+    label: `Select all ${n} Kafka event${n > 1 ? 's' : ''}`, cls: 'primary', onClick: () => {
+      kafkaNodes.forEach(node => { node.kafkaEvent.selected = true; });
+      const host = $(hostId);
+      if (host) { host.innerHTML = renderTreeEditorHtml(asset); wireTreeEditorEvents(host, asset); }
+      lumiSay(`Done ??? all ${n} event${n > 1 ? 's' : ''} picked. They'll generate ${n} IS-Kafka channel${n > 1 ? 's' : ''} in the .iflw the moment this converts.`);
+    }
+  }]);
 }
 
 function sendFixRequest(row) {
@@ -4256,7 +4328,7 @@ function confirmSavePackage() {
   lumiChoices([
     { label: 'Send to QA', cls: 'primary', onClick: () => openRetargetModal(pkg.id, 'QA') },
     { label: 'Send to Prod', onClick: () => openRetargetModal(pkg.id, 'Prod') },
-    { label: 'Not now', onClick: () => {} }
+    { label: 'Not now', onClick: () => { } }
   ]);
 }
 
@@ -4559,7 +4631,7 @@ function saveAdminDefaults() {
 // the system gets persisted to the database for later discovery operations.
 async function registerPISystemWithBackend(piPo) {
   if (!piPo.systemName || !piPo.address) return;
-  
+
   // Parse address to extract host and port
   let virtualHost = piPo.address;
   let virtualPort = 443;
@@ -4587,17 +4659,19 @@ async function registerPISystemWithBackend(piPo) {
   };
 
   try {
-    const res = await fetch('/odata/v4/discovery/addPISystem', {
+    const res = await fetch('/api/tenant/savePipoSystem', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Basic ' + btoa('alice:')  // Mocked auth for Docker demo
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ systemConfig: payload })
     });
     const data = await res.json();
-    if (res.ok && data.systemId) {
+    if (res.ok && data.ID) {
       console.log('[PIPO] Registered system with backend:', data);
+      // Store system ID for later discovery operations
+      S.registeredSystemId = data.ID;
       showToast('PI System Registered', 'System "' + piPo.systemName + '" is now available for discovery.', 'success');
     } else {
       console.warn('[PIPO] Backend registration response:', data);
@@ -4607,6 +4681,104 @@ async function registerPISystemWithBackend(piPo) {
     console.warn('[PIPO] Could not register with backend (expected if not in Docker mode):', err.message);
   }
 }
+
+// Triggers PI/PO artifact discovery via backend TenantService.
+// Uses the registered system ID from registerPISystemWithBackend.
+// Returns discovered artifacts or null if backend unavailable.
+async function triggerBackendDiscovery(systemId) {
+  if (!systemId) {
+    console.warn('[Discovery] No system ID available for backend discovery');
+    return null;
+  }
+
+  try {
+    const res = await fetch('/api/tenant/triggerDiscovery', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Basic ' + btoa('alice:')  // Mocked auth for Docker demo
+      },
+      body: JSON.stringify({ systemId })
+    });
+    const data = await res.json();
+    if (res.ok && data.ID) {
+      console.log('[Discovery] Backend discovery triggered:', data);
+      return data;
+    } else {
+      console.warn('[Discovery] Backend discovery response:', data);
+      return null;
+    }
+  } catch (err) {
+    console.warn('[Discovery] Could not trigger backend discovery:', err.message);
+    return null;
+  }
+}
+
+// Polls discovery job progress until complete or timeout.
+// Returns final job status with discovered artifacts count.
+async function pollDiscoveryProgress(jobId, maxWaitMs = 120000) {
+  const startTime = Date.now();
+  const pollInterval = 2000; // 2 seconds
+
+  while (Date.now() - startTime < maxWaitMs) {
+    try {
+      const res = await fetch(`/odata/v4/discovery/getDiscoveryProgress(jobId=${jobId})`, {
+        method: 'GET',
+        headers: { 'Authorization': 'Basic ' + btoa('alice:') }
+      });
+      const data = await res.json();
+
+      if (data.status === 'completed' || data.status === 'failed') {
+        return data;
+      }
+
+      // Update progress UI if available
+      if (data.progressPercent !== undefined) {
+        console.log(`[Discovery] Progress: ${data.progressPercent}% - ${data.phaseName || 'Processing'}`);
+      }
+
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    } catch (err) {
+      console.warn('[Discovery] Error polling progress:', err.message);
+      break;
+    }
+  }
+  return null;
+}
+
+// Fetches discovered artifacts from backend cache after discovery completes.
+// Maps them to the UI's asset format for display.
+async function fetchDiscoveredArtifacts(systemId) {
+  try {
+    const res = await fetch(`/odata/v4/discovery/Artifacts?$filter=system_ID eq ${systemId}&$top=500`, {
+      method: 'GET',
+      headers: { 'Authorization': 'Basic ' + btoa('alice:') }
+    });
+    const data = await res.json();
+    if (data.value && data.value.length) {
+      return mapBackendArtifactsToAssets(data.value);
+    }
+  } catch (err) {
+    console.warn('[Discovery] Could not fetch artifacts:', err.message);
+  }
+  return null;
+}
+
+// Maps backend Artifact entities to UI asset format for display.
+function mapBackendArtifactsToAssets(artifacts) {
+  return artifacts.map((a, i) => ({
+    id: a.ID || `BK-${String(i + 1).padStart(4, '0')}`,
+    name: a.name || a.artifactType || 'Unknown',
+    type: a.artifactType || 'ICO',
+    tier: a.complexityTier || 'Simple',
+    deps: a.dependencyCount || 1,
+    status: a.migrationReadiness || 'Ready',
+    flowCount: a.subObjectCount || 3,
+    tree: [], // Simplified - tree details would need separate fetch
+    backend: true
+  }));
+}
+
 // Same mock reachability check as testS4Connection ??? validates the Integration
 // Directory address is present, doesn't actually call out to nwjava.consultsda.com.
 function testPiPoConnection() {
@@ -4886,7 +5058,7 @@ function handleComposerSend() {
     const first = S.assets[0];
     lumiSay(`Here's the structure for <b>${first.name}</b>:`);
     lumiTree(renderInlineTree(first));
-    lumiChoices([{ label: 'Let me edit branches', onClick: () => showTreeModal(first.id) }, { label: 'Looks good', cls: 'primary', onClick: () => {} }]);
+    lumiChoices([{ label: 'Let me edit branches', onClick: () => showTreeModal(first.id) }, { label: 'Looks good', cls: 'primary', onClick: () => { } }]);
   } else if (t.includes('show') && t.includes('detail')) {
     if ($('screen-btp-assets').classList.contains('active')) showAssetDetails();
     else lumiSay(`Sure ??? which screen's details would you like? Try asking on the ${p.terms.sourceStepNoun} Selection or Migration Cockpit step.`);
@@ -4947,11 +5119,94 @@ function handleComposerSend() {
     lumiSay("Here you go ??? Settings is open.");
     openScreen('admin');
   } else {
+    // Try backend AI chat if Brain is activated
+    if (S.brainActivated && S.brainKey) {
+      callBackendBrainChat(text);
+      return;
+    }
     const prior = recallSimilarQuestion(text);
     const recallPrefix = prior ? `You asked something close to this before ??? I still don't have a dedicated answer for it, but noted. ` : '';
     lumiSay(`${recallPrefix}I can help with connecting a source, scanning ${p.assetNounPlural}, picking ${p.assetNounPlural} into buckets, planning waves and team, approving the plan, opening the cockpit, or opening Settings ??? try "go to Execute", "go to Plan", "go to Approve", "go to Close", ask about iFlow status/links, say "continue" to pick up where we left off, "start the migration over" to archive this one and begin fresh, or use the buttons above at each step.`);
   }
 }
+
+// Calls the backend Brain service chat endpoint with LangGraph integration.
+// Uses the tenant's checkpoint saver for conversation persistence.
+async function callBackendBrainChat(message) {
+  setLumiState('thinking');
+  lumiSay('<i class="fa-solid fa-spinner fa-spin"></i> Thinking...');
+
+  try {
+    const result = await brainCall('chat', {
+      key: S.brainKey,
+      message: message,
+      threadId: S.brainSessionId || `session_${Date.now()}`,
+      tenantId: S.tenantId || 'default'
+    });
+
+    if (result.response) {
+      setLumiState('success');
+      // Remove the thinking message
+      const lumiLog = $('lumi-drawer-log');
+      if (lumiLog && lumiLog.lastChild) lumiLog.removeChild(lumiLog.lastChild);
+      lumiSay(result.response);
+
+      // If LangGraph returned artifact-related suggestions, offer actions
+      if (result.suggestedActions && result.suggestedActions.length) {
+        const choices = result.suggestedActions.map(a => ({
+          label: a.label,
+          onClick: () => handleBrainSuggestedAction(a)
+        }));
+        lumiChoices(choices);
+      }
+    } else {
+      throw new Error('No response from Brain');
+    }
+  } catch (err) {
+    setLumiState('idle');
+    console.warn('[Brain] Chat call failed:', err.message);
+    // Remove the thinking message and fall back to local response
+    const lumiLog = $('lumi-drawer-log');
+    if (lumiLog && lumiLog.lastChild) lumiLog.removeChild(lumiLog.lastChild);
+    const p = PLATFORMS[S.platform] || PLATFORMS.mulesoft;
+    const prior = recallSimilarQuestion(message);
+    const recallPrefix = prior ? `You asked something close to this before ??? I still don't have a dedicated answer for it, but noted. ` : '';
+    lumiSay(`${recallPrefix}I can help with connecting a source, scanning ${p.assetNounPlural}, picking ${p.assetNounPlural} into buckets, planning waves and team, approving the plan, opening the cockpit, or opening Settings ??? try "go to Execute", "go to Plan", "go to Approve", "go to Close", ask about iFlow status/links, say "continue" to pick up where we left off, "start the migration over" to archive this one and begin fresh, or use the buttons above at each step.`);
+  }
+}
+
+// Handles suggested actions from the Brain's LangGraph tools.
+function handleBrainSuggestedAction(action) {
+  switch (action.type) {
+    case 'viewArtifact':
+      if (action.artifactId) {
+        // Try to find the artifact in our local asset list
+        const asset = (S.assets || []).find(a => a.id === action.artifactId);
+        if (asset) showTreeModal(asset.id);
+        else lumiSay(`Artifact ${action.artifactId} not found in the current scan.`);
+      }
+      break;
+    case 'searchArtifacts':
+      if (action.query) {
+        const matches = (S.assets || []).filter(a =>
+          a.name.toLowerCase().includes(action.query.toLowerCase()) ||
+          a.type.toLowerCase().includes(action.query.toLowerCase())
+        );
+        if (matches.length) {
+          lumiSay(`Found ${matches.length} matching artifact${matches.length > 1 ? 's' : ''}: ${matches.slice(0, 5).map(m => `<b>${m.name}</b>`).join(', ')}${matches.length > 5 ? `, and ${matches.length - 5} more` : ''}.`);
+        } else {
+          lumiSay(`No artifacts matching "${action.query}" found.`);
+        }
+      }
+      break;
+    case 'analyzeMigration':
+      openScreen('buckets');
+      break;
+    default:
+      lumiSay(`I'll look into that ??? ${action.label}.`);
+  }
+}
+
 function formatTreeNodeLabel(node) {
   const text = `${node.kind}: ${node.name}`;
   if (node.ok === false) return `<span class="node-error">??? ${text}</span>`;
