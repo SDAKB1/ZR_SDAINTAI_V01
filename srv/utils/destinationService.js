@@ -2,10 +2,16 @@
 /**
  * BTP Destination Service API Client
  *
- * Programmatically creates and manages destinations for PI/PO systems.
- * Uses the Destination Service REST API.
+ * Programmatically creates and manages subscription-level (instance) destinations
+ * for PI/PO systems in a multi-tenant SaaS application.
+ *
+ * Uses the Destination Service REST API with /instanceDestinations endpoint
+ * to ensure proper tenant isolation - each tenant's credentials are isolated
+ * and not visible to other tenants.
  *
  * @see https://api.sap.com/api/SAP_CP_CF_Connectivity_Destination/resource
+ * @note Uses subscription-level destinations (/instanceDestinations) instead of
+ *       subaccount-level (/subaccountDestinations) for multi-tenant isolation.
  */
 const cds = require('@sap/cds');
 const { executeHttpRequest, getDestination } = require('@sap-cloud-sdk/connectivity');
@@ -90,7 +96,8 @@ async function createPISystemDestinations(config) {
 }
 
 /**
- * Create a single destination via the Destination Service API.
+ * Create a single subscription-level (instance) destination via the Destination Service API.
+ * Uses /instanceDestinations endpoint for proper multi-tenant isolation.
  */
 async function createDestination(destinationConfig) {
   try {
@@ -98,7 +105,7 @@ async function createDestination(destinationConfig) {
       { destinationName: 'DESTINATION_SERVICE' },
       {
         method: 'POST',
-        url: `${DESTINATION_SERVICE_PATH}/subaccountDestinations`,
+        url: `${DESTINATION_SERVICE_PATH}/instanceDestinations`,
         data: destinationConfig,
         headers: {
           'Content-Type': 'application/json',
@@ -112,40 +119,60 @@ async function createDestination(destinationConfig) {
       response: response.data,
     };
   } catch (error) {
-    // Check if destination already exists
+    // Check if destination already exists (409 Conflict)
     if (error.response?.status === 409) {
-      LOG.info('Destination already exists, updating', { name: destinationConfig.Name });
+      LOG.info('Instance destination already exists, updating', { name: destinationConfig.Name });
       return await updateDestination(destinationConfig);
+    }
+    // Handle subscription-level specific errors
+    if (error.response?.status === 403) {
+      LOG.error('Insufficient permissions for instance destination', { name: destinationConfig.Name });
+      throw new Error(`Insufficient permissions to create instance destination: ${destinationConfig.Name}. Ensure the service instance has proper authorization.`);
     }
     throw error;
   }
 }
 
 /**
- * Update an existing destination.
+ * Update an existing subscription-level (instance) destination.
+ * Uses /instanceDestinations endpoint for proper multi-tenant isolation.
  */
 async function updateDestination(destinationConfig) {
-  const response = await executeHttpRequest(
-    { destinationName: 'DESTINATION_SERVICE' },
-    {
-      method: 'PUT',
-      url: `${DESTINATION_SERVICE_PATH}/subaccountDestinations/${destinationConfig.Name}`,
-      data: destinationConfig,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    }
-  );
+  try {
+    const response = await executeHttpRequest(
+      { destinationName: 'DESTINATION_SERVICE' },
+      {
+        method: 'PUT',
+        url: `${DESTINATION_SERVICE_PATH}/instanceDestinations/${destinationConfig.Name}`,
+        data: destinationConfig,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
 
-  return {
-    name: destinationConfig.Name,
-    status: 'updated',
-    response: response.data,
-  };
+    return {
+      name: destinationConfig.Name,
+      status: 'updated',
+      response: response.data,
+    };
+  } catch (error) {
+    // Handle subscription-level specific errors
+    if (error.response?.status === 403) {
+      LOG.error('Insufficient permissions to update instance destination', { name: destinationConfig.Name });
+      throw new Error(`Insufficient permissions to update instance destination: ${destinationConfig.Name}. Ensure the service instance has proper authorization.`);
+    }
+    if (error.response?.status === 404) {
+      LOG.error('Instance destination not found for update', { name: destinationConfig.Name });
+      throw new Error(`Instance destination not found: ${destinationConfig.Name}`);
+    }
+    throw error;
+  }
 }
 
 /**
- * Delete a destination.
+ * Delete a subscription-level (instance) destination.
+ * Uses /instanceDestinations endpoint for proper multi-tenant isolation.
  */
 async function deleteDestination(destinationName) {
   try {
@@ -153,16 +180,21 @@ async function deleteDestination(destinationName) {
       { destinationName: 'DESTINATION_SERVICE' },
       {
         method: 'DELETE',
-        url: `${DESTINATION_SERVICE_PATH}/subaccountDestinations/${destinationName}`,
+        url: `${DESTINATION_SERVICE_PATH}/instanceDestinations/${destinationName}`,
       }
     );
 
-    LOG.info('Deleted destination', { name: destinationName });
+    LOG.info('Deleted instance destination', { name: destinationName });
     return { name: destinationName, status: 'deleted' };
   } catch (error) {
     if (error.response?.status === 404) {
-      LOG.info('Destination not found, skipping delete', { name: destinationName });
+      LOG.info('Instance destination not found, skipping delete', { name: destinationName });
       return { name: destinationName, status: 'not_found' };
+    }
+    // Handle subscription-level specific errors
+    if (error.response?.status === 403) {
+      LOG.error('Insufficient permissions to delete instance destination', { name: destinationName });
+      throw new Error(`Insufficient permissions to delete instance destination: ${destinationName}. Ensure the service instance has proper authorization.`);
     }
     throw error;
   }
@@ -198,7 +230,8 @@ async function deletePISystemDestinations(tenantId, systemName) {
 }
 
 /**
- * Get destination details.
+ * Get subscription-level (instance) destination details.
+ * Uses /instanceDestinations endpoint for proper multi-tenant isolation.
  */
 async function getDestinationDetails(destinationName) {
   try {
@@ -206,7 +239,7 @@ async function getDestinationDetails(destinationName) {
       { destinationName: 'DESTINATION_SERVICE' },
       {
         method: 'GET',
-        url: `${DESTINATION_SERVICE_PATH}/subaccountDestinations/${destinationName}`,
+        url: `${DESTINATION_SERVICE_PATH}/instanceDestinations/${destinationName}`,
       }
     );
 
@@ -215,26 +248,41 @@ async function getDestinationDetails(destinationName) {
     if (error.response?.status === 404) {
       return null;
     }
+    // Handle subscription-level specific errors
+    if (error.response?.status === 403) {
+      LOG.error('Insufficient permissions to read instance destination', { name: destinationName });
+      throw new Error(`Insufficient permissions to read instance destination: ${destinationName}. Ensure the service instance has proper authorization.`);
+    }
     throw error;
   }
 }
 
 /**
- * List all destinations for a tenant (filtered by naming pattern).
+ * List all subscription-level (instance) destinations for a tenant (filtered by naming pattern).
+ * Uses /instanceDestinations endpoint for proper multi-tenant isolation.
  */
 async function listPISystemDestinations(tenantId) {
-  const response = await executeHttpRequest(
-    { destinationName: 'DESTINATION_SERVICE' },
-    {
-      method: 'GET',
-      url: `${DESTINATION_SERVICE_PATH}/subaccountDestinations`,
+  try {
+    const response = await executeHttpRequest(
+      { destinationName: 'DESTINATION_SERVICE' },
+      {
+        method: 'GET',
+        url: `${DESTINATION_SERVICE_PATH}/instanceDestinations`,
+      }
+    );
+
+    const allDestinations = response.data || [];
+    const pattern = `_${tenantId}`.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+
+    return allDestinations.filter(dest => dest.Name.startsWith('PO_') && dest.Name.includes(pattern));
+  } catch (error) {
+    // Handle subscription-level specific errors
+    if (error.response?.status === 403) {
+      LOG.error('Insufficient permissions to list instance destinations');
+      throw new Error('Insufficient permissions to list instance destinations. Ensure the service instance has proper authorization.');
     }
-  );
-
-  const allDestinations = response.data || [];
-  const pattern = `_${tenantId}`.toUpperCase().replace(/[^A-Z0-9]/g, '_');
-
-  return allDestinations.filter(dest => dest.Name.startsWith('PO_') && dest.Name.includes(pattern));
+    throw error;
+  }
 }
 
 /**
