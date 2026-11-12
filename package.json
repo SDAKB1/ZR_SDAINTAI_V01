@@ -20,9 +20,7 @@
     "@sap/cds-mtxs": "^3",
     "@sap/xssec": "^4",
     "express": "^4",
-    "kafkajs": "^2",
     "langchain": "^1.5.2",
-    "redis": "^5.0.0",
     "sqlite3": "^5",
     "xml2js": "^0.6"
   },
