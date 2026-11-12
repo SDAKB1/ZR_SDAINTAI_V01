@@ -8,12 +8,27 @@ applications:
     instances: 1
     health-check-type: http
     health-check-http-endpoint: /health
+    routes:
+      - route: sdaintai-pipo-rfc-mcp.cfapps.us10.hana.ondemand.com
+    services:
+      # Existing destination-service instance, already carrying the PO_PJ2_ESR /
+      # PO_PJ2_DIR Cloud Connector destinations used by /api/pi8/ping and
+      # /api/pi8/objects -- shared with AICONX-srv/sdadataai-bw-rfc-mcp, bind by
+      # name (`cf services` to confirm it still exists in your space).
+      - AICONX-destination
+      # Required alongside AICONX-destination for OnPremise (Cloud Connector)
+      # destinations specifically -- the Destination service only stores the
+      # config, the Connectivity service is what actually tunnels through the
+      # Cloud Connector. Without this, /api/pi8/* returns "Failed to load
+      # destination" even though the destination itself exists and is correctly
+      # named -- confirmed empirically (sdadataai-bw-rfc-mcp binds both).
+      - AICONX-connectivity
     env:
       MCP_USER_1: AYMANK
       MCP_PASS_1: AYMANK
       MCP_USER_2: SAIREDDY
       MCP_PASS_2: SAIREDDY
-      # Set these before first push (cf set-env, then cf restage), not committed here:
-      # SAP_NPM_REGISTRY_TOKEN          — private npm feed token for @sap-rfc scope
+      # Set these before first push (cf set-env, then cf restage) if you also want
+      # the generic call_rfc/get_rfc_metadata tools working -- not needed for PI8:
       # SDAINTAI_SAP_ASHOST / _SYSNR / _CLIENT / _USER / _PASSWD
       # SDADATAAI_SAP_ASHOST / ...      — leave unset until SDADATAAI is ready

@@ -1,13 +1,13 @@
-/* ==================== SDAINT-AI MIGRATION COCKPIT ??? LUMI ENGINE ====================
+/* ==================== SDAINT-AI MIGRATION COCKPIT — LUMI ENGINE ====================
    Pre-sales walkthrough build: runs entirely client-side against sandbox data so this
    can be demoed anywhere, but every screen, question, and data shape mirrors exactly
    what the production SDAINTAI Brain integration will do. */
 
 // ==================== STATIC DATA ====================
 
-// PI8 (PJ2) PI/PO MCP bridge ??? migrated here from the SDADATAAI BW cockpit's
+// PI8 (PJ2) PI/PO MCP bridge — migrated here from the SDADATAAI BW cockpit's
 // proof-of-concept (bw-rfc-server) now that it's proven live against the
-// real system. Open/CORS, no auth needed for these two read-only routes ???
+// real system. Open/CORS, no auth needed for these two read-only routes —
 // see mcp/pipo-rfc-server/README.md.
 const PIPO_MCP_API_BASE = 'https://sdaintai-pipo-rfc-mcp.cfapps.us10.hana.ondemand.com';
 
@@ -58,7 +58,7 @@ const PLATFORMS = {
   }
 };
 
-// Fixed target-side vocabulary ??? the migration target is always SAP Integration Suite (CPI),
+// Fixed target-side vocabulary — the migration target is always SAP Integration Suite (CPI),
 // so unlike PLATFORMS.terms this doesn't vary by source platform.
 const CPI_TERMS = {
   idLabel: 'iFlow ID', nameLabel: 'iFlow Name', typeLabel: 'Integration Flow (iFlow)',
@@ -68,7 +68,7 @@ const CPI_TERMS = {
 function leafTree(kind, name, ok) { return { kind, name, ok: ok !== false, children: [] }; }
 
 // A leaf that also carries a Kafka event a reviewer can opt into converting to a native
-// SAP Integration Suite Kafka Sender/Receiver channel ??? separate from the normal
+// SAP Integration Suite Kafka Sender/Receiver channel — separate from the normal
 // include/exclude checkbox, since "convert this object" and "also wire it to IS-Kafka"
 // are two different decisions. `selected` starts false: nothing gets auto-converted to
 // Kafka just because the object itself is included.
@@ -113,7 +113,7 @@ function generateBulkAssets(platform, count, startIndex, existingNames) {
     let n = 2;
     while (usedNames.has(name)) { name = `${domain}-${action}-${n++}`; }
     usedNames.add(name);
-    // 55% Simple, 35% Medium, 10% High ??? "lots of simple stuff, some real complexity from custom code"
+    // 55% Simple, 35% Medium, 10% High — "lots of simple stuff, some real complexity from custom code"
     const roll = rand();
     const tier = roll < 0.55 ? 'Simple' : roll < 0.90 ? 'Medium' : 'High';
     const deps = tier === 'Simple' ? 1 + Math.floor(rand() * 2) : tier === 'Medium' ? 2 + Math.floor(rand() * 3) : 5 + Math.floor(rand() * 8);
@@ -201,7 +201,7 @@ const ASSET_SETS = {
         leafTree('schema', 'edi-envelope.xsd', false)
       ]
     },
-    // Business Partner: one domain, three separate Kafka-carried events (created/updated/sync) ???
+    // Business Partner: one domain, three separate Kafka-carried events (created/updated/sync) —
     // the exact scenario walked through in the MuleSoft-SDA-Exit deck's Kafka slides. Flagged
     // Review by default so it lands in front of a reviewer, same as the deck's narrative.
     {
@@ -262,7 +262,7 @@ const ASSET_SETS = {
     { id: 'P006', name: 'fi-posting-process', type: 'Process', tier: 'High', deps: 5, status: 'Review', tree: [leafTree('process', 'PRC_FIPosting', true), leafTree('map', 'MAP_FI_to_BAPI', false)] }
   ]
 };
-// Scale each hand-authored set up to a realistic large-migration size ??? SDAINTAI's whole
+// Scale each hand-authored set up to a realistic large-migration size — SDAINTAI's whole
 // pitch is the accelerator handling hundreds of iflows, not a 6-item toy demo. The
 // hand-crafted items above stay first (they carry the Kafka/Warning/Review narrative
 // beats referenced elsewhere) with generated bulk assets appended after them.
@@ -288,7 +288,7 @@ function activeTeam() { return (S.team && S.team.length) ? S.team : TEAM; }
 
 // ==================== FILE UPLOAD + DECOMPILATION ====================
 // Magic-byte sniffing (the same technique real file-type detectors use) rather than
-// trusting the extension alone ??? a renamed .jar or a stripped-extension .class still
+// trusting the extension alone — a renamed .jar or a stripped-extension .class still
 // gets caught correctly.
 const COMPILED_SIGNATURES = [
   { name: 'Java compiled class (.class)', magic: [0xCA, 0xFE, 0xBA, 0xBE] },
@@ -300,11 +300,11 @@ const SOURCE_EXTENSIONS = ['.xml', '.dwl', '.xsd', '.wsdl', '.yaml', '.yml', '.p
 function decompileStages() {
   const wording = (PLATFORMS[S.platform] || PLATFORMS.mulesoft).terms.decompileWording;
   return [
-    'Parsing bytecode structure???',
-    'Reconstructing control flow graph???',
-    'Recovering DataWeave transform equivalents???',
-    `Mapping recovered logic to ${wording}???`,
-    'Cross-referencing the SDAINTAI Brain pattern library???'
+    'Parsing bytecode structure…',
+    'Reconstructing control flow graph…',
+    'Recovering DataWeave transform equivalents…',
+    `Mapping recovered logic to ${wording}…`,
+    'Cross-referencing the SDAINTAI Brain pattern library…'
   ];
 }
 let decompiledCounter = 0;
@@ -319,14 +319,14 @@ async function classifyUploadedFile(file) {
     for (const sig of COMPILED_SIGNATURES) {
       if (sig.magic.every((b, i) => bytes[i] === b)) return { compiled: true, kind: sig.name };
     }
-  } catch (e) { /* empty/tiny file ??? fall through to extension check */ }
+  } catch (e) { /* empty/tiny file — fall through to extension check */ }
   if (SOURCE_EXTENSIONS.includes(ext)) return { compiled: false, kind: `${platformLabel} source artifact` };
   if (ext === '.js') {
     const text = await file.slice(0, 2000).text();
     const looksMinified = text.length > 400 && text.indexOf('\n') === -1;
     return { compiled: looksMinified, kind: looksMinified ? 'Minified/bundled JavaScript' : 'JavaScript source' };
   }
-  return { compiled: false, kind: 'Unrecognized format ??? treating as source' };
+  return { compiled: false, kind: 'Unrecognized format — treating as source' };
 }
 
 // ==================== STATE ====================
@@ -346,25 +346,25 @@ const S = {
   cockpitRows: [],
   cockpitInterval: null,
   cockpitStarted: false,
-  // Persona lens ??? Admin / Approver / Viewer, per UStory_w_Persona_Migration_v1.pptx.
+  // Persona lens — Admin / Approver / Viewer, per UStory_w_Persona_Migration_v1.pptx.
   // Gates exactly one thing: Push to BTP Integration Suite / Take to Production
   // (sendIflowToLandscape target=Prod). Every other screen is unchanged for
-  // Admin and Approver; Viewer is read-only everywhere. Not a real login ???
+  // Admin and Approver; Viewer is read-only everywhere. Not a real login —
   // a lens switch for pre-sales walkthroughs, persisted so it survives reload.
   persona: 'Admin',
   pushApproved: false,
   pushApprovedBy: null,
   pushApprovedAt: null,
-  // Real backend AI Brain (LangGraph/Claude) ??? off until the Admin activation
+  // Real backend AI Brain (LangGraph/Claude) — off until the Admin activation
   // password is entered. brainKey lives in memory only, never persisted.
   brainActivated: false,
   brainKey: null,
   brainSessionId: null,
-  // Admin/Settings defaults ??? pre-seeded with the real lab tenant so "Open in
+  // Admin/Settings defaults — pre-seeded with the real lab tenant so "Open in
   // SAP Integration Suite" works out of the box, before anyone's even opened
   // the Admin screen. saveAdminDefaults() overwrites this from the form.
   adminDefaults: {
-    // Mirrors the Admin screen's own HTML defaults, not just what's typed there ???
+    // Mirrors the Admin screen's own HTML defaults, not just what's typed there —
     // otherwise the "target settings already configured" fast path in
     // selectPlatform() would stay dark until someone explicitly hit Save Defaults
     // once, even though the same values are already sitting in the form.
@@ -373,42 +373,44 @@ const S = {
     username: 'daniel.smith@sdaintai-sandbox.io',
     password: 'Demo#Sandbox2026!',
     tenant: 'sda-prod-eu10',
-    region: 'EU10 ??? Frankfurt',
+    region: 'EU10 — Frankfurt',
     btpTenantUrl: 'https://lab-sda.integrationsuite.cfapps.us10-002.hana.ondemand.com/shell/design/contentpackage/INTPACKFROMMUKESOFT1?section=ARTIFACTS',
     btpTenantManual: false,
     // Each client migration runs under one SDA AI subaccount. Shared by default
     // (sandbox); checking sda-prv-tenant marks the picked subaccount as dedicated
-    // to this client only ??? a real tenant boundary (own XSUAA instance), not a
+    // to this client only — a real tenant boundary (own XSUAA instance), not a
     // row-level filter inside a shared one. See updatePrvTenantStatus().
     sdaSubaccount: 'sda-ai-shared-eu10',
     prvTenant: false,
-    // The two A2A agents behind the acceleration story ??? on by default. See
+    // The two A2A agents behind the acceleration story — on by default. See
     // effortMinutesForTier() / activeAgentCount() for how unchecking either
     // slows every duration the cockpit shows.
     agentMappingEnabled: true,
     agentConversionEnabled: true,
-    // No real ALM tenant or Figaf ALM target has been supplied yet ??? both start in
+    // No real ALM tenant or Figaf ALM target has been supplied yet — both start in
     // "manual" mode (field disabled, no fabricated value) until someone has one.
-    // Two separate systems, two separate fields/flags ??? ALM tenant (e.g. SAP Cloud
+    // Two separate systems, two separate fields/flags — ALM tenant (e.g. SAP Cloud
     // ALM / Solution Manager) is not the same target as Figaf.
     almTenantUrl: '',
     almTenantManual: true,
     figafAlmTarget: '',
     figafManual: true,
-    // SAP PI/PO (Process Orchestration) source system ??? PJ2, the same real
+    // SAP PI/PO (Process Orchestration) source system — PJ2, the same real
     // system proven live via PI8 (see the Live MCP Connectivity Test panel
     // below). System Name/User ID were originally mislabeled PJ1/PI_TECH_MIG
     // from an earlier screenshot capture; corrected to match what's actually
     // configured in the live PO_PJ2_ESR/PO_PJ2_DIR destination (verified via
     // the Destination Configuration API: User SDAINT, same host/location).
-    // Password still starts blank ??? the destination's own stored password
-    // isn't surfaced here, enter it once and Save Defaults persists it.
+    // BRANCHDEVELOPER0 worked-example fix: password pre-filled (matches the
+    // destination's own stored value, confirmed via the Destination
+    // Configuration API) -- main still has this blank until this branch
+    // merges, by design, so the two can be compared side by side.
     piPo: {
       systemName: 'PJ2',
       systemVersion: '7.50',
       address: 'http://nwjava.consultsda.com:443',
       userId: 'SDAINT',
-      password: '',
+      password: 'Password@1',
       authType: 'BasicAuthentication',
       proxyType: 'OnPremise',
       locationId: 'SDA_LAB'
@@ -435,7 +437,7 @@ const qsa = (sel, root) => Array.from((root || document).querySelectorAll(sel));
 //   Push to BTP Integration Suite / Take to Production:               Admin=Full, Approver=approve-only, Viewer=blocked
 //   Pending Approvals panel:                                          Admin=Full, Approver=Full, Viewer=not visible
 //   Admin/Settings screen:                                            Admin=Full, Approver/Viewer=not visible
-// This is a lens switch for pre-sales walkthroughs, not a real login ??? it
+// This is a lens switch for pre-sales walkthroughs, not a real login — it
 // never advances a workflow on its own.
 const PERSONA_KEY = 'sdaintai_persona';
 function isViewer() { return S.persona === 'Viewer'; }
@@ -443,12 +445,12 @@ function isApprover() { return S.persona === 'Approver'; }
 function isAdmin() { return S.persona === 'Admin'; }
 function canSeeAdminScreen() { return isAdmin(); }
 function canSeePendingApprovals() { return isAdmin() || isApprover(); }
-// Everyone but Viewer keeps full Setup/Select/Plan/Execute/Readiness/Errors rights ???
+// Everyone but Viewer keeps full Setup/Select/Plan/Execute/Readiness/Errors rights —
 // the only thing that ever differs between Admin and Approver is the Push/Take-to-
 // Production click itself (gated separately, see canTriggerProdAction()).
 function canAct() { return !isViewer(); }
 // Admin can click Push/Take-to-Production once this wave's gate is approved.
-// Approver can never click it themselves, even after approving ??? sign-off only.
+// Approver can never click it themselves, even after approving — sign-off only.
 function canTriggerProdAction() { return isAdmin() && S.pushApproved; }
 
 function loadPersona() {
@@ -463,7 +465,7 @@ function setPersona(persona) {
   try { localStorage.setItem(PERSONA_KEY, persona); } catch (e) { /* non-persistent this session */ }
   applyPersonaGating();
 }
-// Re-applies every persona-gated bit of UI ??? called on load and whenever the
+// Re-applies every persona-gated bit of UI — called on load and whenever the
 // lens switches. Safe to call before the cockpit screen exists (every lookup
 // is null-guarded) so it can run from the top-level init path too.
 function applyPersonaGating() {
@@ -480,11 +482,11 @@ function applyPersonaGating() {
 }
 
 // ==================== BRAIN MEMORY (persisted, client-side) ====================
-// This is a static frontend with no backend LLM call ??? there's no real LangChain/
+// This is a static frontend with no backend LLM call — there's no real LangChain/
 // LangGraph process running in the browser. What this *does* do honestly: persist
 // migration history and the chat transcript in localStorage so they survive a page
 // reload, standing in for the long-term memory store the production Brain (see
-// mta.yaml ??? "Brain AI (LangChain/LangGraph)") keeps server-side. S.migrationHistory
+// mta.yaml — "Brain AI (LangChain/LangGraph)") keeps server-side. S.migrationHistory
 // already fed the "based on patterns from your last migration" line each session;
 // this just makes it outlive the tab, and lets Lumi notice a repeated question.
 const BRAIN_MEMORY_KEY = 'sdaintai_brain_memory_v1';
@@ -513,10 +515,10 @@ function saveBrainMemory() {
       chatLog: (S.brainChatLog || []).slice(-60),
       adminDefaults: S.adminDefaults
     }));
-  } catch (e) { /* localStorage unavailable (private mode, quota) ??? memory just won't persist this session */ }
+  } catch (e) { /* localStorage unavailable (private mode, quota) — memory just won't persist this session */ }
 }
 // Pushes S.adminDefaults (freshly loaded from Brain memory, or still the hardcoded
-// defaults) into the Admin screen's form fields ??? the reverse of saveAdminDefaults().
+// defaults) into the Admin screen's form fields — the reverse of saveAdminDefaults().
 // Needed because loadBrainMemory() can override S.adminDefaults after the HTML's
 // own hardcoded values already rendered.
 function populateAdminFormFromDefaults() {
@@ -570,7 +572,7 @@ function populateAdminFormFromDefaults() {
 // real persisted migration count rather than a random number each load.
 function brainSpeedupPct() { return Math.min(45, (S.migrationHistory || []).length * 8); }
 // Records what the user actually typed, and flags if they've asked something
-// close to it before ??? the "remembers what users say" ask. Simple normalized
+// close to it before — the "remembers what users say" ask. Simple normalized
 // substring match, not embeddings/NLU, but it's real persisted state driving
 // real behavior, not a canned line.
 function recallSimilarQuestion(text) {
@@ -588,23 +590,23 @@ function logBrainChat(text) {
   saveBrainMemory();
 }
 
-// ==================== REAL AI BRAIN (backend LangGraph/Claude ??? Admin-activated) ====================
+// ==================== REAL AI BRAIN (backend LangGraph/Claude — Admin-activated) ====================
 // Everything above (BRAIN MEMORY) is a localStorage simulation with no backend call.
-// This section is different: it calls the actual srv/brain-service.js OData service ???
+// This section is different: it calls the actual srv/brain-service.js OData service —
 // a real @langchain/langgraph StateGraph backed by Claude, with a local cosine-similarity
-// vector store ??? but only once someone enters the activation password in Admin/Settings.
+// vector store — but only once someone enters the activation password in Admin/Settings.
 // The key is kept in memory only (S.brainKey) and is never written to localStorage/
 // Brain memory, so it doesn't linger in the browser after the tab closes. Every call
 // here is fire-and-forget from the caller's perspective (logBrainEvent swallows its own
 // errors) so a network hiccup never blocks the cockpit's own (already-working)
-// client-side flow ??? the real Brain is additive logging, not a dependency.
+// client-side flow — the real Brain is additive logging, not a dependency.
 let _brainCsrfToken = null;
 async function fetchBrainCsrfToken() {
   try {
     const res = await fetch('/odata/v4/brain/$metadata', { method: 'GET', headers: { 'x-csrf-token': 'fetch' }, credentials: 'same-origin' });
     const token = res.headers.get('x-csrf-token');
     if (token) _brainCsrfToken = token;
-  } catch (e) { /* direct-to-srv hosting (no approuter in front) has no CSRF layer ??? fine to no-op */ }
+  } catch (e) { /* direct-to-srv hosting (no approuter in front) has no CSRF layer — fine to no-op */ }
 }
 async function brainCall(action, params) {
   if (!_brainCsrfToken) await fetchBrainCsrfToken();
@@ -615,19 +617,32 @@ async function brainCall(action, params) {
   if (!res.ok) throw new Error((data && data.error && data.error.message) || `HTTP ${res.status}`);
   return data;
 }
+// Same shape as brainCall, reused as-is for SignupService -- CAP's CSRF
+// token is global per session, not per-service, so the one fetched for
+// Brain works here too without a separate fetch.
+async function signupCall(action, params) {
+  if (!_brainCsrfToken) await fetchBrainCsrfToken();
+  const headers = { 'Content-Type': 'application/json' };
+  if (_brainCsrfToken) headers['x-csrf-token'] = _brainCsrfToken;
+  const res = await fetch(`/odata/v4/signup/${action}`, { method: 'POST', headers, credentials: 'same-origin', body: JSON.stringify(params) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data && data.error && data.error.message) || `HTTP ${res.status}`);
+  return data;
+}
+
 async function activateBrainEngine() {
   const keyInput = $('admin-brain-key');
   const key = keyInput ? keyInput.value.trim() : '';
   const statusEl = $('admin-brain-status');
   if (!key) { showToast('Enter a password', 'Type the activation password before activating.', 'danger'); return; }
-  if (statusEl) { statusEl.className = 'conn-status'; statusEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Activating???'; statusEl.style.display = 'flex'; }
+  if (statusEl) { statusEl.className = 'conn-status'; statusEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Activating…'; statusEl.style.display = 'flex'; }
   try {
     const result = await brainCall('toggleBrain', { key, enabled: true });
     if (!result.success) throw new Error(result.message || 'Activation failed');
     S.brainActivated = true;
     S.brainKey = key;
-    if (statusEl) { statusEl.className = 'conn-status ok'; statusEl.innerHTML = '<span class="dot"></span> AI Engine active ??? logging every migration for pattern learning'; }
-    showToast('AI Engine Activated', 'LangGraph/Claude brain is now live ??? assets, commands, and settings are being captured for learning.', 'purple');
+    if (statusEl) { statusEl.className = 'conn-status ok'; statusEl.innerHTML = '<span class="dot"></span> AI Engine active — logging every migration for pattern learning'; }
+    showToast('AI Engine Activated', 'LangGraph/Claude brain is now live — assets, commands, and settings are being captured for learning.', 'purple');
     refreshBrainStatus();
   } catch (err) {
     S.brainActivated = false; S.brainKey = null;
@@ -641,18 +656,18 @@ async function deactivateBrainEngine() {
   S.brainActivated = false; S.brainKey = null;
   const statusEl = $('admin-brain-status');
   if (statusEl) { statusEl.className = 'conn-status'; statusEl.innerHTML = '<span class="dot"></span> AI Engine inactive'; }
-  showToast('AI Engine Deactivated', 'Logging stopped ??? the cockpit keeps working exactly as before.', 'cyan');
+  showToast('AI Engine Deactivated', 'Logging stopped — the cockpit keeps working exactly as before.', 'cyan');
 }
 async function refreshBrainStatus() {
   if (!S.brainActivated || !S.brainKey) return;
   try {
     const s = await brainCall('getBrainStatus', { key: S.brainKey });
     const statusEl = $('admin-brain-status');
-    if (statusEl) statusEl.innerHTML = `<span class="dot"></span> AI Engine active ??? ${s.eventsCount} event${s.eventsCount === 1 ? '' : 's'} logged, ${s.vectorCount} in the vector store${s.eventsCount === 0 && s.vectorCount > 0 ? ' (DB row unavailable, vector store carrying it)' : ''}`;
+    if (statusEl) statusEl.innerHTML = `<span class="dot"></span> AI Engine active — ${s.eventsCount} event${s.eventsCount === 1 ? '' : 's'} logged, ${s.vectorCount} in the vector store${s.eventsCount === 0 && s.vectorCount > 0 ? ' (DB row unavailable, vector store carrying it)' : ''}`;
   } catch (e) { /* leave last-known status on screen */ }
 }
 // Every asset/command/setting/result capture funnels through here. Redacts
-// anything that looks like a credential before it ever leaves the browser ???
+// anything that looks like a credential before it ever leaves the browser —
 // the Brain should learn migration patterns, not store plaintext passwords.
 function redactSecrets(obj) {
   const SECRET_KEYS = /password|secret|clientsecret/i;
@@ -668,7 +683,7 @@ function redactSecrets(obj) {
   return walk(obj);
 }
 function logBrainEvent(eventType, source, payload, summary) {
-  if (!S.brainActivated || !S.brainKey) return; // no-op until activated ??? zero behavior change otherwise
+  if (!S.brainActivated || !S.brainKey) return; // no-op until activated — zero behavior change otherwise
   brainCall('captureEvent', {
     key: S.brainKey,
     eventType,
@@ -705,7 +720,7 @@ function setLumiState(mode) {
 // ==================== CHAT ENGINE ====================
 function lumiSay(text, opts) {
   opts = opts || {};
-  // Whatever screen was pending an acknowledgment is moot now ??? Lumi is saying
+  // Whatever screen was pending an acknowledgment is moot now — Lumi is saying
   // something fresh, which already is the continuation of the conversation.
   S.pendingScreenAck = false;
   const body = $('lumi-drawer-body');
@@ -733,7 +748,7 @@ function lumiChoices(items) {
   // Remembers the "main next step" every time Lumi offers one, so a free-form
   // side request (settings change, a question) can be followed by "shall we
   // continue where we left off?" and actually resume the guided flow instead
-  // of leaving the user to re-find their place ??? see lumiSayWithResume().
+  // of leaving the user to re-find their place — see lumiSayWithResume().
   const primary = items.find(it => it.cls === 'primary');
   if (primary && primary.onClick) S.resumeAction = { label: primary.label, fn: primary.onClick };
   const body = $('lumi-drawer-body');
@@ -766,7 +781,7 @@ function updateDockLabel(alertText) {
   $('lumi-dock-label-text').textContent = alertText ? 'I think you should review this' : 'Ask Lumi';
 }
 
-// Chat is docked as just another .btp-screen ??? "opening" it means making it
+// Chat is docked as just another .btp-screen — "opening" it means making it
 // the active screen (same mechanism openScreen() uses for every takeover view),
 // which also dismisses the paused-at-X banner since the conversation is live again.
 function openDrawer() {
@@ -775,43 +790,43 @@ function openDrawer() {
   hidePausedBanner();
 }
 
-// Builds Lumi's "Got it ??? I picked up your changes" line from whatever's live on
-// the screen right now (not a before/after diff ??? same spirit as the reference
+// Builds Lumi's "Got it — I picked up your changes" line from whatever's live on
+// the screen right now (not a before/after diff — same spirit as the reference
 // video, which recaps current state rather than itemizing what changed).
 function screenReturnMessage(id) {
   const p = PLATFORMS[S.platform] || PLATFORMS.mulesoft;
   switch (id) {
     case 'connection': {
-      const tenant = $('target-tenant') ? $('target-tenant').value : '???';
-      return `Got it ??? I picked up your connection settings. Target tenant is set to <b>${tenant}</b>${S.connectionOk ? ', and the connection is already tested.' : ' ??? test it whenever ready.'}`;
+      const tenant = $('target-tenant') ? $('target-tenant').value : '—';
+      return `Got it — I picked up your connection settings. Target tenant is set to <b>${tenant}</b>${S.connectionOk ? ', and the connection is already tested.' : ' — test it whenever ready.'}`;
     }
     case 'assets':
-      return `Got it ??? I picked up your ${p.terms.sourceStepNoun} selection: <b>${S.assets.length}</b> ${S.assets.length === 1 ? p.assetNoun : p.assetNounPlural} in scope.`;
+      return `Got it — I picked up your ${p.terms.sourceStepNoun} selection: <b>${S.assets.length}</b> ${S.assets.length === 1 ? p.assetNoun : p.assetNounPlural} in scope.`;
     case 'buckets': {
       const checked = qsa('.bucket-cb:checked').length;
-      return `Got it ??? I picked up your selection from Migration Buckets: <b>${checked}</b> of ${S.assets.length} ${p.assetNounPlural} included.`;
+      return `Got it — I picked up your selection from Migration Buckets: <b>${checked}</b> of ${S.assets.length} ${p.assetNounPlural} included.`;
     }
     case 'wave': {
       const activeWaves = getActiveWaveNumbers();
       const summary = activeWaves.map(w => `Wave ${w}: ${S.waves[w].length}`).join(', ') || '(nothing assigned yet)';
-      return `Got it ??? I picked up your wave grouping and team assignment from that screen and saved them. ${summary}.`;
+      return `Got it — I picked up your wave grouping and team assignment from that screen and saved them. ${summary}.`;
     }
     case 'approve':
-      return `Got it ??? the plan panel's up to date with whatever's on screen now.`;
+      return `Got it — the plan panel's up to date with whatever's on screen now.`;
     case 'cockpit': {
       const done = S.cockpitRows.filter(r => r.status === 'Done').length;
       const errors = S.cockpitRows.filter(r => r.status === 'Error' || r.status === 'Pending Fix').length;
-      return `Got it ??? I've got the latest from the Migration Cockpit: <b>${done}</b> of ${S.cockpitRows.length} converted${errors ? `, ${errors} still need${errors === 1 ? 's' : ''} review` : ''}.`;
+      return `Got it — I've got the latest from the Migration Cockpit: <b>${done}</b> of ${S.cockpitRows.length} converted${errors ? `, ${errors} still need${errors === 1 ? 's' : ''} review` : ''}.`;
     }
     case 'admin':
-      return `Got it ??? I picked up your Admin defaults and team roster. They'll apply the next time you start a migration.`;
+      return `Got it — I picked up your Admin defaults and team roster. They'll apply the next time you start a migration.`;
     default:
       return null;
   }
 }
 // The one path (banner "Continue chat with Lumi", the floating mascot, the sidebar
 // Lumi launcher) that represents the user explicitly stepping away from a screen
-// back into the conversation ??? as opposed to lumiSay()'s internal openDrawer()
+// back into the conversation — as opposed to lumiSay()'s internal openDrawer()
 // calls, which are just Lumi's own forward-flow messages and already speak for
 // themselves.
 function returnToChat() {
@@ -821,11 +836,11 @@ function returnToChat() {
     if (msg) {
       lumiSay(msg);
       // Re-offer whatever primary action was live before the user navigated away
-      // (e.g. the wave-planning "Continue") as a fresh clickable chip ??? otherwise
+      // (e.g. the wave-planning "Continue") as a fresh clickable chip — otherwise
       // returning to chat shows a status recap with nothing actionable, and the
       // user has no visible next step short of scrolling back or typing "continue".
       if (S.resumeAction && S.resumeAction.fn) {
-        lumiChoices([{ label: `Continue ??? ${S.resumeAction.label}`, cls: 'primary', onClick: S.resumeAction.fn }]);
+        lumiChoices([{ label: `Continue — ${S.resumeAction.label}`, cls: 'primary', onClick: S.resumeAction.fn }]);
       }
       return;
     }
@@ -852,7 +867,7 @@ function cycleDrawerPosition() {
   const next = DRAWER_POSITIONS[(DRAWER_POSITIONS.indexOf(cur) + 1) % DRAWER_POSITIONS.length];
   d.classList.remove('pos-' + cur);
   d.classList.add('pos-' + next);
-  d.style.width = ''; d.style.height = ''; // manual resize doesn't carry over to a different dock ??? start from that position's default
+  d.style.width = ''; d.style.height = ''; // manual resize doesn't carry over to a different dock — start from that position's default
   $('lumi-drawer-position').title = `Panel position: ${next} (click to change)`;
 }
 function setupDrawerResize() {
@@ -896,7 +911,7 @@ function unflagNav(id) { const el = $(id); if (el) el.classList.remove('flagged'
 
 function flagReview(navId, screenId, reasonHtml) {
   flagNav(navId);
-  lumiSay(`?????? I think you should review this ??? ${reasonHtml}`, { alert: true });
+  lumiSay(`⚠️ I think you should review this — ${reasonHtml}`, { alert: true });
   lumiChoices([{ label: 'Review', cls: 'review', onClick: () => openScreen(screenId) }, { label: 'Not now', cls: 'ghost', onClick: () => { } }]);
 }
 
@@ -935,8 +950,8 @@ function openScreen(id) {
   if (id === 'landing' || id === 'admin') hidePausedBanner(); else showPausedBanner(id);
   if (id === 'admin') { renderAdminTeamList(); renderAdminAgentList(); refreshBrainStatus(); }
   // Remember which screen we just opened so that whenever the user next explicitly
-  // returns to Lumi (returnToChat()), Lumi can acknowledge whatever's live on it ???
-  // "Got it ??? I picked up your wave grouping from that screen and saved them."
+  // returns to Lumi (returnToChat()), Lumi can acknowledge whatever's live on it —
+  // "Got it — I picked up your wave grouping from that screen and saved them."
   // Cleared automatically the moment any other lumiSay() fires first (normal
   // forward-flow screens already say their own next-step message).
   S.lastScreenId = id;
@@ -954,14 +969,14 @@ function updateStepper(phase) {
 
 // ==================== LANDING / PLATFORM ====================
 const TARGET_TENANTS = [
-  { tenant: 'sda-prod-eu10', region: 'EU10 ??? Frankfurt' },
-  { tenant: 'sda-dev-us10', region: 'US10 ??? US East' }
+  { tenant: 'sda-prod-eu10', region: 'EU10 — Frankfurt' },
+  { tenant: 'sda-dev-us10', region: 'US10 — US East' }
 ];
 
 function startNewMigration() {
   if (!S.userName) {
     openDrawer(false);
-    lumiSay("Before we start ??? what's your name?");
+    lumiSay("Before we start — what's your name?");
     S.pendingAnswerHandler = (text) => {
       setUserName(text.trim() || 'Integration Lead');
       lumiSay(`Nice to meet you, ${S.userName}! Let's connect. Which platform are we migrating from?`);
@@ -976,7 +991,7 @@ function startNewMigration() {
   if ((S.migrationHistory || []).length) {
     const last = S.migrationHistory[S.migrationHistory.length - 1];
     const n = S.migrationHistory.length;
-    lumiSay(`Let's connect. Based on patterns from <b>${last.name}</b> (${last.assetCount} ${PLATFORMS[last.platform].assetNounPlural}, ${last.waveCount} waves) and ${n - 1} migration${n - 1 === 1 ? '' : 's'} before it, the Brain remembers this ??? sequencing should run about <b>${brainSpeedupPct()}% faster</b> than your first run. Which platform are we migrating from?`);
+    lumiSay(`Let's connect. Based on patterns from <b>${last.name}</b> (${last.assetCount} ${PLATFORMS[last.platform].assetNounPlural}, ${last.waveCount} waves) and ${n - 1} migration${n - 1 === 1 ? '' : 's'} before it, the Brain remembers this — sequencing should run about <b>${brainSpeedupPct()}% faster</b> than your first run. Which platform are we migrating from?`);
   } else {
     lumiSay("Let's connect. Which platform are we migrating from?");
   }
@@ -985,12 +1000,12 @@ function startNewMigration() {
 
 function selectPlatform(key) {
   S.platform = key;
-  S.archived = false; // fresh migration ??? hasn't been archived yet, see archiveProject()
+  S.archived = false; // fresh migration — hasn't been archived yet, see archiveProject()
   const p = PLATFORMS[key];
   S.projectName = p.projectName;
   $('project-selector-text').textContent = p.projectName;
   if ($('project-badge-text')) $('project-badge-text').textContent = p.projectName;
-  document.title = `SDAINT-AI ??? ${p.projectName}`;
+  document.title = `SDAINT-AI — ${p.projectName}`;
 
   qsa('.platform-card').forEach(c => c.classList.toggle('selected', c.dataset.platform === key));
   const versionSel = $('connection-version');
@@ -1005,18 +1020,18 @@ function selectPlatform(key) {
 
   // Orchestrator behavior: if Admin/Settings already has a real (non-Manual) target
   // configured, validate it and auto-fill version/env/auth/target from those defaults
-  // instead of asking four sequential questions ??? go straight to scanning. Only fall
+  // instead of asking four sequential questions — go straight to scanning. Only fall
   // back to the old step-by-step Q&A when there's genuinely nothing configured yet.
   const defaultsReady = S.adminDefaults && !S.adminDefaults.btpTenantManual && (S.adminDefaults.tenant || '').trim();
   if (defaultsReady) {
     validateTargetThenAutoScan(p);
   } else {
-    lumiSay(`Before we scan, I don't have a BTP Integration Suite target configured yet ??? it's marked Manual in Settings. Set it now, or I'll continue with the sandbox defaults for this walkthrough?`);
+    lumiSay(`Before we scan, I don't have a BTP Integration Suite target configured yet — it's marked Manual in Settings. Set it now, or I'll continue with the sandbox defaults for this walkthrough?`);
     lumiChoices([
       { label: 'Open Settings', onClick: () => openScreen('admin') },
       {
         label: 'Use sandbox defaults', cls: 'primary', onClick: () => {
-          lumiSay(`No problem ??? sandbox it is. Which runtime or version ??? this is your ${p.hint}?`);
+          lumiSay(`No problem — sandbox it is. Which runtime or version — this is your ${p.hint}?`);
           lumiChoices(p.versions.map(v => ({ label: v, onClick: () => setVersionAnswer(v) })));
         }
       }
@@ -1026,14 +1041,14 @@ function selectPlatform(key) {
 
 // The "smart orchestrator" fast path: Admin's target settings are already trustworthy,
 // so validate once, silently carry them into the Set Connection fields, and go straight
-// to scanning ??? collapsing what used to be four separate chat questions (version, env,
+// to scanning — collapsing what used to be four separate chat questions (version, env,
 // auth, target) into one confirmation message.
 function validateTargetThenAutoScan(p) {
   setLumiState('thinking');
   const sourceNote = S.platform === 'pipo'
-    ? ` Source side is PI8 (PJ2) ??? I'll pull the real ESR catalog live through the Cloud Connector, not demo data.`
+    ? ` Source side is PI8 (PJ2) — I'll pull the real ESR catalog live through the Cloud Connector, not demo data.`
     : '';
-  lumiSay(`Great ??? <b>${p.label}</b> it is. Your target settings are already configured in Admin ??? validating the BTP Integration Suite tenant <b>${S.adminDefaults.tenant}</b> before we scan???${sourceNote}`);
+  lumiSay(`Great — <b>${p.label}</b> it is. Your target settings are already configured in Admin — validating the BTP Integration Suite tenant <b>${S.adminDefaults.tenant}</b> before we scan…${sourceNote}`);
   setTimeout(() => {
     const versionSel = $('connection-version');
     if (versionSel.options.length) versionSel.selectedIndex = 0;
@@ -1055,7 +1070,7 @@ function validateTargetThenAutoScan(p) {
     markDone('nav-connection');
     unlockNav('nav-assets');
     setLumiState('success');
-    lumiSay(`??? Target validated ??? version, environment, and auth are set from your defaults. Kicking off the ${p.label} scan now.`);
+    lumiSay(`✅ Target validated — version, environment, and auth are set from your defaults. Kicking off the ${p.label} scan now.`);
     startAssetScan();
   }, 900);
 }
@@ -1087,38 +1102,38 @@ function applyPlatformTerminology(key) {
   setText('th-bucket-type', t.typeLabel);
   setText('th-cockpit-asset', t.nameLabel);
   setText('th-readiness-name', t.nameLabel);
-  setText('wave-section-label', `${p.assetNounPlural.charAt(0).toUpperCase() + p.assetNounPlural.slice(1)} ??? Waves`);
+  setText('wave-section-label', `${p.assetNounPlural.charAt(0).toUpperCase() + p.assetNounPlural.slice(1)} → Waves`);
   setText('approve-total-assets-label', `Total ${p.assetNounPlural.charAt(0).toUpperCase() + p.assetNounPlural.slice(1)}`);
 
   setText('upload-dropzone-title', `Drop a ${t.uploadLabel}, or browse`);
   const dropDesc = $('upload-dropzone-desc');
   if (dropDesc) {
     dropDesc.textContent = key === 'mulesoft'
-      ? 'Flow XML, DataWeave (.dwl), schema (.xsd/.wsdl), config (.yaml/.properties) ??? or a compiled artifact (.class, .jar, .dll, .so) if that???s all you have'
-      : `${p.label} export XML/config files ??? or a compiled artifact (.class, .jar, .dll, .so) if that's all you have`;
+      ? 'Flow XML, DataWeave (.dwl), schema (.xsd/.wsdl), config (.yaml/.properties) — or a compiled artifact (.class, .jar, .dll, .so) if that’s all you have'
+      : `${p.label} export XML/config files — or a compiled artifact (.class, .jar, .dll, .so) if that's all you have`;
   }
 
   const cockpitSubtitle = $('cockpit-subtitle');
   if (cockpitSubtitle) {
     const n = S.cockpitRows ? S.cockpitRows.length : 0;
     const assetCount = S.assets ? S.assets.length : 0;
-    cockpitSubtitle.textContent = `${assetCount} ${p.label} ${assetCount === 1 ? p.assetNoun : p.assetNounPlural} ??? ${n} SAP Integration Suite (CPI) ${CPI_TERMS.typeLabel}${n === 1 ? '' : 's'} ?? ${S.projectName || '???'}`;
+    cockpitSubtitle.textContent = `${assetCount} ${p.label} ${assetCount === 1 ? p.assetNoun : p.assetNounPlural} → ${n} SAP Integration Suite (CPI) ${CPI_TERMS.typeLabel}${n === 1 ? '' : 's'} · ${S.projectName || '—'}`;
   }
 }
 
 function setVersionAnswer(v) {
   $('connection-version').value = v;
-  lumiSay(`Set to <b>${v}</b> ??? you can see it filled in on the version field. Which environment ??? Production, Sandbox, or Design?`);
+  lumiSay(`Set to <b>${v}</b> — you can see it filled in on the version field. Which environment — Production, Sandbox, or Design?`);
   lumiChoices(['Production', 'Sandbox', 'Design'].map(env => ({ label: env, onClick: () => setEnvironmentAnswer(env) })));
 }
 
 function setEnvironmentAnswer(env) {
   $('connection-env').value = env;
   const p = PLATFORMS[S.platform];
-  lumiSay(`Environment set to <b>${env}</b>. For authentication ??? should I use the sandbox credentials already on file, or would you like to enter your own?`);
+  lumiSay(`Environment set to <b>${env}</b>. For authentication — should I use the sandbox credentials already on file, or would you like to enter your own?`);
   lumiChoices([
     { label: 'Use saved sandbox credentials', cls: 'primary', onClick: () => askTarget() },
-    { label: "I'll enter my own", onClick: () => { lumiSay(`No problem ??? the ${p.hint} fields on the right are open for editing. Let me know when you're done.`); lumiChoices([{ label: 'Done, continue', onClick: confirmOwnCredentials }]); } }
+    { label: "I'll enter my own", onClick: () => { lumiSay(`No problem — the ${p.hint} fields on the right are open for editing. Let me know when you're done.`); lumiChoices([{ label: 'Done, continue', onClick: confirmOwnCredentials }]); } }
   ]);
 }
 
@@ -1126,8 +1141,8 @@ function confirmOwnCredentials() {
   const idValue = S.authMode === 'userpass' ? $('auth-username').value.trim() : $('auth-client-id').value.trim();
   const secretValue = S.authMode === 'userpass' ? $('auth-password').value : $('auth-client-secret').value;
   const idLabel = S.authMode === 'userpass' ? 'username' : 'client ID';
-  const maskedSecret = secretValue ? '???'.repeat(Math.min(secretValue.length, 10)) : '(empty)';
-  lumiSay(`Got it ??? I'll authenticate with ${idLabel} <b>${idValue || '(empty)'}</b> and secret <b>${maskedSecret}</b>. Moving on.`);
+  const maskedSecret = secretValue ? '•'.repeat(Math.min(secretValue.length, 10)) : '(empty)';
+  lumiSay(`Got it — I'll authenticate with ${idLabel} <b>${idValue || '(empty)'}</b> and secret <b>${maskedSecret}</b>. Moving on.`);
   askTarget();
 }
 
@@ -1138,7 +1153,7 @@ function askTarget() {
 function setTargetAnswer(t) {
   $('target-tenant').value = t.tenant;
   $('target-region').value = t.region;
-  lumiSay(`Target set to <b>${t.tenant}</b>. I've filled in every field on the Set Connection screen ??? ready to test the connection?`);
+  lumiSay(`Target set to <b>${t.tenant}</b>. I've filled in every field on the Set Connection screen — ready to test the connection?`);
   lumiChoices([{ label: 'Test Connection', cls: 'primary', onClick: () => testConnection(false) }]);
 }
 
@@ -1154,11 +1169,11 @@ function setAuthMode(mode) {
 function testConnection(forceFail) {
   if (!S.platform) { showToast('Pick a platform first', 'Select MuleSoft, PI/PO, Informatica, or Boomi above.', 'danger'); return; }
   setLumiState('thinking');
-  lumiSay('Testing both ends of the connection???');
+  lumiSay('Testing both ends of the connection…');
   const statusEl = $('conn-test-status');
   statusEl.style.display = 'flex';
   statusEl.className = 'conn-status';
-  statusEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Testing???';
+  statusEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Testing…';
   $('btn-test-connection').disabled = true;
 
   setTimeout(() => {
@@ -1172,10 +1187,10 @@ function testConnection(forceFail) {
     } else {
       S.connectionOk = true;
       statusEl.className = 'conn-status ok';
-      statusEl.innerHTML = '<span class="dot"></span> Connected ??? source and target reachable';
+      statusEl.innerHTML = '<span class="dot"></span> Connected — source and target reachable';
       unflagNav('nav-connection');
       $('btn-save-connection').disabled = false;
-      lumiSay('??? Connected ??? both source and target are reachable. Ready to continue?');
+      lumiSay('✅ Connected — both source and target are reachable. Ready to continue?');
       lumiChoices([{ label: 'Save & Continue', cls: 'primary', onClick: saveConnection }]);
     }
   }, 1400);
@@ -1186,7 +1201,7 @@ function saveConnection() {
   unlockNav('nav-assets');
   openScreen('assets');
   const p = PLATFORMS[S.platform];
-  lumiSay(`Ready ??? should I scan for every ${p.assetNoun}${S.platform === 'mulesoft' ? ', flow, sub-flow, connector, DataWeave transform, and schema file' : ' and its sub-objects'}?`);
+  lumiSay(`Ready — should I scan for every ${p.assetNoun}${S.platform === 'mulesoft' ? ', flow, sub-flow, connector, DataWeave transform, and schema file' : ' and its sub-objects'}?`);
   lumiChoices([{ label: 'Start Asset Scan', cls: 'primary', onClick: startAssetScan }]);
 }
 
@@ -1194,19 +1209,19 @@ function saveConnection() {
 function startAssetScan() {
   const btn = $('btn-import-assets-trigger');
   btn.disabled = true;
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Scanning???';
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Scanning…';
   setLumiState('thinking');
-  lumiSay('Scanning??? this takes a few seconds.');
+  lumiSay('Scanning… this takes a few seconds.');
 
   if (S.platform === 'pipo') { scanPi8Live(btn); return; }
   setTimeout(() => finishAssetScan(ASSET_SETS[S.platform] || ASSET_SETS.mulesoft, btn, {}), 1600);
 }
 
-// Live PI8 (PJ2) object scan ??? fetches the real ESR catalog through
+// Live PI8 (PJ2) object scan — fetches the real ESR catalog through
 // mcp/pipo-rfc-server (migrated here from the SDADATAAI BW cockpit's proof
 // of concept, now that it's proven live). Falls back to the existing demo
-// ASSET_SETS.pipo (with a toast) on any failure ??? same fallback pattern
-// already proven on the BW cockpit's PI8 Objects tab ??? so a fresh clone
+// ASSET_SETS.pipo (with a toast) on any failure — same fallback pattern
+// already proven on the BW cockpit's PI8 Objects tab — so a fresh clone
 // still demos cleanly even where the Cloud Connector chain isn't reachable.
 async function scanPi8Live(btn) {
   // Try backend discovery first if we have a registered system
@@ -1239,7 +1254,7 @@ async function scanPi8Live(btn) {
     showToast('Connected to PI8 (PJ2)', `${data.totalCount || assets.length} real ESR objects found live (${assets.length} shown).`, 'success');
     finishAssetScan(assets, btn, { live: true, totalCount: data.totalCount });
   } catch (err) {
-    showToast('PI8 live scan failed', `${err.message || err} ??? showing demo data instead.`, 'danger');
+    showToast('PI8 live scan failed', `${err.message || err} — showing demo data instead.`, 'danger');
     finishAssetScan(ASSET_SETS.pipo, btn, { live: false });
   }
 }
@@ -1247,7 +1262,7 @@ async function scanPi8Live(btn) {
 // Maps real PI8 ESR objects ({type, typeLabel, name, namespace, swcv,
 // isCustom}, from mcp/pipo-rfc-server's /api/pi8/objects) into the same
 // asset shape populateAssetsTable()/computeConversionPct()/bucket grouping
-// already render for mock data ??? custom content gets a Review nudge since
+// already render for mock data — custom content gets a Review nudge since
 // it needs more scrutiny than SAP's own content.
 function mapPi8ObjectsToAssets(items) {
   return items.map((o, i) => ({
@@ -1264,36 +1279,182 @@ function mapPi8ObjectsToAssets(items) {
   }));
 }
 
+// Registers PI/PO system configuration with the backend DiscoveryService.
+// This enables the Docker demo with SQLite - when users fill in Settings,
+// the system gets persisted to the database for later discovery operations.
+async function registerPISystemWithBackend(piPo) {
+  if (!piPo || !piPo.systemName || !piPo.address) return;
+  // Parse address to extract host and port
+  let virtualHost = piPo.address;
+  let virtualPort = 443;
+  let protocol = 'https';
+  try {
+    const url = new URL(piPo.address);
+    virtualHost = url.hostname;
+    virtualPort = parseInt(url.port) || (url.protocol === 'https:' ? 443 : 80);
+    protocol = url.protocol.replace(':', '');
+  } catch (e) {
+    // If not a valid URL, use as-is
+    virtualHost = piPo.address.replace(/^https?:\/\//, '').split(':')[0];
+  }
+  const payload = {
+    systemName: piPo.systemName,
+    description: piPo.systemName + ' - PI/PO System (version ' + (piPo.systemVersion || '7.50') + ')',
+    virtualHost: virtualHost,
+    virtualPort: virtualPort,
+    protocol: protocol,
+    locationId: piPo.locationId || 'DEFAULT',
+    techUser: piPo.userId || 'PIPO_USER',
+    techPassword: piPo.password || '',
+    piVersion: piPo.systemVersion || '7.50'
+  };
+  try {
+    const res = await fetch('/api/tenant/savePipoSystem', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Basic ' + btoa('alice:')  // Mocked auth for Docker demo
+      },
+      body: JSON.stringify({ systemConfig: payload })
+    });
+    const data = await res.json();
+    if (res.ok && data.ID) {
+      console.log('[PIPO] Registered system with backend:', data);
+      // Store system ID for later discovery operations
+      S.registeredSystemId = data.ID;
+      showToast('PI System Registered', 'System "' + piPo.systemName + '" is now available for discovery.', 'success');
+    } else {
+      console.warn('[PIPO] Backend registration response:', data);
+    }
+  } catch (err) {
+    // Silent fail - this is optional for Docker demo mode
+    console.warn('[PIPO] Could not register with backend (expected if not in Docker mode):', err.message);
+  }
+}
+
+// Triggers PI/PO artifact discovery via backend TenantService.
+// Uses the registered system ID from registerPISystemWithBackend.
+// Returns discovered artifacts or null if backend unavailable.
+async function triggerBackendDiscovery(systemId) {
+  if (!systemId) {
+    console.warn('[Discovery] No system ID available for backend discovery');
+    return null;
+  }
+  try {
+    const res = await fetch('/api/tenant/triggerDiscovery', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Basic ' + btoa('alice:')  // Mocked auth for Docker demo
+      },
+      body: JSON.stringify({ systemId })
+    });
+    const data = await res.json();
+    if (res.ok && data.ID) {
+      console.log('[Discovery] Backend discovery triggered:', data);
+      return data;
+    } else {
+      console.warn('[Discovery] Backend discovery response:', data);
+      return null;
+    }
+  } catch (err) {
+    console.warn('[Discovery] Could not trigger backend discovery:', err.message);
+    return null;
+  }
+}
+
+// Polls discovery job progress until complete or timeout.
+// Returns final job status with discovered artifacts count.
+async function pollDiscoveryProgress(jobId, maxWaitMs = 120000) {
+  const startTime = Date.now();
+  const pollInterval = 2000; // 2 seconds
+  while (Date.now() - startTime < maxWaitMs) {
+    try {
+      const res = await fetch(`/odata/v4/discovery/getDiscoveryProgress(jobId=${jobId})`, {
+        method: 'GET',
+        headers: { 'Authorization': 'Basic ' + btoa('alice:') }
+      });
+      const data = await res.json();
+      if (data.status === 'completed' || data.status === 'failed') {
+        return data;
+      }
+      // Update progress UI if available
+      if (data.progressPercent !== undefined) {
+        console.log(`[Discovery] Progress: ${data.progressPercent}% - ${data.phaseName || 'Processing'}`);
+      }
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    } catch (err) {
+      console.warn('[Discovery] Error polling progress:', err.message);
+      break;
+    }
+  }
+  return null;
+}
+
+// Fetches discovered artifacts from backend cache after discovery completes.
+// Maps them to the UI's asset format for display.
+async function fetchDiscoveredArtifacts(systemId) {
+  try {
+    const res = await fetch(`/odata/v4/discovery/Artifacts?$filter=system_ID eq ${systemId}&$top=500`, {
+      method: 'GET',
+      headers: { 'Authorization': 'Basic ' + btoa('alice:') }
+    });
+    const data = await res.json();
+    if (data.value && data.value.length) {
+      return mapBackendArtifactsToAssets(data.value);
+    }
+  } catch (err) {
+    console.warn('[Discovery] Could not fetch artifacts:', err.message);
+  }
+  return null;
+}
+
+// Maps backend Artifact entities to UI asset format for display.
+function mapBackendArtifactsToAssets(artifacts) {
+  return artifacts.map((a, i) => ({
+    id: a.ID || `BK-${String(i + 1).padStart(4, '0')}`,
+    name: a.name || a.artifactType || 'Unknown',
+    type: a.artifactType || 'ICO',
+    tier: a.complexityTier || 'Simple',
+    deps: a.dependencyCount || 1,
+    status: a.migrationReadiness || 'Ready',
+    flowCount: a.subObjectCount || 3,
+    tree: [], // Simplified - tree details would need separate fetch
+    backend: true
+  }));
+}
+
 function finishAssetScan(rawAssets, btn, liveInfo) {
   {
     S.assets = rawAssets.map(a => ({ ...a, convertPct: computeConversionPct(a) }));
     S.assetsLivePi8 = !!(liveInfo && liveInfo.live);
+    registerPISystemWithBackend(S.adminDefaults.piPo);
     btn.innerHTML = '<i class="fa-solid fa-check"></i> Scan complete';
     const ready = S.assets.filter(a => a.status === 'Ready').length;
     const review = S.assets.filter(a => a.status === 'Review').length;
     const warn = S.assets.filter(a => a.status === 'Warning').length;
     const p = PLATFORMS[S.platform];
 
-    // Each asset bundles more than one deduced iFlow ??? a MuleSoft app or PI/PO
+    // Each asset bundles more than one deduced iFlow — a MuleSoft app or PI/PO
     // object is a container, not a 1:1 stand-in for "one interface." flowCount
     // was already computed per asset (generateBulkAssets / the hand-authored
-    // fallback) but never surfaced anywhere ??? 60 apps reading as "60 apps ready"
+    // fallback) but never surfaced anywhere — 60 apps reading as "60 apps ready"
     // undersold the real scope (closer to ~500-600 underlying iFlows/interfaces).
     const totalIflows = S.assets.reduce((sum, a) => sum + (a.flowCount || 1), 0);
     S.totalIflowEstimate = totalIflows;
     S.brainSessionId = S.brainSessionId || `${S.platform}-${S.projectName || 'migration'}-${Date.now()}`;
     logBrainEvent('asset_scan', S.platform,
       { assets: S.assets.map(a => ({ id: a.id, name: a.name, type: a.type, tier: a.tier, deps: a.deps, status: a.status, flowCount: a.flowCount, tree: a.tree })) },
-      `Scanned ${S.assets.length} ${p.assetNounPlural} on ${p.label} ??? ${ready} ready, ${warn} warning, ${review} need review, ~${totalIflows} interfaces/iFlows total.`);
+      `Scanned ${S.assets.length} ${p.assetNounPlural} on ${p.label} — ${ready} ready, ${warn} warning, ${review} need review, ~${totalIflows} interfaces/iFlows total.`);
 
-    // Live PI8 (PJ2) data gets its own narrative ??? "found" in a demo-data sense
+    // Live PI8 (PJ2) data gets its own narrative — "found" in a demo-data sense
     // reads wrong once Lumi is actually looking at a real ESR catalog pulled
     // through the Cloud Connector, and the custom-vs-SAP split (isCustom,
     // sorted first by scanPi8Live) is the one piece of real assessment this
     // source can offer today, so it's surfaced explicitly rather than folded
     // into the generic ready/warning/review tiering.
     const livePrefix = S.assetsLivePi8
-      ? `Pulled <b>${S.assets.length} real objects</b> live from PI8 (PJ2)'s ESR catalog${liveInfo && liveInfo.totalCount ? ` (${liveInfo.totalCount} total in the system, ${S.assets.length} shown)` : ''} ??? no demo data. `
+      ? `Pulled <b>${S.assets.length} real objects</b> live from PI8 (PJ2)'s ESR catalog${liveInfo && liveInfo.totalCount ? ` (${liveInfo.totalCount} total in the system, ${S.assets.length} shown)` : ''} — no demo data. `
       : `Scan complete. `;
     const customCount = S.assets.filter(a => a.isCustom).length;
 
@@ -1309,8 +1470,8 @@ function finishAssetScan(rawAssets, btn, liveInfo) {
     cont.onclick = () => { markDone('nav-assets'); goToBuckets(); };
 
     lumiSay(S.assetsLivePi8
-      ? `Live scan complete ??? ${S.assets.length} real PI8 (PJ2) ESR objects pulled (${customCount} custom, ${S.assets.length - customCount} standard). ${ready} ready${warn ? `, ${warn} warning` : ''}${review ? `, ${review} need review` : ''}. Custom objects are flagged for review first since they're the ones carrying this org's own logic.`
-      : `Scan complete ??? ${S.assets.length} ${p.assetNounPlural} found (???${totalIflows} interfaces/iFlows once each app's bundled flows are counted). ${ready} ready${warn ? `, ${warn} warning` : ''}${review ? `, ${review} need review` : ''}.`);
+      ? `Live scan complete — ${S.assets.length} real PI8 (PJ2) ESR objects pulled (${customCount} custom, ${S.assets.length - customCount} standard). ${ready} ready${warn ? `, ${warn} warning` : ''}${review ? `, ${review} need review` : ''}. Custom objects are flagged for review first since they're the ones carrying this org's own logic.`
+      : `Scan complete — ${S.assets.length} ${p.assetNounPlural} found (≈${totalIflows} interfaces/iFlows once each app's bundled flows are counted). ${ready} ready${warn ? `, ${warn} warning` : ''}${review ? `, ${review} need review` : ''}.`);
     if (review) flagNav('nav-buckets');
     lumiChoices([{ label: 'Show me the details', onClick: showAssetDetails }, { label: 'Continue to Plan', cls: 'primary', onClick: () => { markDone('nav-assets'); goToBuckets(); } }]);
   }
@@ -1380,7 +1541,7 @@ function selectConnectMode(mode) {
       S.projectName = p.projectName;
       $('project-selector-text').textContent = p.projectName;
       if ($('project-badge-text')) $('project-badge-text').textContent = p.projectName;
-      document.title = `SDAINT-AI ??? ${p.projectName}`;
+      document.title = `SDAINT-AI — ${p.projectName}`;
       qsa('.platform-card').forEach(c => c.classList.toggle('selected', c.dataset.platform === 'mulesoft'));
       markDone('nav-details');
       applyPlatformTerminology('mulesoft');
@@ -1388,7 +1549,7 @@ function selectConnectMode(mode) {
     markDone('nav-connection');
     unlockNav('nav-assets');
     const uploadLabel = PLATFORMS[S.platform].terms.uploadLabel;
-    lumiSay(`Sure ??? drop a ${uploadLabel} on the right, or click Browse. If it turns out to be compiled code, I'll decompile it before adding it to your ${PLATFORMS[S.platform].assetNoun} list.`);
+    lumiSay(`Sure — drop a ${uploadLabel} on the right, or click Browse. If it turns out to be compiled code, I'll decompile it before adding it to your ${PLATFORMS[S.platform].assetNoun} list.`);
   }
 }
 
@@ -1409,22 +1570,22 @@ function setupUploadZone() {
 async function handleUploadedFile(file) {
   const logRow = document.createElement('div');
   logRow.className = 'upload-log-row';
-  logRow.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Inspecting <code>${file.name}</code>???`;
+  logRow.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Inspecting <code>${file.name}</code>…`;
   $('upload-log').appendChild(logRow);
   openDrawer(false);
-  lumiSay(`Inspecting <b>${file.name}</b>???`);
+  lumiSay(`Inspecting <b>${file.name}</b>…`);
 
   const { compiled, kind } = await classifyUploadedFile(file);
   let asset;
   if (compiled) {
-    lumiSay(`?????? That's compiled code ??? <b>${kind}</b>, not source. This is more complex. Give me a moment, I'm running the SDAINTAI decompilation pipeline.`, { alert: true });
+    lumiSay(`⚠️ That's compiled code — <b>${kind}</b>, not source. This is more complex. Give me a moment, I'm running the SDAINTAI decompilation pipeline.`, { alert: true });
     asset = await runDecompilation(file, kind);
-    logRow.innerHTML = `<i class="fa-solid fa-microchip" style="color:var(--btp-brand-gold-hover);"></i> <code>${file.name}</code> ??? decompiled, ${asset.convertPct}% recovered cleanly`;
+    logRow.innerHTML = `<i class="fa-solid fa-microchip" style="color:var(--btp-brand-gold-hover);"></i> <code>${file.name}</code> — decompiled, ${asset.convertPct}% recovered cleanly`;
   } else {
-    lumiSay(`<b>${file.name}</b> is a ${kind} ??? straightforward, no decompilation needed. Parsing it now.`);
+    lumiSay(`<b>${file.name}</b> is a ${kind} — straightforward, no decompilation needed. Parsing it now.`);
     await new Promise(r => setTimeout(r, 700));
     asset = buildUploadedSourceAsset(file.name);
-    logRow.innerHTML = `<i class="fa-solid fa-circle-check" style="color:#10b981;"></i> <code>${file.name}</code> ??? parsed and added`;
+    logRow.innerHTML = `<i class="fa-solid fa-circle-check" style="color:#10b981;"></i> <code>${file.name}</code> — parsed and added`;
   }
   addAssetToResults(asset);
   lumiSay(`Added <b>${asset.name}</b> to your asset list.`);
@@ -1461,7 +1622,7 @@ async function runDecompilation(file, kind) {
 
   const asset = buildDecompiledAsset(file.name, kind);
   setLumiState('success');
-  lumiSay(`Decompilation complete ??? recovered <b>${asset.convertPct}%</b> cleanly. Here's the structure:`);
+  lumiSay(`Decompilation complete — recovered <b>${asset.convertPct}%</b> cleanly. Here's the structure:`);
   lumiTree(renderInlineTree(asset));
   return asset;
 }
@@ -1478,11 +1639,11 @@ function buildDecompiledAsset(filename, kind) {
     },
     leafTree('flow', `${baseName}-error-handler-flow (recovered)`, true),
     leafTree('properties', `${baseName}.properties.yaml (recovered)`, true),
-    leafTree('schema', `${baseName}-schema.xsd (recovered ??? needs review)`, false)
+    leafTree('schema', `${baseName}-schema.xsd (recovered — needs review)`, false)
   ];
   const assetNoun = (PLATFORMS[S.platform] || PLATFORMS.mulesoft).assetNoun;
   const assetNounCap = assetNoun.charAt(0).toUpperCase() + assetNoun.slice(1);
-  const asset = { id: `D${String(decompiledCounter).padStart(3, '0')}`, name: baseName, type: `${assetNounCap} (decompiled ??? ${kind})`, tier: 'High', deps: 3, status: 'Review', tree };
+  const asset = { id: `D${String(decompiledCounter).padStart(3, '0')}`, name: baseName, type: `${assetNounCap} (decompiled — ${kind})`, tier: 'High', deps: 3, status: 'Review', tree };
   asset.convertPct = computeConversionPct(asset);
   return asset;
 }
@@ -1507,7 +1668,7 @@ function addAssetToResults(asset) {
 
 // ==================== MIGRATION BUCKETS ====================
 // Orchestrator behavior: include everything and move straight to wave grouping
-// instead of stopping to ask "use your grouping or pick yourself?" ??? Lumi does
+// instead of stopping to ask "use your grouping or pick yourself?" — Lumi does
 // the job and states the result; hand-picking is still one click away via the
 // "Adjust" option on the wave-grouping message, not a blocking upfront question.
 function goToBuckets() {
@@ -1515,7 +1676,7 @@ function goToBuckets() {
   populateBucketsTable();
   const p = PLATFORMS[S.platform];
   qsa('#buckets-tbody input[type=checkbox]').forEach(cb => cb.checked = true);
-  lumiSay(`I've grouped by complexity and dependencies and included all <b>${S.assets.length} ${p.assetNounPlural}</b> ??? say the word if you'd rather hand-pick which ones are in scope.`);
+  lumiSay(`I've grouped by complexity and dependencies and included all <b>${S.assets.length} ${p.assetNounPlural}</b> — say the word if you'd rather hand-pick which ones are in scope.`);
   goToWaveFromBuckets();
 }
 function renderAssetPickChips() {
@@ -1528,7 +1689,7 @@ function renderAssetPickChips() {
     const cb = qs(`.bucket-cb[data-id="${a.id}"]`);
     const chip = document.createElement('div');
     chip.className = 'lumi-chip' + (cb.checked ? ' primary' : '');
-    chip.textContent = (cb.checked ? '??? ' : '') + a.name;
+    chip.textContent = (cb.checked ? '✓ ' : '') + a.name;
     chip.addEventListener('click', () => { cb.checked = !cb.checked; renderAssetPickChips(); });
     wrap.appendChild(chip);
   });
@@ -1566,20 +1727,20 @@ function goToWaveFromBuckets() {
   const activeWaves = getActiveWaveNumbers();
   const waveCount = Math.max(1, activeWaves.length);
   const sequenceMsg = waveCount === 1
-    ? `Everything you selected fits into a single wave ??? no need to spread it out.`
-    : `I'd sequence this into ${waveCount} waves (${activeWaves.map(w => `Wave ${w}`).join(', ')}) ??? low-risk first, then medium-complexity, then the high-complexity items last since they need extra review.`;
+    ? `Everything you selected fits into a single wave — no need to spread it out.`
+    : `I'd sequence this into ${waveCount} waves (${activeWaves.map(w => `Wave ${w}`).join(', ')}) — low-risk first, then medium-complexity, then the high-complexity items last since they need extra review.`;
   const expandHint = waveCount < 3 ? ` Use "+ Add Wave" below the board if you'd like to split this further.` : '';
   lumiSay(`${sequenceMsg} I've suggested a team per wave by skill and availability. Use the dropdown on any card to move it (position also sets priority), or add/remove team members below.${expandHint} Continue when it looks right.`);
   lumiHtml(renderTierPieChart(simple.length, medium.length, high.length));
   logBrainEvent('wave_plan', S.platform,
     { waves: S.waves, teamByWave: S.teamByWave, simple: simple.map(a => a.id), medium: medium.map(a => a.id), high: high.map(a => a.id) },
-    `Planned ${waveCount} wave(s) for ${selected.length} assets ??? ${simple.length} simple, ${medium.length} medium, ${high.length} high complexity.`);
+    `Planned ${waveCount} wave(s) for ${selected.length} assets — ${simple.length} simple, ${medium.length} medium, ${high.length} high complexity.`);
   lumiChoices([
     { label: 'Continue', cls: 'primary', onClick: continueToApprove },
-    { label: 'Adjust which apps are included', onClick: () => { openScreen('buckets'); lumiSay('Sure ??? click each one to include or exclude it, then continue when ready.'); renderAssetPickChips(); } }
+    { label: 'Adjust which apps are included', onClick: () => { openScreen('buckets'); lumiSay('Sure — click each one to include or exclude it, then continue when ready.'); renderAssetPickChips(); } }
   ]);
 }
-// Why Lumi drew the wave lines where it did ??? a quick visual instead of another
+// Why Lumi drew the wave lines where it did — a quick visual instead of another
 // paragraph of explanation. Pure CSS conic-gradient, no chart library.
 function renderTierPieChart(simpleN, mediumN, highN) {
   const total = simpleN + mediumN + highN || 1;
@@ -1590,9 +1751,9 @@ function renderTierPieChart(simpleN, mediumN, highN) {
   return `<div class="tier-pie-wrap">
     <div class="tier-pie" style="background:${gradient};"></div>
     <div class="tier-pie-legend">
-      <div><span class="dot" style="background:#10b981;"></span><b>Simple ??? ${simpleN} (${pctS}%)</b><span class="tier-pie-why">Wave 1 ?? low custom code, few dependencies</span></div>
-      <div><span class="dot" style="background:#f59e0b;"></span><b>Medium ??? ${mediumN} (${pctM}%)</b><span class="tier-pie-why">Wave 2 ?? some custom mapping/transform logic</span></div>
-      <div><span class="dot" style="background:#ef4444;"></span><b>High ??? ${highN} (${pctH}%)</b><span class="tier-pie-why">Wave 3 ?? heavy custom code and dependencies ??? routed last for extra review</span></div>
+      <div><span class="dot" style="background:#10b981;"></span><b>Simple — ${simpleN} (${pctS}%)</b><span class="tier-pie-why">Wave 1 · low custom code, few dependencies</span></div>
+      <div><span class="dot" style="background:#f59e0b;"></span><b>Medium — ${mediumN} (${pctM}%)</b><span class="tier-pie-why">Wave 2 · some custom mapping/transform logic</span></div>
+      <div><span class="dot" style="background:#ef4444;"></span><b>High — ${highN} (${pctH}%)</b><span class="tier-pie-why">Wave 3 · heavy custom code and dependencies — routed last for extra review</span></div>
     </div>
   </div>`;
 }
@@ -1695,7 +1856,7 @@ function renderTeamBoard() {
     }).join('')}
       <select class="team-add-select" data-wave="${w}">
         <option value="">+ Add member&hellip;</option>
-        ${available.map(t => `<option value="${t.id}">${t.name} ??? ${t.role}</option>`).join('')}
+        ${available.map(t => `<option value="${t.id}">${t.name} — ${t.role}</option>`).join('')}
       </select>
     </div>`;
   }).join('');
@@ -1741,7 +1902,7 @@ function countSelectedKafkaEvents(asset) {
 function renderKafkaSummary(asset) {
   const n = countSelectedKafkaEvents(asset);
   if (!n) return '';
-  return `<div class="kafka-summary"><i class="fa-solid fa-bolt"></i> ${n} Kafka event${n > 1 ? 's' : ''} selected ??? will generate ${n} IS-Kafka channel${n > 1 ? 's' : ''} in the .iflw on conversion.</div>`;
+  return `<div class="kafka-summary"><i class="fa-solid fa-bolt"></i> ${n} Kafka event${n > 1 ? 's' : ''} selected — will generate ${n} IS-Kafka channel${n > 1 ? 's' : ''} in the .iflw on conversion.</div>`;
 }
 function renderTreeEditorHtml(asset) {
   let html = `<div class="tree-editor">`;
@@ -1789,7 +1950,7 @@ function resolveTreeNode(asset, path) {
 }
 function renderTreeNode(node, path, depth) {
   const errorRow = node.ok === false ? ' node-error-row' : '';
-  const label = node.ok === false ? `<span class="node-error">??? ${node.name}</span>` : node.name;
+  const label = node.ok === false ? `<span class="node-error">⚠ ${node.name}</span>` : node.name;
   const mainRow = `<div class="tree-node depth-${depth}${errorRow}">
     <input type="checkbox" data-path="${path}" ${node.ok ? 'checked' : ''}>
     <span class="node-kind">${node.kind}</span> ${label}
@@ -1800,7 +1961,7 @@ function renderTreeNode(node, path, depth) {
   return mainRow + `<div class="tree-node depth-${depth} kafka-event-row${k.selected ? ' picked' : ''}">
     <input type="checkbox" data-kafka-path="${path}" ${k.selected ? 'checked' : ''}>
     <span class="kafka-badge">${k.id}</span>
-    <span class="kafka-event-label">Convert to IS-Kafka ??? topic <code>${k.topic}</code></span>
+    <span class="kafka-event-label">Convert to IS-Kafka — topic <code>${k.topic}</code></span>
     ${k.selected ? '<span class="kafka-picked-tag">PICKED</span>' : ''}
   </div>`;
 }
@@ -1838,7 +1999,7 @@ function continueToApprove() {
   const waveCount = activeWaves.length;
   // Same wave-bound model as totalEffortMinutes(): each wave's duration is
   // its single slowest interface (everything in a wave converts at once
-  // across the AI agent fleet), waves run sequentially ??? not a hardcoded
+  // across the AI agent fleet), waves run sequentially — not a hardcoded
   // weeks-per-wave guess, and not a sum across every interface. cockpitRows
   // doesn't exist yet at this stage (built once Execute starts), so this
   // estimates straight from the assets/waves already known; flowCount only
@@ -1864,7 +2025,7 @@ function continueToApprove() {
 
   const requesterName = S.userName || 'Daniel Smith';
   const requesterInitials = requesterName.split(' ').map(x => x[0]).join('').slice(0, 2).toUpperCase();
-  // one assigned member stays an outstanding sign-off, for the interactive "click to approve" demo moment ???
+  // one assigned member stays an outstanding sign-off, for the interactive "click to approve" demo moment —
   // prefer whoever is the Architect (narratively the one reviewing riskiest changes), else the last assigned.
   const pendingMember = teamMembers.find(m => m.role === 'Architect') || teamMembers[teamMembers.length - 1] || null;
 
@@ -1874,19 +2035,19 @@ function continueToApprove() {
     const isPending = pendingMember && m.id === pendingMember.id;
     rowsHtml += `<div class="approval-row"><div class="avatar-chip" style="background:${m.color};">${initials}</div><div class="info"><b>${m.name}</b><span>${m.role}</span></div>` +
       (isPending
-        ? `<span class="approval-pill pending" style="cursor:pointer;" onclick="approvePending(this)">Pending ??? click to sign off</span>`
+        ? `<span class="approval-pill pending" style="cursor:pointer;" onclick="approvePending(this)">Pending — click to sign off</span>`
         : `<span class="approval-pill approved">Approved</span>`) +
       `</div>`;
   });
   if (!teamMembers.length) {
-    rowsHtml += `<div class="approval-row"><div class="info"><span style="color:var(--btp-text-muted-dark);font-size:0.82rem;">No team members assigned yet ??? go back to Define Wave &amp; Team to assign someone.</span></div></div>`;
+    rowsHtml += `<div class="approval-row"><div class="info"><span style="color:var(--btp-text-muted-dark);font-size:0.82rem;">No team members assigned yet — go back to Define Wave &amp; Team to assign someone.</span></div></div>`;
   }
   $('approvals-list').innerHTML = rowsHtml;
 
   openScreen('approve');
-  const namesForMessage = teamMembers.length ? teamMembers.map(m => m.name).join(', ') : "no one yet ??? you may want to assign a team first";
+  const namesForMessage = teamMembers.length ? teamMembers.map(m => m.name).join(', ') : "no one yet — you may want to assign a team first";
   const assetNoun = includedCount === 1 ? PLATFORMS[S.platform].assetNoun : PLATFORMS[S.platform].assetNounPlural;
-  lumiSay(`Everything's ready ??? ${includedCount} ${assetNoun}, ${waveCount} wave${waveCount === 1 ? '' : 's'}, ~${durationLabel} estimated with A2A agents working in parallel. I've notified ${namesForMessage} for sign-off. Approve and start, or export a PDF first?`);
+  lumiSay(`Everything's ready — ${includedCount} ${assetNoun}, ${waveCount} wave${waveCount === 1 ? '' : 's'}, ~${durationLabel} estimated with A2A agents working in parallel. I've notified ${namesForMessage} for sign-off. Approve and start, or export a PDF first?`);
   lumiChoices([{ label: 'Approve & Start', cls: 'primary', onClick: approveAndStart }, { label: 'Export PDF', onClick: exportPdf }]);
 }
 function approvePending(el) { el.className = 'approval-pill approved'; el.textContent = 'Approved'; el.onclick = null; el.style.cursor = 'default'; }
@@ -1905,15 +2066,15 @@ async function exportPdf() {
     { text: `Total Assets: ${getIncludedAssetIds().length}`, size: 11 },
     { text: `Waves: ${activeWaves.length}`, size: 11 },
     { text: `Team Members: ${teamMembers.length}`, size: 11 },
-    { text: `Estimated Duration: ${$('approve-duration') ? $('approve-duration').textContent : '???'}`, size: 11, gap: 4 },
+    { text: `Estimated Duration: ${$('approve-duration') ? $('approve-duration').textContent : '—'}`, size: 11, gap: 4 },
     { text: 'Wave Summary', bold: true, size: 13, gap: 16 },
-    ...[1, 2, 3].map(w => ({ text: `Wave ${w}: ${S.waves[w].length} asset(s) ??? ${S.waves[w].map(id => S.assets.find(a => a.id === id).name).join(', ') || '(none)'}`, size: 11 })),
+    ...[1, 2, 3].map(w => ({ text: `Wave ${w}: ${S.waves[w].length} asset(s) — ${S.waves[w].map(id => S.assets.find(a => a.id === id).name).join(', ') || '(none)'}`, size: 11 })),
     { text: 'Team by Wave', bold: true, size: 13, gap: 16 },
     ...[1, 2, 3].map(w => ({ text: `Wave ${w}: ${S.teamByWave[w].map(id => activeTeam().find(t => t.id === id).name).join(', ') || '(none)'}`, size: 11 })),
     { text: 'Approvals', bold: true, size: 13, gap: 16 },
-    { text: `${S.userName || 'Daniel Smith'} (Integration Lead) ??? Approved`, size: 11 },
+    { text: `${S.userName || 'Daniel Smith'} (Integration Lead) — Approved`, size: 11 },
     ...(teamMembers.length
-      ? teamMembers.map((m, i) => ({ text: `${m.name} (${m.role}) ??? ${pendingMember && m.id === pendingMember.id ? 'Pending' : 'Approved'}`, size: 11, gap: i === teamMembers.length - 1 ? 4 : 0 }))
+      ? teamMembers.map((m, i) => ({ text: `${m.name} (${m.role}) — ${pendingMember && m.id === pendingMember.id ? 'Pending' : 'Approved'}`, size: 11, gap: i === teamMembers.length - 1 ? 4 : 0 }))
       : [{ text: '(no team members assigned)', size: 11, gap: 4 }])
   ];
   if (S.cockpitRows.length) {
@@ -1978,7 +2139,7 @@ async function saveBlob(blob, filename, description, acceptTypes) {
       await writable.write(blob);
       await writable.close();
       return;
-    } catch (e) { /* user cancelled, or API unsupported in this context ??? fall through */ }
+    } catch (e) { /* user cancelled, or API unsupported in this context — fall through */ }
   }
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1999,12 +2160,12 @@ function doApprove() {
   renderCockpitTable();
   openScreen('cockpit');
   showToast('Plan Approved', `${S.projectName} is approved. Migration Cockpit unlocked.`, 'purple');
-  lumiSay(`Approved. The cockpit is unlocked ??? ready to start execution?`);
+  lumiSay(`Approved. The cockpit is unlocked — ready to start execution?`);
   lumiChoices([{ label: 'Start Execution', cls: 'primary', onClick: startExecution }]);
 }
 
 // ==================== MIGRATION COCKPIT ====================
-// The two real, already-existing iFlows in the lab-sda tenant ??? used as stand-ins
+// The two real, already-existing iFlows in the lab-sda tenant — used as stand-ins
 // for "the iFlow this app deduces to" until there's a real per-artifact deploy
 // target. Alternated by row index so every row has *a* real, clickable link.
 const IFLOW_LINK_POOL = [
@@ -2012,7 +2173,7 @@ const IFLOW_LINK_POOL = [
   'https://lab-sda.integrationsuite.cfapps.us10-002.hana.ondemand.com/shell/design/contentpackage/INTPACKFROMMUKESOFT1/integrationflows/MATERIAL_MASTER_IFLOW'
 ];
 // Material Master and Customer Master each have their own real BTP iFlow URL
-// (above) ??? "Open in Integration Suite" / monitoring links must resolve to the
+// (above) — "Open in Integration Suite" / monitoring links must resolve to the
 // matching one by asset name, not rotate through the pool by row index.
 function iflowLinkForAsset(a, idx) {
   const n = (a.name || '').toLowerCase();
@@ -2020,12 +2181,12 @@ function iflowLinkForAsset(a, idx) {
   if (n.includes('material')) return IFLOW_LINK_POOL[1];
   return IFLOW_LINK_POOL[idx % IFLOW_LINK_POOL.length];
 }
-// One S.cockpitRows entry per INDIVIDUAL iFlow, not per source asset ??? a
+// One S.cockpitRows entry per INDIVIDUAL iFlow, not per source asset — a
 // MuleSoft app or PI/PO object bundles a.flowCount separate interfaces, and
 // every one of them gets its own generated iFlow/row here (per explicit
 // instruction: if the scan found 423 iFlows, 423 get generated, not 60
 // asset-level stand-ins). row.assetId points back at the parent asset for
-// every S.assets.find(...) lookup elsewhere (tree/Kafka/tier/etc) ??? row.id
+// every S.assets.find(...) lookup elsewhere (tree/Kafka/tier/etc) — row.id
 // is now unique PER IFLOW (`${assetId}-${n}`), so it can no longer double as
 // an asset id the way it used to when there was exactly one row per asset.
 function buildCockpitRows() {
@@ -2041,15 +2202,15 @@ function buildCockpitRows() {
       const assignee = activeTeam().find(t => t.id === S.teamByWave[w][i % S.teamByWave[w].length]) || activeTeam()[0];
       const total = a.flowCount || 1;
       // A handful of non-erroring assets carry a semantic advisory, and a
-      // problematic asset's issue is localized to one of its interfaces ???
+      // problematic asset's issue is localized to one of its interfaces —
       // both stay pinned to interface #1 rather than repeating across every
       // one of the asset's expanded rows. Same deterministic idea as before.
       const advisory = a.status !== 'Ready' ? null
-        : idx % 7 === 3 ? 'Timezone normalized to UTC during conversion ??? verify the receiver expects UTC.'
-          : idx % 11 === 5 ? 'Retry policy mapped to adapter defaults ??? confirm the interval before go-live.'
+        : idx % 7 === 3 ? 'Timezone normalized to UTC during conversion — verify the receiver expects UTC.'
+          : idx % 11 === 5 ? 'Retry policy mapped to adapter defaults — confirm the interval before go-live.'
             : null;
       for (let n = 1; n <= total; n++) {
-        const rowName = total > 1 ? `${a.name} ??? Interface ${n}/${total}` : a.name;
+        const rowName = total > 1 ? `${a.name} — Interface ${n}/${total}` : a.name;
         S.cockpitRows.push({
           wave: w, id: `${a.id}-${n}`, assetId: a.id, name: rowName, type: a.type, assignee: assignee.name, status: 'Pending',
           willError: a.status !== 'Ready' && n === 1, convertedAt: null,
@@ -2065,7 +2226,7 @@ function buildCockpitRows() {
   });
 }
 // SAP PI/PO is a genuine platform-to-platform migration into SAP Integration Suite;
-// MuleSoft/Informatica/Boomi are third-party conversions ??? same successful outcome,
+// MuleSoft/Informatica/Boomi are third-party conversions — same successful outcome,
 // different word, matching how SDA already talks about the two program types.
 function successIflowWord() { return S.platform === 'pipo' ? 'Migrated with success' : 'Deployed'; }
 function iflowStatusLabel(row) {
@@ -2080,7 +2241,7 @@ function iflowStatusPillClass(row) {
   const s = iflowStatusLabel(row);
   return s === successIflowWord() ? 'done' : s === 'Failed' ? 'error' : s === 'Generating' ? 'progress' : 'pending';
 }
-// iFlow Step ??? the coarser deployment-lifecycle read: green/success rows read
+// iFlow Step — the coarser deployment-lifecycle read: green/success rows read
 // "Deployed" (or "Migrated with success" for PI/PO), anything blocked or still
 // unresolved reads "Pending deployment / review", everything else in the pipeline
 // just hasn't reached deployment yet.
@@ -2130,7 +2291,7 @@ function renderCockpitTable() {
       <td style="white-space:nowrap;"><a href="${r.iflowLink}" target="_blank" rel="noopener" title="${r.iflowName}"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open</a>
         <button class="btn-btp-table-action btn-view-iflow" onclick="showIflowViewModal('${r.id}')" title="View iFlow"><i class="fa-solid fa-eye"></i></button></td>
       <td><button class="btn-btp-table-action" onclick="showLumiInsight('${r.id}')">Insight</button></td>
-      <td>${r.status === 'Done' ? `<button class="btn-btp-table-action" onclick="downloadSingleAsset('${r.id}')" title="Download this converted artifact"><i class="fa-solid fa-download"></i></button>` : '???'}</td>
+      <td>${r.status === 'Done' ? `<button class="btn-btp-table-action" onclick="downloadSingleAsset('${r.id}')" title="Download this converted artifact"><i class="fa-solid fa-download"></i></button>` : '—'}</td>
       <td style="white-space:nowrap;">${['Error', 'Pending Fix', 'Parked'].includes(r.status) ? `<button class="btn-btp-table-action" onclick="showRowDetail('${r.id}')">Details</button>` : ''}
         <button class="btn-btp-table-action" style="background:var(--btp-text-muted-dark);" onclick="showDeveloperAssignModal('${r.id}')" title="Assign A2A developers (up to 8)"><i class="fa-solid fa-user-group"></i> ${(r.assignees || []).length || ''}</button></td>
     </tr>`).join('');
@@ -2157,12 +2318,12 @@ function updateCockpitStats() {
 
   // exportToIS() owns the button's label/disabled state while a push is
   // actively animating (S.pushing set synchronously before its first
-  // renderCockpitTable() call, ahead of S.pushInterval being assigned) ???
+  // renderCockpitTable() call, ahead of S.pushInterval being assigned) —
   // don't fight it on every renderCockpitTable() tick during that window.
   const exportBtn = $('btn-export-is');
   if (exportBtn && !S.pushing) {
     if (isViewer()) {
-      // Blocked, not just disabled ??? Viewer never sees a production-affecting trigger.
+      // Blocked, not just disabled — Viewer never sees a production-affecting trigger.
       exportBtn.style.display = 'none';
     } else {
       exportBtn.style.display = '';
@@ -2171,15 +2332,15 @@ function updateCockpitStats() {
         exportBtn.disabled = true;
         exportBtn.title = 'Already pushed to Integration Suite';
       } else if (isApprover()) {
-        // Approve-only, by design ??? never unlocks for this persona, even after their own sign-off.
+        // Approve-only, by design — never unlocks for this persona, even after their own sign-off.
         exportBtn.disabled = true;
-        exportBtn.title = 'Approver sign-off doesn\'t also grant the Push click ??? an Admin session pushes once you approve.';
+        exportBtn.title = 'Approver sign-off doesn\'t also grant the Push click — an Admin session pushes once you approve.';
       } else if (done === 0) {
         exportBtn.disabled = true;
         exportBtn.title = 'Available once at least one asset has converted successfully';
       } else if (!S.pushApproved) {
         exportBtn.disabled = true;
-        exportBtn.title = 'Awaiting this wave\'s Approver sign-off ??? see Pending Approvals above';
+        exportBtn.title = 'Awaiting this wave\'s Approver sign-off — see Pending Approvals above';
       } else {
         exportBtn.disabled = false;
         exportBtn.title = '';
@@ -2189,15 +2350,15 @@ function updateCockpitStats() {
 }
 
 // ==================== EXECUTION SUB-TABS (Integration list / Migration status / Readiness / Errors-issues / Progress / Migration execution / Integration package) ====================
-// All derived from S.cockpitRows + S.assets ??? no parallel state, so the tabs can never drift from the Integration list tab.
+// All derived from S.cockpitRows + S.assets — no parallel state, so the tabs can never drift from the Integration list tab.
 // No-AI-agents baseline (what this used to be, and what it reverts toward as
-// each A2A agent is switched off in Admin ??? Migration Acceleration) ??? a human
+// each A2A agent is switched off in Admin → Migration Acceleration) — a human
 // doing the mapping and the Groovy/code rewrite by hand, per interface.
 const MANUAL_EFFORT_MINUTES = { Simple: 15, Medium: 30, High: 90 };
 // Both A2A agents (Mapping + Conversion) active is the real observed 30x
 // acceleration over manual (15/30/90min -> 30s/1min/3min). Each agent
 // contributes an equal share of that factor, so one agent alone gives
-// sqrt(30) ??? 5.48x rather than the full 30x ??? multiplicative, not additive,
+// sqrt(30) ≈ 5.48x rather than the full 30x — multiplicative, not additive,
 // since the two agents cover different parts of the same pipeline stage.
 const AGENT_FULL_SPEEDUP = 30;
 const AGENT_SOLO_SPEEDUP = Math.sqrt(AGENT_FULL_SPEEDUP);
@@ -2206,7 +2367,7 @@ function activeAgentCount() {
   const conversion = $('admin-agent-conversion') ? $('admin-agent-conversion').checked : (S.adminDefaults.agentConversionEnabled !== false);
   return (mapping ? 1 : 0) + (conversion ? 1 : 0);
 }
-// Per-interface conversion time ??? scales with how many of the two A2A agents
+// Per-interface conversion time — scales with how many of the two A2A agents
 // (Mapping, Conversion) are switched on in Admin, so turning them off one by
 // one visibly slows every duration the cockpit shows, demonstrating the
 // acceleration they provide. 2 agents: 30s/1min/3min. 1 agent: ~2m44s/5m28s/16m24s.
@@ -2220,11 +2381,11 @@ function effortMinutesForTier(tier) {
 }
 // Wave-bound duration model: every interface within a wave converts
 // simultaneously across the AI agent fleet, so a wave's duration is its
-// single slowest interface, not a sum of everything in it ??? waves themselves
+// single slowest interface, not a sum of everything in it — waves themselves
 // run sequentially, so total duration is the sum of each wave's max. Volume
 // (20 interfaces in a wave, or 200) barely moves this; wave count and
 // complexity mix do. Applies only to AGGREGATE totals (a wave, the whole
-// migration) ??? a single row's own estimate (Report tab, Readiness tab, Lumi
+// migration) — a single row's own estimate (Report tab, Readiness tab, Lumi
 // Insight) stays the raw per-interface number above, since that's one real
 // task, not a batch.
 function totalEffortMinutes(rows) {
@@ -2246,7 +2407,7 @@ function formatEffort(minutes) {
   return h ? (m ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
 }
 function rowTier(row) { const a = S.assets.find(x => x.id === row.assetId); return a ? a.tier : 'Medium'; }
-// Buckets used across the Migration status / Readiness tabs ??? a relabeling of the same
+// Buckets used across the Migration status / Readiness tabs — a relabeling of the same
 // Pending/In Progress/Done/Error/Pending Fix/Parked pipeline the Integration list tab uses.
 function statusBucket(status) {
   if (status === 'Done') return 'Converted';
@@ -2275,7 +2436,7 @@ function renderWaveStatusRow() {
   const remaining = totalEffortMinutes(rows.filter(r => !['Done', 'Error', 'Parked'].includes(r.status)));
   const pill = waveStatusPill(currentWave);
   host.innerHTML = `<span class="wave-status-label">Wave ${currentWave}</span><span class="status-pill ${pill.cls}">${pill.label}</span>
-    <span class="wave-status-fill"></span><span class="wave-status-meta">${pct}% ?? ${formatEffort(remaining)} effort remaining</span>`;
+    <span class="wave-status-fill"></span><span class="wave-status-meta">${pct}% · ${formatEffort(remaining)} effort remaining</span>`;
 }
 function renderMigrationStatusTab() {
   const buckets = ['Not started', 'Packaged', 'Converting', 'Converted', 'Blocked', 'In fix / parked'];
@@ -2288,11 +2449,11 @@ function renderMigrationStatusTab() {
     tbody.innerHTML = [1, 2, 3].filter(w => S.cockpitRows.some(r => r.wave === w)).map(w => {
       const rows = S.cockpitRows.filter(r => r.wave === w);
       const c = {}; buckets.forEach(b => c[b] = 0); rows.forEach(r => c[statusBucket(r.status)]++);
-      return `<tr><td><span class="wave-chip">Wave ${w}</span></td><td>${rows.length}</td>${buckets.map(b => `<td>${c[b] || '???'}</td>`).join('')}</tr>`;
+      return `<tr><td><span class="wave-chip">Wave ${w}</span></td><td>${rows.length}</td>${buckets.map(b => `<td>${c[b] || '—'}</td>`).join('')}</tr>`;
     }).join('');
   }
   const intro = $('exec-status-intro');
-  if (intro) intro.textContent = `Where every integration in scope stands right now ??? ${S.cockpitRows.length} in the approved plan.`;
+  if (intro) intro.textContent = `Where every integration in scope stands right now — ${S.cockpitRows.length} in the approved plan.`;
 }
 function renderReadinessTab() {
   const tbody = $('readiness-tbody');
@@ -2311,25 +2472,25 @@ function renderReadinessTab() {
   }).join('');
   const readyCount = S.cockpitRows.filter(r => !!r.assignee && !!S.packageAdded && r.status !== 'Error').length;
   const intro = $('exec-readiness-intro');
-  if (intro) intro.textContent = `${readyCount} of ${S.cockpitRows.length} integrations clear every pre-conversion check ??? owner staffed, in a package, no blocking issue.${S.cockpitRows.length - readyCount > 0 ? ` ${S.cockpitRows.length - readyCount} still short of one check.` : ''}`;
+  if (intro) intro.textContent = `${readyCount} of ${S.cockpitRows.length} integrations clear every pre-conversion check — owner staffed, in a package, no blocking issue.${S.cockpitRows.length - readyCount > 0 ? ` ${S.cockpitRows.length - readyCount} still short of one check.` : ''}`;
 }
 // ==================== A2A REVIEW & ASSIGN (AI Agents resolving blocking issues) ====================
 // Named specialist agents an issue can be routed to instead of (or before) a human owner.
-// Purely a front-end resolution UX ??? no backend orchestration call; mirrors the same mocked-realism
+// Purely a front-end resolution UX — no backend orchestration call; mirrors the same mocked-realism
 // level as the rest of the cockpit (Lumi Recommendation text, Figaf test results, etc).
 const A2A_AGENTS_BASE = [
-  { id: 'adapter-channel', label: 'Adapter & Channel', domain: 'Connectivity', desc: 'Adapter parameters ?? Sender/receiver channels ?? Adapter version mapping', needPhrase: 'pi/po channel architecture', subject: 'Channel property set' },
-  { id: 'mapping-udf', label: 'Mapping & UDF', domain: 'Mappings', desc: 'Message-mapping UDFs ?? Java ??? Groovy rewrite ?? Value mappings', needPhrase: 'UDF-to-Groovy mapping rewrite', subject: 'Message-mapping UDF' },
-  { id: 'dataweave', label: 'DataWeave Converter', domain: 'Transforms', desc: 'DataWeave functions ?? Groovy script generation ?? Payload shape checks', needPhrase: 'DataWeave-to-Groovy conversion', subject: 'DataWeave transform' },
-  { id: 'externalized-params', label: 'Externalized Parameters', domain: 'Config', desc: 'Property files ?? Externalized parameters ?? Environment endpoints', needPhrase: 'secure parameters & tenant security', subject: 'property file' },
-  { id: 'security-creds', label: 'Security & Credentials', domain: 'Security', desc: 'Secure parameters ?? Keystore & OAuth credentials ?? Credential rotation', needPhrase: 'secure parameters & tenant security', subject: 'credential/keystore reference' },
-  { id: 'finance', label: 'Finance', domain: 'FI', desc: 'GL & invoice IDocs ?? Tax codes ?? Currency value mappings', needPhrase: 'FI mapping review', subject: 'FI value mapping' },
-  { id: 'controlling', label: 'Controlling', domain: 'CO', desc: 'Cost & profit centers ?? Internal orders ?? CO-PA', needPhrase: 'CO mapping review', subject: 'CO value mapping' },
-  { id: 'sales-orders', label: 'Sales and Orders', domain: 'SD', desc: 'ORDERS / ORDRSP IDocs ?? Pricing conditions ?? Partner functions', needPhrase: 'SD mapping review', subject: 'SD value mapping' },
-  { id: 'procurement-logistics', label: 'Procurement & Logistics', domain: 'MM / LE', desc: 'Purchase orders ?? Deliveries & shipments ?? Material master', needPhrase: 'MM/LE mapping review', subject: 'MM/LE value mapping' },
-  { id: 'hr', label: 'HR', domain: 'HCM', desc: 'Employee master ?? Org management ?? PII masking', needPhrase: 'HR data-mapping review', subject: 'HR field mapping' }
+  { id: 'adapter-channel', label: 'Adapter & Channel', domain: 'Connectivity', desc: 'Adapter parameters · Sender/receiver channels · Adapter version mapping', needPhrase: 'pi/po channel architecture', subject: 'Channel property set' },
+  { id: 'mapping-udf', label: 'Mapping & UDF', domain: 'Mappings', desc: 'Message-mapping UDFs · Java → Groovy rewrite · Value mappings', needPhrase: 'UDF-to-Groovy mapping rewrite', subject: 'Message-mapping UDF' },
+  { id: 'dataweave', label: 'DataWeave Converter', domain: 'Transforms', desc: 'DataWeave functions · Groovy script generation · Payload shape checks', needPhrase: 'DataWeave-to-Groovy conversion', subject: 'DataWeave transform' },
+  { id: 'externalized-params', label: 'Externalized Parameters', domain: 'Config', desc: 'Property files · Externalized parameters · Environment endpoints', needPhrase: 'secure parameters & tenant security', subject: 'property file' },
+  { id: 'security-creds', label: 'Security & Credentials', domain: 'Security', desc: 'Secure parameters · Keystore & OAuth credentials · Credential rotation', needPhrase: 'secure parameters & tenant security', subject: 'credential/keystore reference' },
+  { id: 'finance', label: 'Finance', domain: 'FI', desc: 'GL & invoice IDocs · Tax codes · Currency value mappings', needPhrase: 'FI mapping review', subject: 'FI value mapping' },
+  { id: 'controlling', label: 'Controlling', domain: 'CO', desc: 'Cost & profit centers · Internal orders · CO-PA', needPhrase: 'CO mapping review', subject: 'CO value mapping' },
+  { id: 'sales-orders', label: 'Sales and Orders', domain: 'SD', desc: 'ORDERS / ORDRSP IDocs · Pricing conditions · Partner functions', needPhrase: 'SD mapping review', subject: 'SD value mapping' },
+  { id: 'procurement-logistics', label: 'Procurement & Logistics', domain: 'MM / LE', desc: 'Purchase orders · Deliveries & shipments · Material master', needPhrase: 'MM/LE mapping review', subject: 'MM/LE value mapping' },
+  { id: 'hr', label: 'HR', domain: 'HCM', desc: 'Employee master · Org management · PII masking', needPhrase: 'HR data-mapping review', subject: 'HR field mapping' }
 ];
-// Session-editable roster ??? mirrors activeTeam()/S.team. Admin/Settings can add
+// Session-editable roster — mirrors activeTeam()/S.team. Admin/Settings can add
 // business-process-specific agents on top of the base catalog; every place that
 // used to read A2A_AGENTS directly now reads activeAgents() instead.
 function activeAgents() { return (S.agents && S.agents.length) ? S.agents : A2A_AGENTS_BASE; }
@@ -2344,22 +2505,22 @@ function pickBestAgents(row) {
 }
 function agentWhyText(agent, row) {
   const templates = {
-    'adapter-channel': `${row.name} carries channel/adapter parameters with no direct Integration Suite equivalent ??? this agent maps them onto the target adapter.`,
-    'mapping-udf': `The message mapping for ${row.name} calls a UDF that can't run in Cloud Integration ??? this agent rewrites it as Groovy and re-tests the mapping.`,
+    'adapter-channel': `${row.name} carries channel/adapter parameters with no direct Integration Suite equivalent — this agent maps them onto the target adapter.`,
+    'mapping-udf': `The message mapping for ${row.name} calls a UDF that can't run in Cloud Integration — this agent rewrites it as Groovy and re-tests the mapping.`,
     'dataweave': `${row.name}'s DataWeave transform needs a Groovy rewrite and a payload-shape check before it can deploy.`,
-    'externalized-params': `Property values in ${row.name} didn't translate automatically ??? this agent turns them into externalized parameters so the iFlow stops pointing at sandbox values.`,
-    'security-creds': `${row.name} references secure parameters that need re-keying ??? this agent rotates credentials and re-verifies the keystore.`,
-    'finance': `Payload fields in ${row.name} map to FI objects ??? this agent reviews the business meaning of the corrected values.`,
-    'controlling': `${row.name} touches cost/profit center objects ??? this agent validates the CO mapping.`,
-    'sales-orders': `Payload fields in ${row.name} map to SD objects ??? this agent reviews the business meaning of the corrected values.`,
-    'procurement-logistics': `${row.name} touches procurement/logistics objects ??? this agent validates the MM/LE mapping.`,
-    'hr': `${row.name} carries HR-sensitive fields ??? this agent reviews PII masking and org-mapping correctness.`
+    'externalized-params': `Property values in ${row.name} didn't translate automatically — this agent turns them into externalized parameters so the iFlow stops pointing at sandbox values.`,
+    'security-creds': `${row.name} references secure parameters that need re-keying — this agent rotates credentials and re-verifies the keystore.`,
+    'finance': `Payload fields in ${row.name} map to FI objects — this agent reviews the business meaning of the corrected values.`,
+    'controlling': `${row.name} touches cost/profit center objects — this agent validates the CO mapping.`,
+    'sales-orders': `Payload fields in ${row.name} map to SD objects — this agent reviews the business meaning of the corrected values.`,
+    'procurement-logistics': `${row.name} touches procurement/logistics objects — this agent validates the MM/LE mapping.`,
+    'hr': `${row.name} carries HR-sensitive fields — this agent reviews PII masking and org-mapping correctness.`
   };
   return templates[agent.id] || `${agent.label} can resolve outstanding items on ${row.name}.`;
 }
 function issueBlockingDetail(row) {
   const a = (row._reviewAgents && row._reviewAgents[0]) || activeAgents()[0];
-  return `Flow logic converted, but the ${a.subject} for ${row.name} could not be translated automatically ??? 2 of 4 items have no Integration Suite equivalent, so the iFlow would deploy against sandbox values.`;
+  return `Flow logic converted, but the ${a.subject} for ${row.name} could not be translated automatically — 2 of 4 items have no Integration Suite equivalent, so the iFlow would deploy against sandbox values.`;
 }
 let REVIEW_MODAL_STATE = null;
 function openReviewAssignModal(rowId) {
@@ -2382,7 +2543,7 @@ function renderReviewModalBody(row) {
       <label>
         <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleReviewAgent('${a.id}')">
         <div class="review-agent-info">
-          <div class="review-agent-title"><b>A2A ??? ${a.label}</b> ?? ${a.domain}</div>
+          <div class="review-agent-title"><b>A2A – ${a.label}</b> · ${a.domain}</div>
           ${isBest ? `<div class="review-agent-why"><b>Why this agent:</b> ${agentWhyText(a, row)}</div>` : `<div class="review-agent-desc">${a.desc}</div>`}
         </div>
       </label>
@@ -2392,7 +2553,7 @@ function renderReviewModalBody(row) {
   return `
     <div class="review-agents-panel">
       <div class="review-agents-head"><span><i class="fa-solid fa-robot"></i> AI Agents</span><span class="status-pill progress">Unassigned</span></div>
-      <div class="review-need-banner">Needs <b>${bestAgents[0].needPhrase}</b> ??? nobody staffed on Wave ${row.wave} holds it. Agents below can cover it.</div>
+      <div class="review-need-banner">Needs <b>${bestAgents[0].needPhrase}</b> — nobody staffed on Wave ${row.wave} holds it. Agents below can cover it.</div>
       <div class="review-scope-row"><span class="review-scope-label">Scope</span><div class="review-scope-tabs">${scopeOptions.map(([key, label]) => `<button class="review-scope-tab ${REVIEW_MODAL_STATE.scope === key ? 'active' : ''}" onclick="setReviewScope('${key}')">${label}</button>`).join('')}</div></div>
       <div class="review-agent-list">${rowsHtml}</div>
       <div class="review-agent-count">${sel.size} agent${sel.size === 1 ? '' : 's'} on this error</div>
@@ -2435,8 +2596,8 @@ function resolveReviewWithAgents(rowId) {
   renderCockpitTable();
   refreshExecTabs();
   unflagNav('nav-cockpit');
-  showToast(`${row.name} resolved by AI Agents`, `${row.resolvedByAgents.map(a => a.label).join(' + ')} re-ran the conversion ??? coverage is now 100%.`, 'purple');
-  lumiSay(`AI Agents resolved <b>${row.name}</b> ??? re-ran the conversion, coverage is now 100%. Back in Wave ${row.wave}.`);
+  showToast(`${row.name} resolved by AI Agents`, `${row.resolvedByAgents.map(a => a.label).join(' + ')} re-ran the conversion — coverage is now 100%.`, 'purple');
+  lumiSay(`AI Agents resolved <b>${row.name}</b> — re-ran the conversion, coverage is now 100%. Back in Wave ${row.wave}.`);
   checkCockpitCompletion();
 }
 
@@ -2445,13 +2606,13 @@ function renderErrorsIssuesTab() {
   const resolvedIssues = S.cockpitRows.filter(r => r.resolvedByAgents);
   const advisories = S.cockpitRows.filter(r => r.advisory && r.status === 'Done');
   const intro = $('exec-errors-intro');
-  if (intro) intro.textContent = `${openIssues.length} blocking ?? ${advisories.length} advisory. Blocking findings hold that asset until an owner resolves or parks it ??? the rest of the wave keeps converting. Advisories are semantic differences recorded during conversion; the artifact is complete and shippable, so execution never pauses for them.`;
+  if (intro) intro.textContent = `${openIssues.length} blocking · ${advisories.length} advisory. Blocking findings hold that asset until an owner resolves or parks it — the rest of the wave keeps converting. Advisories are semantic differences recorded during conversion; the artifact is complete and shippable, so execution never pauses for them.`;
   const list = $('errors-issues-list');
   if (!list) return;
   const resolvedHtml = resolvedIssues.map(r => `
     <div class="issue-card issue-card-resolved">
-      <div class="issue-card-head"><b>${r.name} ??? Resolved</b><span class="status-pill done">Resolved</span></div>
-      <div class="issue-card-meta">Wave ${r.wave} ?? owner ${r.assignee} ?? coverage 100%</div>
+      <div class="issue-card-head"><b>${r.name} — Resolved</b><span class="status-pill done">Resolved</span></div>
+      <div class="issue-card-meta">Wave ${r.wave} · owner ${r.assignee} · coverage 100%</div>
       <div class="issue-card-agents">AI Agents ${r.resolvedByAgents.map(a => `<span class="agent-pill">A2A ${a.label}</span>`).join('')}<span class="agent-resolved-tag">Resolved</span></div>
       <div class="issue-card-actions">
         <button class="btn-btp-action-outline" onclick="showRowDetail('${r.id}')">View details</button>
@@ -2460,18 +2621,18 @@ function renderErrorsIssuesTab() {
     </div>`).join('');
   const blockingHtml = openIssues.map(r => `
     <div class="issue-card ${r.status === 'Pending Fix' ? 'issue-card-pending' : 'issue-card-blocking'}">
-      <div class="issue-card-head"><b>${r.name}</b> ??? ${r.status === 'Pending Fix' ? 'fix requested' : 'conversion issue'}<span class="status-pill ${r.status === 'Pending Fix' ? 'progress' : 'error'}">${r.status === 'Pending Fix' ? 'Fix assigned ??? awaiting confirmation' : 'Action required'}</span></div>
-      <div class="issue-card-meta">Wave ${r.wave} ?? owner ${r.assignee}</div>
+      <div class="issue-card-head"><b>${r.name}</b> — ${r.status === 'Pending Fix' ? 'fix requested' : 'conversion issue'}<span class="status-pill ${r.status === 'Pending Fix' ? 'progress' : 'error'}">${r.status === 'Pending Fix' ? 'Fix assigned — awaiting confirmation' : 'Action required'}</span></div>
+      <div class="issue-card-meta">Wave ${r.wave} · owner ${r.assignee}</div>
       <div class="issue-card-actions">
         <button class="btn-btp-action-outline" onclick="showRowDetail('${r.id}')">View details</button>
         <button class="btn-btp-action-outline" onclick="showIflowViewModal('${r.id}')">Open object</button>
         ${canAct() ? (r.status === 'Pending Fix' ? `<button class="btn-btp-action-solid" onclick="markFixResult(S.cockpitRows.find(x=>x.id==='${r.id}'),'yes')">Mark resolved</button>` : `<button class="btn-btp-action-solid" onclick="openReviewAssignModal('${r.id}')">Review &amp; assign</button>`) : ''}
       </div>
     </div>`).join('');
-  const advisoryHtml = advisories.length ? `<div class="advisory-section-label">Advisories ??? migration not affected</div>${advisories.map(r => `
+  const advisoryHtml = advisories.length ? `<div class="advisory-section-label">Advisories — migration not affected</div>${advisories.map(r => `
     <div class="issue-card advisory">
-      <div class="issue-card-head"><b>${r.name}</b> ??? converted with advisory<span class="status-pill progress">Non-blocking</span></div>
-      <div class="issue-card-meta">Wave ${r.wave} ?? owner ${r.assignee} ?? coverage 100%</div>
+      <div class="issue-card-head"><b>${r.name}</b> — converted with advisory<span class="status-pill progress">Non-blocking</span></div>
+      <div class="issue-card-meta">Wave ${r.wave} · owner ${r.assignee} · coverage 100%</div>
       <div style="font-size:0.78rem;color:var(--btp-text-muted-dark);margin-top:4px;">${r.advisory}</div>
       <div class="issue-card-actions">
         <button class="btn-btp-action-outline" onclick="showRowDetail('${r.id}')">Open object</button>
@@ -2494,7 +2655,7 @@ function renderProgressTab() {
   const remainingTotal = totalEffortMinutes(S.cockpitRows.filter(r => !['Done', 'Error', 'Parked'].includes(r.status)));
   const estimatedTotal = totalEffortMinutes(S.cockpitRows);
   const intro = $('exec-progress-intro');
-  if (intro) intro.textContent = `${done} of ${total} integrations converted ?? ${pct}% ?? ${formatEffort(remainingTotal)} of ${formatEffort(estimatedTotal)} estimated effort remaining.`;
+  if (intro) intro.textContent = `${done} of ${total} integrations converted · ${pct}% · ${formatEffort(remainingTotal)} of ${formatEffort(estimatedTotal)} estimated effort remaining.`;
   updateCockpitTimeStat();
   const host = $('progress-wave-list');
   if (!host) return;
@@ -2503,7 +2664,7 @@ function renderProgressTab() {
     const wdone = rows.filter(r => ['Done', 'Error', 'Parked'].includes(r.status)).length;
     const wpct = rows.length ? Math.round((wdone / rows.length) * 100) : 0;
     return `<div class="progress-wave-card">
-      <div class="progress-wave-head"><b>Wave ${w}</b><span class="wave-chip">${rows.length} integrations</span><span class="progress-wave-meta">${wdone}/${rows.length} converted ?? ${wpct}%</span></div>
+      <div class="progress-wave-head"><b>Wave ${w}</b><span class="wave-chip">${rows.length} integrations</span><span class="progress-wave-meta">${wdone}/${rows.length} converted · ${wpct}%</span></div>
       <div class="cockpit-progress-track"><div class="cockpit-progress-fill" style="width:${wpct}%;"></div></div>
     </div>`;
   }).join('');
@@ -2518,7 +2679,7 @@ function logExecRaw(text) {
   S.execRawLog.unshift(text);
   renderExecutionTab();
 }
-// The scrollable Lumi chat-transcript feed at the top of Migration Execution ???
+// The scrollable Lumi chat-transcript feed at the top of Migration Execution —
 // per-row "converted" cards plus inline proactive alert cards on error, matching
 // the reference videos. Distinct from exec-log-list (plain timestamped rows,
 // unchanged below it) and exec-console (raw terminal log, also unchanged).
@@ -2540,7 +2701,7 @@ function renderExecFeed() {
     if (e.type === 'alert' && !e.dismissed) {
       return `<div class="exec-feed-card exec-feed-alert">
         <div class="exec-feed-who"><i class="fa-solid fa-triangle-exclamation"></i> LUMI</div>
-        <div class="exec-feed-text">?????? ${e.text}</div>
+        <div class="exec-feed-text">⚠️ ${e.text}</div>
         ${e.sub ? `<div class="exec-feed-sub">${e.sub}</div>` : ''}
         <div class="exec-feed-actions">
           <button class="btn-btp-action-solid" onclick="dismissExecFeedAlert('${e.rowId}'); switchExecTab('errors');">Review</button>
@@ -2555,14 +2716,14 @@ function renderExecFeed() {
       ${e.sub ? `<div class="exec-feed-sub">${e.sub}</div>` : ''}
     </div>`;
   }).join('');
-  const working = S.cockpitStarted && !S.cockpitRows.every(r => r.status === 'Done' || r.status === 'Error') ? '<div class="exec-feed-working">Working???</div>' : '';
+  const working = S.cockpitStarted && !S.cockpitRows.every(r => r.status === 'Done' || r.status === 'Error') ? '<div class="exec-feed-working">Working…</div>' : '';
   host.innerHTML = cardsHtml + working;
   host.scrollTop = host.scrollHeight;
 }
 function renderExecutionTab() {
   const list = $('exec-log-list');
   if (list) {
-    list.innerHTML = (S.execLog || []).map(l => `<div class="exec-log-row"><span class="exec-log-time">${l.t.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} ?? ${l.t.toLocaleTimeString()}</span><i class="fa-solid fa-circle-check"></i><span>${l.text}</span></div>`).join('');
+    list.innerHTML = (S.execLog || []).map(l => `<div class="exec-log-row"><span class="exec-log-time">${l.t.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · ${l.t.toLocaleTimeString()}</span><i class="fa-solid fa-circle-check"></i><span>${l.text}</span></div>`).join('');
   }
   const console_ = $('exec-console');
   if (console_) console_.textContent = (S.execRawLog || []).join('\n');
@@ -2575,7 +2736,7 @@ function renderExecutionTab() {
 }
 // The "Target Integration Suite" deployment/test/monitor card grid lives on its
 // own "Target execution" tab, between Migration execution and Integration
-// package ??? not on Integration package, which stays the plain manifest/zip-contents preview.
+// package — not on Integration package, which stays the plain manifest/zip-contents preview.
 function renderExecTargetIS() {
   const host = $('exec-target-is-wrap');
   if (!host) return;
@@ -2592,7 +2753,7 @@ function refreshExecTabs() {
   renderPendingApprovals();
 }
 // Fires the moment every row clears its pre-conversion checks (the same
-// terminal condition that reveals the Target Integration Suite grid) ??? reads
+// terminal condition that reveals the Target Integration Suite grid) — reads
 // an existing signal, no new scan. Admin and Approver both see it; it's what
 // unlocks Push to BTP Integration Suite / Take to Production for Admin once
 // Approved. Viewer never sees this panel.
@@ -2612,7 +2773,7 @@ function renderPendingApprovals() {
       <div class="lumi-avatar idle" style="--size:28px;"><div class="visor"></div></div>
       <div>
         <div class="pending-approvals-title">Gate cleared</div>
-        <div class="pending-approvals-cleared"><i class="fa-solid fa-circle-check"></i> ${waveLabel} ??? approved${S.pushApprovedBy ? ` by ${S.pushApprovedBy}` : ''}${S.pushApprovedAt ? `, ${S.pushApprovedAt}` : ''}. Cleared for Push to BTP Integration Suite / Take to Production.</div>
+        <div class="pending-approvals-cleared"><i class="fa-solid fa-circle-check"></i> ${waveLabel} — approved${S.pushApprovedBy ? ` by ${S.pushApprovedBy}` : ''}${S.pushApprovedAt ? `, ${S.pushApprovedAt}` : ''}. Cleared for Push to BTP Integration Suite / Take to Production.</div>
       </div>`;
     return;
   }
@@ -2620,7 +2781,7 @@ function renderPendingApprovals() {
     <div class="lumi-avatar idle" style="--size:28px;"><div class="visor"></div></div>
     <div>
       <div class="pending-approvals-title">Pending Approvals</div>
-      <div class="pending-approvals-text">${waveLabel} ??? ${readyCount} of ${rows.length} interfaces ready, 0 blocking issues. Lumi: "Everything's ready ??? approve to clear the production gate?"</div>
+      <div class="pending-approvals-text">${waveLabel} — ${readyCount} of ${rows.length} interfaces ready, 0 blocking issues. Lumi: "Everything's ready — approve to clear the production gate?"</div>
     </div>
     ${isApprover() || isAdmin() ? `<div class="pending-approvals-actions">
       <button class="btn-btp-gold" onclick="approvePush()">Approve</button>
@@ -2637,9 +2798,9 @@ function approvePush() {
   showToast('Approved', 'Gate cleared for Push to BTP Integration Suite / Take to Production.', 'purple');
 }
 function rejectPush() {
-  // Reject just keeps the gate closed for this session ??? no separate "rejected"
+  // Reject just keeps the gate closed for this session — no separate "rejected"
   // state to track; the Pending Approvals panel simply stays up for the next review.
-  showToast('Rejected', 'The gate stays closed ??? Push to BTP Integration Suite / Take to Production remain locked.', 'danger');
+  showToast('Rejected', 'The gate stays closed — Push to BTP Integration Suite / Take to Production remain locked.', 'danger');
 }
 // Small always-visible colorful widget (bottom-right, above the mascot) tracking
 // wave 1/2/3 progress independent of which screen or tab is currently open.
@@ -2667,12 +2828,12 @@ function switchExecTab(tab) {
   qsa('.exec-tab', $('exec-tabs')).forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
 }
 // Lumi proposes the package name/description (per "packages names ... defaulted
-// or initialized by Lumi") but you can edit either before creating ??? same beat
+// or initialized by Lumi") but you can edit either before creating — same beat
 // as the reference video's "Define Package" dialog.
 function addPackage() {
-  if (!S.cockpitRows.length) { lumiSay("There's nothing to package yet ??? scan and plan a migration first."); return; }
+  if (!S.cockpitRows.length) { lumiSay("There's nothing to package yet — scan and plan a migration first."); return; }
   const defaultName = S.packageName || `${S.projectName} Package`;
-  const defaultDesc = S.packageDescription || `Auto-generated by Lumi ??? ${S.cockpitRows.length} converted items across ${getActiveWaveNumbers().length} waves.`;
+  const defaultDesc = S.packageDescription || `Auto-generated by Lumi — ${S.cockpitRows.length} converted items across ${getActiveWaveNumbers().length} waves.`;
   const body = `
     <div class="form-group-btp"><label>Package</label><input type="text" class="btp-input" id="define-package-name" value="${defaultName}"></div>
     <div class="form-group-btp" style="margin-top:14px;"><label>Description</label><textarea class="btp-input" id="define-package-desc" rows="3" style="resize:vertical;width:100%;">${defaultDesc}</textarea></div>`;
@@ -2703,13 +2864,13 @@ function syncStartExecutionButtons(html, disabled) {
 // rows (e.g. 423) instead of ~60 assets. Processing exactly one row per
 // 1000ms tick would make a 423-row demo run for 7+ minutes, so the batch size
 // scales with the row count to keep total runtime in the same ~60-100s
-// ballpark regardless of scale ??? a batch never crosses a wave boundary, so
+// ballpark regardless of scale — a batch never crosses a wave boundary, so
 // wave-start/complete announcements still land on the right tick.
 const EXEC_TARGET_TICKS = 70;
 function startExecution() {
   if (S.cockpitStarted) return;
   S.cockpitStarted = true;
-  syncStartExecutionButtons('<i class="fa-solid fa-spinner fa-spin"></i> Running???', true);
+  syncStartExecutionButtons('<i class="fa-solid fa-spinner fa-spin"></i> Running…', true);
   const batchSize = Math.max(1, Math.ceil(S.cockpitRows.length / EXEC_TARGET_TICKS));
   logExecLine('Wave 1 execution started');
   logExecRaw(`[${new Date().toLocaleString()}] INFO  cockpit: Wave 1 execution kicked off`);
@@ -2720,8 +2881,8 @@ function startExecution() {
     const wave = S.cockpitRows[i].wave;
     if (wave !== announcedWave) {
       announcedWave = wave;
-      lumiSay(`Starting Wave ${wave}???`);
-      pushExecFeed({ type: 'info', text: `Starting Wave ${wave}???` });
+      lumiSay(`Starting Wave ${wave}…`);
+      pushExecFeed({ type: 'info', text: `Starting Wave ${wave}…` });
       if (wave > 1) { logExecLine(`Wave ${wave} execution started`); logExecRaw(`[${new Date().toLocaleString()}] INFO  cockpit: Wave ${wave} execution kicked off`); }
     }
     // Clamp the batch so it never spans two waves.
@@ -2730,7 +2891,7 @@ function startExecution() {
     const batch = S.cockpitRows.slice(i, end);
     batch.forEach(row => {
       row.status = 'In Progress';
-      logExecRaw(`[${new Date().toLocaleString()}] INFO  iflow-generator: Compiling ${row.name} ??? CPI iFlow`);
+      logExecRaw(`[${new Date().toLocaleString()}] INFO  iflow-generator: Compiling ${row.name} → CPI iFlow`);
     });
     renderCockpitTable();
     updateCockpitTimeStat();
@@ -2742,10 +2903,10 @@ function startExecution() {
           row.convertedAt = new Date().toISOString();
           logExecLine(`${row.name} migrated successfully`);
           logExecRaw(`[${new Date().toLocaleString()}] INFO  deployer: ${row.name} converted and staged`);
-          pushExecFeed({ type: 'info', text: `${row.name} converted ??? artifacts generated (${PLATFORMS[S.platform].label} Migration).`, sub: 'No blockers found.' });
+          pushExecFeed({ type: 'info', text: `${row.name} converted — artifacts generated (${PLATFORMS[S.platform].label} Migration).`, sub: 'No blockers found.' });
         } else {
           logExecRaw(`[${new Date().toLocaleString()}] ERROR connector: ${row.name} ERR_CONVERSION_FAILED`);
-          pushExecFeed({ type: 'alert', text: `I think you should review this ??? a conversion issue on <code>${row.name}</code> in Wave ${row.wave}.`, sub: `${row.assignee} owns it. Want to see it?`, rowId: row.id });
+          pushExecFeed({ type: 'alert', text: `I think you should review this — a conversion issue on <code>${row.name}</code> in Wave ${row.wave}.`, sub: `${row.assignee} owns it. Want to see it?`, rowId: row.id });
           flagReview('nav-cockpit', 'cockpit', `a conversion issue on <code>${row.name}</code> in Wave ${row.wave}. Want to see it?`);
         }
       });
@@ -2764,11 +2925,11 @@ function startExecution() {
 function onCockpitDone() {
   const errors = S.cockpitRows.filter(r => r.status === 'Error').length;
   syncStartExecutionButtons('<i class="fa-solid fa-check"></i> Execution Complete', true);
-  lumiSay(errors ? `All waves processed ??? ${errors} item${errors > 1 ? 's' : ''} still need${errors === 1 ? 's' : ''} your review before we close out.` : `All waves converted, 0 open errors. Ready to close out whenever you are.`, { alert: !!errors });
+  lumiSay(errors ? `All waves processed — ${errors} item${errors > 1 ? 's' : ''} still need${errors === 1 ? 's' : ''} your review before we close out.` : `All waves converted, 0 open errors. Ready to close out whenever you are.`, { alert: !!errors });
   const done = S.cockpitRows.filter(r => r.status === 'Done').length;
   logBrainEvent('conversion_result', S.platform,
     { rows: S.cockpitRows.map(r => ({ id: r.id, name: r.name, status: r.status, tier: rowTier(r), iflowName: r.iflowName, iflowCount: r.iflowCount, wave: r.wave, advisory: r.advisory })) },
-    `Execution complete ??? ${done} of ${S.cockpitRows.length} converted, ${errors} error(s).`);
+    `Execution complete — ${done} of ${S.cockpitRows.length} converted, ${errors} error(s).`);
   if (!errors) checkCockpitCompletion();
 }
 function checkCockpitCompletion() {
@@ -2779,7 +2940,7 @@ function checkCockpitCompletion() {
   if (nav && nav.classList.contains('pending')) {
     markDone('nav-cockpit');
     unlockNav('nav-close');
-    lumiSay('Everything is resolved ??? ready to close out?');
+    lumiSay('Everything is resolved — ready to close out?');
     lumiChoices([{ label: 'Close the project', cls: 'primary', onClick: goToClose }]);
   }
 }
@@ -2795,7 +2956,7 @@ function showRowDetail(id) {
     <div class="kv"><span>Assignee</span><b>${row.assignee}</b></div>
     <div class="kv"><span>Status</span><b>${row.status}</b></div>
     ${packagedAs}
-    <div style="margin-top:14px;font-weight:700;font-size:0.82rem;">${sourceStepNoun} structure ??? erroneous branches highlighted, click View to inspect a file</div>
+    <div style="margin-top:14px;font-weight:700;font-size:0.82rem;">${sourceStepNoun} structure — erroneous branches highlighted, click View to inspect a file</div>
     <div id="row-detail-tree-host" style="margin-top:8px;">${asset ? renderTreeEditorHtml(asset) : '(structure unavailable)'}</div>`;
   const buttons = [{ label: 'Close', cls: 'btn-btp-cancel', onClick: closeModal }, { label: 'Assign A2A Developers', cls: 'btn-btp-cancel', onClick: () => showDeveloperAssignModal(id) }];
   if (row.status === 'Error') buttons.push({ label: `Send to ${row.assignee} for fix`, cls: 'btn-btp-gold', onClick: () => sendFixRequest(row) });
@@ -2806,25 +2967,25 @@ function showRowDetail(id) {
   }
 }
 
-// Up to 8 A2A developers per iflow ??? the parallel-review model that's the actual
+// Up to 8 A2A developers per iflow — the parallel-review model that's the actual
 // pitch of the accelerator. Reachable from any row in the Integration list table,
-// not just flagged ones, and from the row-detail modal ??? "review at any point."
+// not just flagged ones, and from the row-detail modal — "review at any point."
 function showDeveloperAssignModal(id) {
   const row = S.cockpitRows.find(r => r.id === id);
   if (!row) return;
   row.assignees = row.assignees && row.assignees.length ? row.assignees : activeTeam().filter(m => m.name === row.assignee).map(m => m.id);
   const body = `
-    <div style="font-size:0.82rem;color:var(--btp-text-muted-dark);margin-bottom:10px;">Assign up to 8 A2A developers to <b>${row.name}</b> ??? complex iflows often need more than one set of eyes in parallel.</div>
+    <div style="font-size:0.82rem;color:var(--btp-text-muted-dark);margin-bottom:10px;">Assign up to 8 A2A developers to <b>${row.name}</b> — complex iflows often need more than one set of eyes in parallel.</div>
     <div class="dev-assign-list" id="dev-assign-list">
       ${activeTeam().map(m => `
         <label class="dev-assign-row">
           <input type="checkbox" value="${m.id}" ${row.assignees.includes(m.id) ? 'checked' : ''}>
           <span class="avatar-chip" style="background:${m.color};">${m.name.split(' ').map(x => x[0]).join('')}</span>
-          <span>${m.name} ??? ${m.role}</span>
+          <span>${m.name} — ${m.role}</span>
         </label>`).join('')}
     </div>
     <div id="dev-assign-count" style="font-size:0.72rem;color:var(--btp-text-muted-dark);margin-top:8px;font-weight:700;"></div>`;
-  openModal(`Assign Developers ??? ${row.name}`, body, [
+  openModal(`Assign Developers — ${row.name}`, body, [
     { label: 'Cancel', cls: 'btn-btp-cancel', onClick: closeModal },
     { label: 'Save Assignment', cls: 'btn-btp-gold', onClick: () => saveDeveloperAssignment(id) }
   ]);
@@ -2851,7 +3012,7 @@ function saveDeveloperAssignment(id) {
 
 // ==================== MIGRATION REPORT (viewable + downloadable) ====================
 // Every converted/pushed/migrated iFlow in one place, derived straight from
-// S.cockpitRows/S.assets like every other exec tab ??? no parallel state. Error and
+// S.cockpitRows/S.assets like every other exec tab — no parallel state. Error and
 // High-complexity rows get an inline multi-select (capped at 8, same rule as the
 // row-level "Assign A2A Developers" modal) so staffing a complex iflow doesn't
 // require leaving the report to open that modal.
@@ -2861,13 +3022,13 @@ function reportRowIsComplex(row) {
 }
 // Which underlying issue "subject" (mirrors issueBlockingDetail's per-agent subject
 // line) triggered each error, without requiring the Review & Assign modal to have
-// ever been opened ??? same lazy-cache pattern issueBlockingDetail() already uses.
+// ever been opened — same lazy-cache pattern issueBlockingDetail() already uses.
 function rowIssueSubject(row) {
   row._reviewAgents = row._reviewAgents || pickBestAgents(row);
   return row._reviewAgents[0].subject;
 }
 function reportComplexityBreakdown() {
-  // rowTier()/asset.tier use 'Simple'/'Medium'/'High' ??? matching those keys
+  // rowTier()/asset.tier use 'Simple'/'Medium'/'High' — matching those keys
   // exactly (not 'Low') so Simple-tier rows don't silently drop out of the count.
   const out = { Simple: 0, Medium: 0, High: 0 };
   S.cockpitRows.forEach(r => { const tier = rowTier(r); out[tier] = (out[tier] || 0) + 1; });
@@ -2883,11 +3044,11 @@ function reportTopIssues(limit) {
   S.cockpitRows.filter(r => (r.errorCount || 0) > 0).forEach(r => { const s = rowIssueSubject(r); counts[s] = (counts[s] || 0) + 1; });
   return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, limit || 5);
 }
-// The Brain "learning curve" ??? each past migration's auto-resolve rate (issues
+// The Brain "learning curve" — each past migration's auto-resolve rate (issues
 // AI Agents fixed vs. issues raised), using the real totals archiveProject()
 // stores in S.migrationHistory, plus the in-progress migration as the latest
 // point. Same narrative brainSpeedupPct() already tells ("the Brain gets faster
-// the more migrations it's seen") ??? here for the underlying trend, not just a
+// the more migrations it's seen") — here for the underlying trend, not just a
 // single rolled-up percentage.
 function reportLearningCurve() {
   const past = (S.migrationHistory || []).map(m => ({
@@ -2949,16 +3110,16 @@ function renderReportAnalytics() {
         <div class="donut-row">
           <div class="donut-chart" style="background:${donutGradient};"><div class="donut-hole"><b>${total}</b><span>iFlows</span></div></div>
           <div class="donut-legend">
-            <span><i class="donut-dot" style="background:#10b981;"></i> Simple ??? ${complexity.Simple} (${Math.round(lowPct)}%)</span>
-            <span><i class="donut-dot" style="background:var(--btp-brand-gold-hover);"></i> Medium ??? ${complexity.Medium} (${Math.round(medPct)}%)</span>
-            <span><i class="donut-dot" style="background:var(--lumi-alert);"></i> Complex ??? ${complexity.High} (${Math.round(100 - lowPct - medPct)}%)</span>
+            <span><i class="donut-dot" style="background:#10b981;"></i> Simple — ${complexity.Simple} (${Math.round(lowPct)}%)</span>
+            <span><i class="donut-dot" style="background:var(--btp-brand-gold-hover);"></i> Medium — ${complexity.Medium} (${Math.round(medPct)}%)</span>
+            <span><i class="donut-dot" style="background:var(--lumi-alert);"></i> Complex — ${complexity.High} (${Math.round(100 - lowPct - medPct)}%)</span>
           </div>
         </div>
       </div>
       <div class="report-analytics-card">
         <h5>Top agents used for fix</h5>
         ${topAgents.length ? topAgents.map(([label, count]) => `
-          <div class="report-bar-row"><span class="report-bar-label">A2A ??? ${label}</span><div class="report-bar-track"><div class="report-bar-fill" style="width:${(count / maxAgentCount) * 100}%;"></div></div><span class="report-bar-count">${count}</span></div>`).join('')
+          <div class="report-bar-row"><span class="report-bar-label">A2A – ${label}</span><div class="report-bar-track"><div class="report-bar-fill" style="width:${(count / maxAgentCount) * 100}%;"></div></div><span class="report-bar-count">${count}</span></div>`).join('')
       : '<div class="mock-note"><i class="fa-solid fa-circle-info"></i> No issues resolved by AI Agents yet.</div>'}
       </div>
       <div class="report-analytics-card">
@@ -2968,7 +3129,7 @@ function renderReportAnalytics() {
       : '<div class="mock-note"><i class="fa-solid fa-circle-info"></i> No conversion issues raised yet.</div>'}
       </div>
       <div class="report-analytics-card report-analytics-wide">
-        <h5>Brain learning curve ??? auto-resolve rate across migrations</h5>
+        <h5>Brain learning curve — auto-resolve rate across migrations</h5>
         ${renderLearningCurveSvg(reportLearningCurve())}
       </div>
     </div>`;
@@ -2979,7 +3140,7 @@ function renderReportTab() {
   const introEl = $('exec-report-intro');
   if (introEl) {
     const assetCount = new Set(S.cockpitRows.map(r => r.assetId)).size;
-    introEl.textContent = `${S.cockpitRows.length} iFlows in scope across ${assetCount} source ${assetCount === 1 ? 'object' : 'objects'}. Every converted, pushed, and migrated iFlow in one view ??? errors and complex iFlows carry an A2A developer dropdown right here so you can staff them without leaving the report.`;
+    introEl.textContent = `${S.cockpitRows.length} iFlows in scope across ${assetCount} source ${assetCount === 1 ? 'object' : 'objects'}. Every converted, pushed, and migrated iFlow in one view — errors and complex iFlows carry an A2A developer dropdown right here so you can staff them without leaving the report.`;
   }
   renderReportAnalytics();
   tbody.innerHTML = S.cockpitRows.map(r => {
@@ -2990,7 +3151,7 @@ function renderReportTab() {
       <button class="btn-btp-table-action btn-view-iflow" onclick="showIflowViewModal('${r.id}')" title="View iFlow"><i class="fa-solid fa-eye"></i></button>`;
     const assignCell = complex
       ? `<select multiple size="3" class="report-dev-select" id="report-assign-${r.id}" onchange="reportAssignChange('${r.id}')" title="Select up to 8">
-          ${activeTeam().map(m => `<option value="${m.id}" ${(r.assignees || []).includes(m.id) ? 'selected' : ''}>${m.name} ??? ${m.role}</option>`).join('')}
+          ${activeTeam().map(m => `<option value="${m.id}" ${(r.assignees || []).includes(m.id) ? 'selected' : ''}>${m.name} — ${m.role}</option>`).join('')}
         </select>`
       : `<span style="font-size:0.78rem;">${r.assignee}</span>`;
     return `<tr class="${r.status === 'Error' ? 'row-flagged' : ''}">
@@ -3009,7 +3170,7 @@ function reportAssignChange(id) {
   let checked = qsa('option', select).filter(o => o.selected).map(o => o.value);
   if (checked.length > 8) {
     // Selecting past 8 in a native multi-select can't be blocked mid-click the way
-    // the modal's checkboxes disable themselves ??? trim from the end and say so.
+    // the modal's checkboxes disable themselves — trim from the end and say so.
     checked = checked.slice(0, 8);
     qsa('option', select).forEach(o => { o.selected = checked.includes(o.value); });
     showToast('Limit is 8', 'Only the first 8 selected developers were kept.', 'danger');
@@ -3022,7 +3183,7 @@ function reportAssignChange(id) {
 }
 function csvEscape(v) { return `"${String(v == null ? '' : v).replace(/"/g, '""')}"`; }
 async function downloadReportCsv() {
-  if (!S.cockpitRows.length) { showToast('Nothing to report yet', 'Run a migration first ??? the report fills in as items convert.', 'danger'); return; }
+  if (!S.cockpitRows.length) { showToast('Nothing to report yet', 'Run a migration first — the report fills in as items convert.', 'danger'); return; }
   const header = ['Wave', 'Asset', 'Type', 'Interface (of source object)', 'Complexity', 'Status', 'iFlow Status', 'iFlow Step', 'iFlow Name', 'iFlow Link', 'Assignees', 'Advisory / Error'];
   const rows = S.cockpitRows.map(r => {
     const asset = S.assets.find(a => a.id === r.assetId);
@@ -3031,7 +3192,7 @@ async function downloadReportCsv() {
       `Wave ${r.wave}`, r.name, r.type, `${r.interfaceIndex}/${r.assetFlowTotal}`, asset ? asset.tier : 'Medium', r.status,
       iflowStatusLabel(r), iflowStepLabel(r), r.iflowName, r.iflowLink,
       assigneeNames.length ? assigneeNames.join('; ') : r.assignee,
-      r.status === 'Error' ? 'Blocking error ??? needs review' : (r.advisory || '')
+      r.status === 'Error' ? 'Blocking error — needs review' : (r.advisory || '')
     ].map(csvEscape).join(',');
   });
   const assetCount = new Set(S.cockpitRows.map(r => r.assetId)).size;
@@ -3055,7 +3216,7 @@ async function downloadSingleAsset(id) {
   showToast('Downloaded', `${row.name} artifact saved.`, 'purple');
 }
 
-// A quick, generated (not a real LLM call) explanation of one converted item ???
+// A quick, generated (not a real LLM call) explanation of one converted item —
 // same "What it contains / Dependencies / Assumptions / Constraints / Worth
 // knowing" shape the reference video's per-item insight panel uses.
 function showLumiInsight(id) {
@@ -3067,25 +3228,25 @@ function showLumiInsight(id) {
   const riskWord = asset.tier === 'High' ? 'heavy custom logic and several dependencies'
     : asset.tier === 'Medium' ? 'some custom mapping/transform logic'
       : 'straightforward, low-risk logic';
-  lumiSay(`<b>Insight ??? ${row.name}</b>`);
+  lumiSay(`<b>Insight — ${row.name}</b>`);
   lumiHtml(`<div class="insight-card">
     <div><b>What it contains</b><p>${asset.type} converting via ${p.terms.mappingLabel}; ${riskWord}.</p></div>
-    <div><b>Dependencies</b><p>${asset.deps} dependent object${asset.deps === 1 ? '' : 's'} ??? carried along automatically unless flagged.</p></div>
+    <div><b>Dependencies</b><p>${asset.deps} dependent object${asset.deps === 1 ? '' : 's'} — carried along automatically unless flagged.</p></div>
     <div><b>Assumptions</b><p>Value mappings and credentials already exist on the target; the endpoint contract stays as-is.</p></div>
     <div><b>Constraints</b><p>Estimated ${formatEffort(effortMinutesForTier(asset.tier))} of review effort, owned by ${row.assignee} in Wave ${row.wave}.</p></div>
-    <div><b>Worth knowing</b><p>${row.advisory || (asset.tier === 'High' ? 'Custom logic is regenerated as best-effort ??? test the transform output before promoting.' : 'No advisories on this item.')}</p></div>
+    <div><b>Worth knowing</b><p>${row.advisory || (asset.tier === 'High' ? 'Custom logic is regenerated as best-effort — test the transform output before promoting.' : 'No advisories on this item.')}</p></div>
   </div>`);
   lumiChoices([
     {
       label: 'What could break?', onClick: () => lumiSay(asset.tier === 'High'
-        ? `Mostly the parts marked "needs review" in the structure tree ??? those branches couldn't be mapped 1:1 and fall back to a manual pattern.`
-        : `Nothing flagged ??? this one converted cleanly with full coverage.`)
+        ? `Mostly the parts marked "needs review" in the structure tree — those branches couldn't be mapped 1:1 and fall back to a manual pattern.`
+        : `Nothing flagged — this one converted cleanly with full coverage.`)
     },
     { label: 'Show me the script', onClick: () => showTreeModal(id) }
   ]);
 }
 
-// A small mocked "canvas" snippet of the actual SAP Integration Suite iFlow ???
+// A small mocked "canvas" snippet of the actual SAP Integration Suite iFlow —
 // start/end message events plus a deterministic run of steps built from the
 // asset's tier/type, styled after the real CPI iFlow editor canvas. Not a live
 // render of the real .iflw (this app has no BPMN engine); it's a believable
@@ -3119,7 +3280,7 @@ function showIflowViewModal(id) {
   }).join('');
   const body = `
     <div class="iflow-modal-head-row">
-      <div><b>${row.iflowName}</b><div style="font-size:0.72rem;color:var(--btp-text-muted-dark);">Deduced from ${row.name} (${p.label})${row.assetFlowTotal > 1 ? ` ??? interface ${row.interfaceIndex} of ${row.assetFlowTotal} within ${asset ? asset.name : 'this object'}` : ''}</div></div>
+      <div><b>${row.iflowName}</b><div style="font-size:0.72rem;color:var(--btp-text-muted-dark);">Deduced from ${row.name} (${p.label})${row.assetFlowTotal > 1 ? ` — interface ${row.interfaceIndex} of ${row.assetFlowTotal} within ${asset ? asset.name : 'this object'}` : ''}</div></div>
       <span class="status-pill ${stepCls}">${stepLabel}</span>
     </div>
     <div class="iflow-canvas">
@@ -3127,8 +3288,8 @@ function showIflowViewModal(id) {
       <div class="iflow-canvas-row">${nodesHtml}</div>
       <div class="iflow-lane-label right"><i class="fa-solid fa-cloud"></i> SAP Integration Suite (Receiver)</div>
     </div>
-    <div class="mock-note" style="margin-top:14px;"><i class="fa-solid fa-circle-info"></i> Visual snippet only ??? a simplified stand-in for the real .iflw canvas. Open the item in SAP Integration Suite for the actual editable flow.</div>`;
-  openModal(`View iFlow ??? ${row.name}`, body, [
+    <div class="mock-note" style="margin-top:14px;"><i class="fa-solid fa-circle-info"></i> Visual snippet only — a simplified stand-in for the real .iflw canvas. Open the item in SAP Integration Suite for the actual editable flow.</div>`;
+  openModal(`View iFlow — ${row.name}`, body, [
     { label: 'Close', cls: 'btn-btp-cancel', onClick: closeModal },
     { label: 'Open in Integration Suite', cls: 'btn-btp-gold', onClick: () => window.open(row.iflowLink, '_blank', 'noopener') }
   ]);
@@ -3142,7 +3303,7 @@ function getAllKafkaEventNodes(asset) {
 }
 
 // Lumi proactively flags Kafka events sitting in an asset under review, instead of waiting
-// for the reviewer to notice them buried in the tree ??? same spirit as Lumi's other
+// for the reviewer to notice them buried in the tree — same spirit as Lumi's other
 // proactive nudges elsewhere in this cockpit (goToBuckets, checkCockpitCompletion).
 // `hostId` is whichever tree-host element is on screen right now (the cockpit row-detail
 // modal and the earlier "Validate structure" modal each use their own).
@@ -3153,14 +3314,14 @@ function suggestKafkaConversion(asset, hostId) {
   if (!kafkaNodes.length) return;
   const unpicked = kafkaNodes.filter(n => !n.kafkaEvent.selected);
   const n = kafkaNodes.length;
-  lumiSay(`${asset.name} carries ${n} Kafka event${n > 1 ? 's' : ''} ??? want me to wire the one${n > 1 ? 's' : ''} you need to IS-Kafka before this converts?`);
+  lumiSay(`${asset.name} carries ${n} Kafka event${n > 1 ? 's' : ''} — want me to wire the one${n > 1 ? 's' : ''} you need to IS-Kafka before this converts?`);
   if (!unpicked.length) return;
   lumiChoices([{
     label: `Select all ${n} Kafka event${n > 1 ? 's' : ''}`, cls: 'primary', onClick: () => {
       kafkaNodes.forEach(node => { node.kafkaEvent.selected = true; });
       const host = $(hostId);
       if (host) { host.innerHTML = renderTreeEditorHtml(asset); wireTreeEditorEvents(host, asset); }
-      lumiSay(`Done ??? all ${n} event${n > 1 ? 's' : ''} picked. They'll generate ${n} IS-Kafka channel${n > 1 ? 's' : ''} in the .iflw the moment this converts.`);
+      lumiSay(`Done — all ${n} event${n > 1 ? 's' : ''} picked. They'll generate ${n} IS-Kafka channel${n > 1 ? 's' : ''} in the .iflw the moment this converts.`);
     }
   }]);
 }
@@ -3170,7 +3331,7 @@ function sendFixRequest(row) {
   row.status = 'Pending Fix';
   renderCockpitTable();
   showToast('Fix Requested', `Sent to ${row.assignee}: please review and fix ${row.name}.`, 'purple');
-  lumiSay(`I've sent a fix request to <b>${row.assignee}</b> for <b>${row.name}</b>. I'll check back ??? has it been fixed?`);
+  lumiSay(`I've sent a fix request to <b>${row.assignee}</b> for <b>${row.name}</b>. I'll check back — has it been fixed?`);
   lumiChoices([
     { label: 'Yes, fixed', cls: 'primary', onClick: () => markFixResult(row, 'yes') },
     { label: 'No, not yet', onClick: () => markFixResult(row, 'no') },
@@ -3190,13 +3351,13 @@ function markFixResult(row, answer) {
     row.resolvedByHuman = row.assignee;
     renderCockpitTable();
     unflagNav('nav-cockpit');
-    lumiSay(`Great ??? marking <b>${row.name}</b> as resolved and converted.`);
+    lumiSay(`Great — marking <b>${row.name}</b> as resolved and converted.`);
     checkCockpitCompletion();
   } else {
-    lumiSay(`Understood ??? <b>${row.name}</b> is still ${answer === 'pending' ? 'pending a fix' : 'not fixed'}. Should I park this asset and continue with the rest of the migration, or hold everything until it's resolved?`);
+    lumiSay(`Understood — <b>${row.name}</b> is still ${answer === 'pending' ? 'pending a fix' : 'not fixed'}. Should I park this asset and continue with the rest of the migration, or hold everything until it's resolved?`);
     lumiChoices([
       { label: 'Park it and continue', cls: 'primary', onClick: () => parkAsset(row) },
-      { label: 'Hold ??? keep it open', onClick: () => { row.status = 'Error'; renderCockpitTable(); } }
+      { label: 'Hold — keep it open', onClick: () => { row.status = 'Error'; renderCockpitTable(); } }
     ]);
   }
 }
@@ -3206,7 +3367,7 @@ function parkAsset(row) {
   row.willError = false;
   renderCockpitTable();
   unflagNav('nav-cockpit');
-  showToast('Parked', `${row.name} has been parked ??? the rest of the migration continues.`, 'purple');
+  showToast('Parked', `${row.name} has been parked — the rest of the migration continues.`, 'purple');
   lumiSay(`Parked <b>${row.name}</b>. The rest of the migration continues without it.`);
   checkCockpitCompletion();
 }
@@ -3221,24 +3382,24 @@ function figafTestUrl(row) {
 
 // Pushes progressively, batch-by-batch on a real interval (same pattern as
 // startExecution()'s conversion loop) rather than flipping every card at
-// once after a single timeout ??? matches the reference video, where cards
+// once after a single timeout — matches the reference video, where cards
 // visibly move Ready to push -> Pushing... (with a progress bar) -> resolved
 // one at a time, and the header's "N Deployed" count climbs live.
 const PUSH_TARGET_TICKS = 14;
 function exportToIS() {
-  if (!canTriggerProdAction()) return; // persona gate ??? Viewer/Approver can't trigger this even via a direct call
+  if (!canTriggerProdAction()) return; // persona gate — Viewer/Approver can't trigger this even via a direct call
   if (S.pushing) return; // already running
   const btn = $('btn-export-is');
   const doneRows = S.cockpitRows.filter(r => r.status === 'Done' && !r.isImportStatus);
   if (!doneRows.length) return;
   const tenant = $('target-tenant').value || 'sda-prod-eu10';
   const baseUrl = S.retargetTenantUrl || (S.adminDefaults && S.adminDefaults.btpTenantUrl) || INTEGRATION_SUITE_URL;
-  // Set before the first renderCockpitTable() call below ??? updateCockpitStats()
+  // Set before the first renderCockpitTable() call below — updateCockpitStats()
   // checks this flag to avoid fighting the button state every render tick
   // while a push is animating (see the ordering note there).
   S.pushing = true;
   doneRows.forEach(r => { r.pushPending = true; r.testRun = false; r.monitorActive = false; });
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Pushing to Integration Suite???';
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Pushing to Integration Suite…';
   btn.disabled = true;
   renderCockpitTable();
   const batchSize = Math.max(1, Math.ceil(doneRows.length / PUSH_TARGET_TICKS));
@@ -3250,7 +3411,7 @@ function exportToIS() {
       S.pushInterval = null;
       btn.innerHTML = '<i class="fa-solid fa-check"></i> Pushed to BTP Integration Suite';
       const failCount = doneRows.filter(r => r.willError).length;
-      showToast(failCount ? 'Imported ??? with issues' : 'Imported',
+      showToast(failCount ? 'Imported — with issues' : 'Imported',
         `Pushed ${doneRows.length} converted artifact(s) to ${tenant} via the SAP Integration Suite Content API.${failCount ? ` ${failCount} need review.` : ' All deployed cleanly.'}`,
         failCount ? 'danger' : 'purple');
       window.open(baseUrl, '_blank', 'noopener');
@@ -3259,7 +3420,7 @@ function exportToIS() {
     }
     const batch = doneRows.slice(i, i + batchSize);
     // Mimic the response fields a real Integration Suite Content API push/deploy
-    // would hand back ??? reuses the same willError flag the conversion step
+    // would hand back — reuses the same willError flag the conversion step
     // already set, so an asset that had trouble converting also has trouble
     // importing. testIflowUrl reuses the same deduced per-row iflowLink
     // (buildCockpitRows()) rather than one shared URL, so the Integration
@@ -3269,12 +3430,12 @@ function exportToIS() {
       r.pushPending = false;
       r.isImportStatus = r.willError ? 'Failed' : 'Success';
       r.isReturnMessage = r.willError
-        ? `Deployment rejected on ${tenant} ??? property file validation error, 2 of 4 keys have no BAIP equivalent.`
+        ? `Deployment rejected on ${tenant} — property file validation error, 2 of 4 keys have no BAIP equivalent.`
         : `iFlow ${r.iflowName} deployed successfully to ${tenant}.`;
       r.isTestingStatus = r.willError ? 'Blocked' : 'Passed';
       r.testIflowUrl = r.iflowLink || baseUrl;
     });
-    // Only the Target Integration Suite grid actually changes per tick ??? a
+    // Only the Target Integration Suite grid actually changes per tick — a
     // full renderCockpitTable() cascades into every other tab (Report
     // analytics, Readiness, Migration status, ...), which is both wasted
     // work and, at real scale, slow enough to visibly stall the animation.
@@ -3283,7 +3444,7 @@ function exportToIS() {
     i += batchSize;
   }, 350);
 }
-// Single-card retry from a failed Target Integration Suite card ??? always
+// Single-card retry from a failed Target Integration Suite card — always
 // resolves clean (a real retry after a fix, not a repeat of the same
 // deploy-time error), matching the "View Issue -> Retry" storyline the
 // reference video's failed card implies.
@@ -3317,14 +3478,14 @@ function escapeXml(s) {
   return String(s).replace(/[<>&"']/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c]));
 }
 
-// Bundle-SymbolicName must be a bare OSGi symbolic name ??? letters/digits/._- only
+// Bundle-SymbolicName must be a bare OSGi symbolic name — letters/digits/._- only
 function iflowSlug(name) {
   return (String(name || '').replace(/[^A-Za-z0-9_.-]+/g, '_').replace(/^_+|_+$/g, '')) || 'SDAINTAI_Migration';
 }
 
 // SAP Integration Suite requires this exact project shape (META-INF/MANIFEST.MF at the
 // zip root + a bpmn2 .iflw under src/main/resources/scenarioflows/integrationflow/) to
-// accept an "Add > Integration Flow > Upload" ??? without it you get "must contain a valid
+// accept an "Add > Integration Flow > Upload" — without it you get "must contain a valid
 // manifest file". Below builds a minimal but structurally valid Start->End iFlow shell.
 function buildIflowManifest(slug, name) {
   return [
@@ -3340,7 +3501,7 @@ function buildIflowManifest(slug, name) {
 }
 
 // Collects every selected Kafka event across a set of assets (walking each asset's full
-// tree, not just top-level nodes) ??? the single source of truth for "what does the reviewer
+// tree, not just top-level nodes) — the single source of truth for "what does the reviewer
 // actually want wired to IS-Kafka," shared by the iFlow generator, the manifest, the
 // package preview and Revalidate Package.
 function getSelectedKafkaEvents(assets) {
@@ -3364,7 +3525,7 @@ function buildKafkaParticipantXml(ev, idx) {
   const pid = `Participant_Kafka_${idx}`;
   const mfid = `MessageFlow_Kafka_${idx}`;
   return {
-    participant: `    <bpmn2:participant id="${pid}" ifl:type="EndpointReceiver" name="${escapeXml(ev.id)} ??? ${escapeXml(ev.topic)}"/>`,
+    participant: `    <bpmn2:participant id="${pid}" ifl:type="EndpointReceiver" name="${escapeXml(ev.id)} — ${escapeXml(ev.topic)}"/>`,
     messageFlow: `  <bpmn2:messageFlow id="${mfid}" name="${escapeXml(ev.id)}" sourceRef="Participant_Process_1" targetRef="${pid}">
     <bpmn2:extensionElements>
       <ifl:property><key>ComponentType</key><value>Kafka</value></ifl:property>
@@ -3372,7 +3533,7 @@ function buildKafkaParticipantXml(ev, idx) {
       <ifl:property><key>topic</key><value>${escapeXml(ev.topic)}</value></ifl:property>
       <ifl:property><key>consumerGroup</key><value>${escapeXml(ev.group)}</value></ifl:property>
       <ifl:property><key>authenticationType</key><value>SASL</value></ifl:property>
-      <ifl:property><key>generatedBy</key><value>SDAINTAI Brain ??? recalled from source, not re-typed</value></ifl:property>
+      <ifl:property><key>generatedBy</key><value>SDAINTAI Brain — recalled from source, not re-typed</value></ifl:property>
     </bpmn2:extensionElements>
   </bpmn2:messageFlow>`,
     shape: `      <bpmndi:BPMNShape id="BPMNShape_${pid}" bpmnElement="${pid}">
@@ -3454,7 +3615,7 @@ function buildDotProject(name) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<projectDescription>\n\t<name>${escapeXml(name)}</name>\n\t<comment></comment>\n\t<projects>\n\t</projects>\n\t<buildSpec>\n\t</buildSpec>\n\t<natures>\n\t</natures>\n</projectDescription>\n`;
 }
 
-// Pure builder shared by downloadZip(), the Package Preview panel, and Revalidate Package ???
+// Pure builder shared by downloadZip(), the Package Preview panel, and Revalidate Package —
 // all three must agree on exactly what ships, so they all read from this single function.
 function buildPackageManifest() {
   const projectName = S.projectName || 'SDAINTAI Migration';
@@ -3487,14 +3648,14 @@ function buildPackageManifest() {
   // ---- SDAINTAI migration payload, kept alongside as reference resources ----
   files.push({ name: 'manifest.json', content: JSON.stringify(manifestJson, null, 2) });
   doneRows.forEach(r => {
-    files.push({ name: `src/main/resources/resources/${r.id}-${r.name}.txt`, content: `Converted artifact ??? SDAINTAI Brain output\nAsset: ${r.name}\nType: ${r.type}\nWave: ${r.wave}\nAssignee: ${r.assignee}\nConverted At: ${r.convertedAt || 'n/a'}\nTarget: SAP Integration Suite iFlow / CAP service\n` });
+    files.push({ name: `src/main/resources/resources/${r.id}-${r.name}.txt`, content: `Converted artifact — SDAINTAI Brain output\nAsset: ${r.name}\nType: ${r.type}\nWave: ${r.wave}\nAssignee: ${r.assignee}\nConverted At: ${r.convertedAt || 'n/a'}\nTarget: SAP Integration Suite iFlow / CAP service\n` });
   });
-  // ---- IS-Kafka channels a reviewer picked in the object tree ??? one resource file per
+  // ---- IS-Kafka channels a reviewer picked in the object tree — one resource file per
   // event, each also wired as a real Kafka messageFlow/participant inside the .iflw above ----
   kafkaEvents.forEach(ev => {
-    files.push({ name: `src/main/resources/resources/${ev.id}-kafka-channel.txt`, content: `IS-Kafka channel ??? SDAINTAI Brain generated\nEvent: ${ev.id}\nSource object: ${ev.node} (${ev.assetName})\nTopic: ${ev.topic}\nConsumer group: ${ev.group}\nAuthentication: SASL\nAdapter: SAP Integration Suite native Kafka Receiver adapter\nWired into: src/main/resources/scenarioflows/integrationflow/${slug}.iflw\n` });
+    files.push({ name: `src/main/resources/resources/${ev.id}-kafka-channel.txt`, content: `IS-Kafka channel — SDAINTAI Brain generated\nEvent: ${ev.id}\nSource object: ${ev.node} (${ev.assetName})\nTopic: ${ev.topic}\nConsumer group: ${ev.group}\nAuthentication: SASL\nAdapter: SAP Integration Suite native Kafka Receiver adapter\nWired into: src/main/resources/scenarioflows/integrationflow/${slug}.iflw\n` });
   });
-  files.push({ name: 'conversion-log.txt', content: (S.cockpitRows || []).map(r => `[${r.status}] Wave ${r.wave} ??? ${r.name} (${r.assignee})${r.convertedAt ? ' @ ' + r.convertedAt : ''}`).join('\n') });
+  files.push({ name: 'conversion-log.txt', content: (S.cockpitRows || []).map(r => `[${r.status}] Wave ${r.wave} — ${r.name} (${r.assignee})${r.convertedAt ? ' @ ' + r.convertedAt : ''}`).join('\n') });
 
   return { projectName, slug, doneRows, includedAssets, kafkaEvents, files };
 }
@@ -3504,13 +3665,13 @@ async function downloadZip() {
   const blob = buildZipBlob(files);
   const filename = `${slug}-package.zip`;
   await saveBlob(blob, filename, 'ZIP archive', { 'application/zip': ['.zip'] });
-  const kafkaNote = kafkaEvents.length ? ` ??? ${kafkaEvents.length} IS-Kafka channel${kafkaEvents.length > 1 ? 's' : ''} wired into the .iflw.` : '';
-  showToast('Downloaded', `${filename} saved ??? packaged as a valid SAP Integration Suite Integration Flow project (META-INF/MANIFEST.MF included).${kafkaNote}`, 'purple');
+  const kafkaNote = kafkaEvents.length ? ` — ${kafkaEvents.length} IS-Kafka channel${kafkaEvents.length > 1 ? 's' : ''} wired into the .iflw.` : '';
+  showToast('Downloaded', `${filename} saved — packaged as a valid SAP Integration Suite Integration Flow project (META-INF/MANIFEST.MF included).${kafkaNote}`, 'purple');
 }
 
 // Re-runs the same package builder used for the download and the preview panel, and checks
 // the structural invariants SAP Integration Suite requires for an "Add > Integration Flow >
-// Upload" (see buildIflowManifest/buildIflowSkeleton above) ??? a lightweight self-check rather
+// Upload" (see buildIflowManifest/buildIflowSkeleton above) — a lightweight self-check rather
 // than parsing the actual zip bytes back, since both sides are generated from one source of truth.
 // The Kafka check below is the same idea applied to IS-Kafka: confirm every event a reviewer
 // picked in the object tree actually landed inside the generated .iflw's own XML, i.e. the
@@ -3531,7 +3692,7 @@ function revalidatePackage() {
     <div style="margin-top:12px;font-weight:700;font-size:0.78rem;">IS-Kafka channels found in the .iflw</div>
     <div class="btp-table-container" style="margin-top:6px;">
       <table class="btp-table"><thead><tr><th>Event</th><th>Topic</th><th>Source</th></tr></thead>
-        <tbody>${kafkaEvents.map(ev => `<tr><td><span class="kafka-badge">${ev.id}</span></td><td><code>${ev.topic}</code></td><td>${ev.assetName} ??? ${ev.node}</td></tr>`).join('')}</tbody>
+        <tbody>${kafkaEvents.map(ev => `<tr><td><span class="kafka-badge">${ev.id}</span></td><td><code>${ev.topic}</code></td><td>${ev.assetName} — ${ev.node}</td></tr>`).join('')}</tbody>
       </table>
     </div>` : '';
   const body = `
@@ -3542,8 +3703,8 @@ function revalidatePackage() {
     </div>${kafkaRows}`;
   openModal(allOk ? 'Package Valid' : 'Package Has Issues', body, [{ label: 'Close', cls: 'btn-btp-cancel', onClick: closeModal }]);
   showToast(allOk ? 'Package Valid' : 'Package Has Issues', allOk
-    ? `${slug}-package.zip structure checks out ??? ${doneRows.length} converted object(s)${kafkaEvents.length ? ` and ${kafkaEvents.length} IS-Kafka channel(s)` : ''} ready for SAP Integration Suite.`
-    : 'One or more structural checks failed ??? see details.', allOk ? 'purple' : 'danger');
+    ? `${slug}-package.zip structure checks out — ${doneRows.length} converted object(s)${kafkaEvents.length ? ` and ${kafkaEvents.length} IS-Kafka channel(s)` : ''} ready for SAP Integration Suite.`
+    : 'One or more structural checks failed — see details.', allOk ? 'purple' : 'danger');
 }
 
 // ==================== SAP2SAP MIGRATION (OpenConnectors removal) ====================
@@ -3553,13 +3714,13 @@ function revalidatePackage() {
 // instead of Marketo's own JSON), rewrites the script to read the data directly, and
 // repackages a downloadable, re-importable .zip.
 //
-// Deterministic, rule-based rewrite only ??? no LLM call in this pass. Matches the scoping
+// Deterministic, rule-based rewrite only — no LLM call in this pass. Matches the scoping
 // already committed to for EXFO ("AI drafts the code, a human still configures the tenant"):
 // the sender channel/security material still needs manual reconfiguration with real tenant
 // credentials, which can't be safely automated blind, so that is surfaced as a clear manual
 // step in SAP2SAP-MIGRATION-NOTES.txt inside the output package rather than faked. An
 // AI-assisted pass for scripts that don't match this exact pattern is documented as a future
-// extension, not built here ??? see docs/SDAINTAI-SAP2SAP-Migration-Feature.md.
+// extension, not built here — see docs/SDAINTAI-SAP2SAP-Migration-Feature.md.
 
 // Uploaded Groovy/filename content is the first place in this app where arbitrary
 // user-supplied file content gets rendered into innerHTML (everything else is static sample
@@ -3574,13 +3735,13 @@ function openSap2SapModal() {
       Upload a downloaded SAP Integration Suite iFlow content package (.zip). SDAINTAI scans every
       Groovy script inside it for the OpenConnectors "wrapper envelope" pattern (<code>XmlSlurper</code> +
       <code>message.raw.*</code> field paths), assesses it the same way as any other migration object
-      (Tier / Status / Effort) and, where safe, rewrites the script to read the source payload directly ???
+      (Tier / Status / Effort) and, where safe, rewrites the script to read the source payload directly —
       no OpenConnectors unwrap needed.
     </div>
     <input type="file" id="sap2sap-file-input" accept=".zip" style="width:100%;padding:8px;border:1px solid var(--lumi-border,#ccc);border-radius:6px;background:var(--lumi-panel,#fff);" />
     <div id="sap2sap-result" style="margin-top:14px;"></div>
   `;
-  openModal('Migrate SAP2SAP ??? Remove OpenConnectors', body, [{ label: 'Close', cls: 'btn-btp-cancel', onClick: closeModal }]);
+  openModal('Migrate SAP2SAP — Remove OpenConnectors', body, [{ label: 'Close', cls: 'btn-btp-cancel', onClick: closeModal }]);
   $('sap2sap-file-input').addEventListener('change', handleSap2SapFile);
 }
 
@@ -3588,21 +3749,21 @@ async function handleSap2SapFile(e) {
   const file = e.target.files[0];
   if (!file) return;
   const resultHost = $('sap2sap-result');
-  resultHost.innerHTML = `<div class="kv"><span>Status</span><b>Reading ${escapeHtml(file.name)}???</b></div>`;
+  resultHost.innerHTML = `<div class="kv"><span>Status</span><b>Reading ${escapeHtml(file.name)}…</b></div>`;
 
   let zip;
   try {
     const buf = await file.arrayBuffer();
     zip = await JSZip.loadAsync(buf);
   } catch (err) {
-    resultHost.innerHTML = `<div style="color:var(--lumi-alert);"><i class="fa-solid fa-circle-xmark"></i> Could not read this file as a .zip ??? ${escapeHtml(err.message)}</div>`;
+    resultHost.innerHTML = `<div style="color:var(--lumi-alert);"><i class="fa-solid fa-circle-xmark"></i> Could not read this file as a .zip — ${escapeHtml(err.message)}</div>`;
     return;
   }
 
   const iflwEntry = Object.values(zip.files).find(f => !f.dir && f.name.endsWith('.iflw'));
   const groovyEntries = Object.values(zip.files).filter(f => !f.dir && f.name.endsWith('.groovy'));
   if (!iflwEntry) {
-    resultHost.innerHTML = `<div style="color:var(--lumi-alert);"><i class="fa-solid fa-circle-xmark"></i> No .iflw file found inside this package ??? not a recognizable Integration Suite content package. Migration blocked.</div>`;
+    resultHost.innerHTML = `<div style="color:var(--lumi-alert);"><i class="fa-solid fa-circle-xmark"></i> No .iflw file found inside this package — not a recognizable Integration Suite content package. Migration blocked.</div>`;
     return;
   }
 
@@ -3610,7 +3771,7 @@ async function handleSap2SapFile(e) {
   try {
     groovyContents = await Promise.all(groovyEntries.map(async f => ({ name: f.name, text: await f.async('string') })));
   } catch (err) {
-    resultHost.innerHTML = `<div style="color:var(--lumi-alert);"><i class="fa-solid fa-circle-xmark"></i> Could not read one or more script files from the package ??? ${escapeHtml(err.message)}. Migration blocked.</div>`;
+    resultHost.innerHTML = `<div style="color:var(--lumi-alert);"><i class="fa-solid fa-circle-xmark"></i> Could not read one or more script files from the package — ${escapeHtml(err.message)}. Migration blocked.</div>`;
     return;
   }
 
@@ -3645,13 +3806,13 @@ function assessSap2SapPackage(groovyCount, matches) {
 
   if (!matches.length) {
     tier = 'Simple'; status = 'Ready'; canMigrate = false;
-    headline = `Scanned ${groovyCount} Groovy script(s) ??? no OpenConnectors wrapper pattern detected. Nothing to migrate in this package.`;
+    headline = `Scanned ${groovyCount} Groovy script(s) — no OpenConnectors wrapper pattern detected. Nothing to migrate in this package.`;
   } else if (actionable.length && !flaggedOnly.length) {
     tier = 'Simple'; status = 'Ready'; canMigrate = true;
-    headline = `${actionable.length} script${actionable.length > 1 ? 's' : ''} matched the confirmed OpenConnectors pattern exactly ??? ready to migrate.`;
+    headline = `${actionable.length} script${actionable.length > 1 ? 's' : ''} matched the confirmed OpenConnectors pattern exactly — ready to migrate.`;
   } else if (actionable.length && flaggedOnly.length) {
     tier = 'Medium'; status = 'Review'; canMigrate = true;
-    headline = `${actionable.length} script${actionable.length > 1 ? 's' : ''} ready to migrate automatically; ${flaggedOnly.length} referenced OpenConnectors but didn't match the exact rewrite pattern ??? review those manually.`;
+    headline = `${actionable.length} script${actionable.length > 1 ? 's' : ''} ready to migrate automatically; ${flaggedOnly.length} referenced OpenConnectors but didn't match the exact rewrite pattern — review those manually.`;
   } else {
     tier = 'High'; status = 'Review'; canMigrate = false;
     headline = `${flaggedOnly.length} script${flaggedOnly.length > 1 ? 's' : ''} referenced OpenConnectors but none matched the confirmed XmlSlurper + message.raw rewrite pattern closely enough to auto-fix safely. Migration blocked pending manual review.`;
@@ -3680,7 +3841,7 @@ function renderSap2SapAssessment(assessment, matches) {
 
   const compareRows = actionable.map(m => `
     <div style="margin-top:14px;">
-      <div style="font-weight:700;font-size:0.78rem;margin-bottom:4px;"><code>${escapeHtml(m.name.split('/').pop())}</code> ??? ${m.detected.reasons.map(escapeHtml).join(' + ')}</div>
+      <div style="font-weight:700;font-size:0.78rem;margin-bottom:4px;"><code>${escapeHtml(m.name.split('/').pop())}</code> — ${m.detected.reasons.map(escapeHtml).join(' + ')}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         <div>
           <div style="font-size:0.68rem;font-weight:700;color:#a13a3a;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:3px;">Before</div>
@@ -3695,10 +3856,10 @@ function renderSap2SapAssessment(assessment, matches) {
 
   const flaggedRows = flaggedOnly.length ? `
     <div style="margin-top:14px;">
-      <div style="font-weight:700;font-size:0.78rem;color:#b4770a;margin-bottom:4px;"><i class="fa-solid fa-triangle-exclamation"></i> Needs manual review ??? not auto-fixed</div>
+      <div style="font-weight:700;font-size:0.78rem;color:#b4770a;margin-bottom:4px;"><i class="fa-solid fa-triangle-exclamation"></i> Needs manual review — not auto-fixed</div>
       <div class="btp-table-container">
         <table class="btp-table"><thead><tr><th>Script</th><th>Why it was flagged</th></tr></thead>
-          <tbody>${flaggedOnly.map(m => `<tr><td><code>${escapeHtml(m.name.split('/').pop())}</code></td><td>${m.detected.reasons.map(escapeHtml).join(' + ')} ??? no matching XmlSlurper().parseText(...) + message.raw usage found to safely rewrite</td></tr>`).join('')}</tbody>
+          <tbody>${flaggedOnly.map(m => `<tr><td><code>${escapeHtml(m.name.split('/').pop())}</code></td><td>${m.detected.reasons.map(escapeHtml).join(' + ')} — no matching XmlSlurper().parseText(...) + message.raw usage found to safely rewrite</td></tr>`).join('')}</tbody>
         </table>
       </div>
     </div>` : '';
@@ -3822,20 +3983,20 @@ WHAT STILL NEEDS MANUAL CONFIGURATION (not automated -- requires tenant-specific
   const allOk = verifyChecks.every(c => c.ok);
 
   const flaggedNoteHtml = flaggedOnly.length
-    ? `<div style="margin-top:6px;font-size:0.78rem;color:#b4770a;"><i class="fa-solid fa-triangle-exclamation"></i> ${flaggedOnly.length} script(s) left unchanged pending manual review ??? see SAP2SAP-MIGRATION-NOTES.txt.</div>`
+    ? `<div style="margin-top:6px;font-size:0.78rem;color:#b4770a;"><i class="fa-solid fa-triangle-exclamation"></i> ${flaggedOnly.length} script(s) left unchanged pending manual review — see SAP2SAP-MIGRATION-NOTES.txt.</div>`
     : '';
 
   $('sap2sap-result').innerHTML = `
     <div style="color:${allOk ? '#0d7a4c' : 'var(--lumi-alert)'};font-weight:700;">
       <i class="fa-solid ${allOk ? 'fa-circle-check' : 'fa-circle-xmark'}"></i>
-      ${escapeHtml(outName)} downloaded${allOk ? ' ??? rewrite verified in the output package.' : ' ??? verification found an issue, review before importing.'}
+      ${escapeHtml(outName)} downloaded${allOk ? ' — rewrite verified in the output package.' : ' — verification found an issue, review before importing.'}
     </div>
     <div style="margin-top:8px;font-size:0.78rem;color:var(--lumi-text-dim,#666);">
       ${actionable.length} script${actionable.length > 1 ? 's' : ''} rewritten. SAP2SAP-MIGRATION-NOTES.txt added to the package with
       what changed and what still needs manual tenant configuration.
     </div>${flaggedNoteHtml}`;
   showToast(allOk ? 'SAP2SAP Package Ready' : 'SAP2SAP Package Has Issues',
-    `${outName} ??? ${actionable.length} script(s) migrated from OpenConnectors.`, allOk ? 'purple' : 'danger');
+    `${outName} — ${actionable.length} script(s) migrated from OpenConnectors.`, allOk ? 'purple' : 'danger');
 }
 
 // Renders the "what will actually be in the zip" preview above the export row, so the
@@ -3849,12 +4010,12 @@ function renderPackagePreview() {
   if (titleEl) titleEl.textContent = `${CPI_TERMS.typeLabel} Package Preview`;
 
   if (!includedAssets.length) {
-    host.innerHTML = `<div class="mock-note"><i class="fa-solid fa-circle-info"></i> No ${PLATFORMS[S.platform].assetNounPlural} approved into a wave yet ??? the preview fills in once the plan is approved.</div>`;
+    host.innerHTML = `<div class="mock-note"><i class="fa-solid fa-circle-info"></i> No ${PLATFORMS[S.platform].assetNounPlural} approved into a wave yet — the preview fills in once the plan is approved.</div>`;
     return;
   }
 
   // One row per individual iFlow (S.cockpitRows is now expanded to that
-  // granularity in buildCockpitRows) ??? if the scan found 423 iFlows across
+  // granularity in buildCockpitRows) — if the scan found 423 iFlows across
   // these assets, this table lists all 423, not one per source object.
   const rows = S.cockpitRows.map(r => {
     const converted = r.status === 'Done';
@@ -3883,14 +4044,14 @@ function renderPackagePreview() {
         <tbody>${kafkaEvents.map(ev => `<tr><td><span class="kafka-badge">${ev.id}</span></td><td><code>${ev.topic}</code></td><td>${ev.assetName}</td></tr>`).join('')}</tbody>
       </table>
     </div>` : ''}
-    ${S.cockpitRows.some(r => r.isImportStatus) ? `<div class="mock-note" style="margin-top:10px;"><i class="fa-solid fa-circle-info"></i> Pushed to Integration Suite ??? see the <b>Migration execution</b> tab for per-iFlow deployment/test/monitor status.</div>` : ''}`;
+    ${S.cockpitRows.some(r => r.isImportStatus) ? `<div class="mock-note" style="margin-top:10px;"><i class="fa-solid fa-circle-info"></i> Pushed to Integration Suite — see the <b>Migration execution</b> tab for per-iFlow deployment/test/monitor status.</div>` : ''}`;
 }
-// Only appears once "Push to BTP Integration Suite" has actually run ??? the mocked
+// Only appears once "Push to BTP Integration Suite" has actually run — the mocked
 // response fields a real Content API deploy+test call would hand back.
 function runIflowTest(id) {
   const r = S.cockpitRows.find(x => x.id === id);
   if (!r) return;
-  // No popup ??? only report a result if a real Figaf ALM target is configured
+  // No popup — only report a result if a real Figaf ALM target is configured
   // in Settings; otherwise this is a no-op (nothing to test against).
   const figafSet = S.adminDefaults && !S.adminDefaults.figafManual && (S.adminDefaults.figafAlmTarget || '').trim();
   if (!figafSet) return;
@@ -3908,7 +4069,7 @@ function startIflowMonitoring(id) {
   showToast('Monitoring started', `${r.name} is now actively monitored in Integration Suite.`, 'purple');
 }
 // The Target Integration Suite grid appears once every interface has reached
-// a terminal conversion state (Done or Error) ??? matching the reference video,
+// a terminal conversion state (Done or Error) — matching the reference video,
 // which shows all 60 cards as "Ready to push" the moment conversion hits
 // 100%, well before anyone clicks Push. Cards then move through three visual
 // states: Ready to push (no isImportStatus, not pending) -> Pushing (a row's
@@ -3926,7 +4087,7 @@ function renderIsImportResults(rowPool) {
   const tested = succeeded.filter(r => r.testRun);
   const monitoring = succeeded.filter(r => r.monitorActive);
   // "Deployment status" completes once every push attempt has resolved
-  // (success or fail) ??? a failed iFlow still counts as resolved, matching the
+  // (success or fail) — a failed iFlow still counts as resolved, matching the
   // reference video, which checks this step off even with 1/60 failed.
   const steps = [
     { label: 'Converted', done: true },
@@ -3947,21 +4108,21 @@ function renderIsImportResults(rowPool) {
       return `
       <div class="target-is-card target-is-card-pending">
         <div class="target-is-card-head"><b>${r.name}</b></div>
-        <div class="target-is-card-sub">Wave ${r.wave} ?? ${r.assignee}</div>
+        <div class="target-is-card-sub">Wave ${r.wave} · ${r.assignee}</div>
         <div class="target-is-row"><span>Conversion</span><span class="target-is-val ok"><i class="fa-solid fa-check"></i> Complete</span></div>
         <div class="target-is-row"><span>Deployment</span><span class="target-is-val">Ready to push</span></div>
-        <div class="target-is-row"><span>Status</span><span class="target-is-val">???</span></div>
+        <div class="target-is-row"><span>Status</span><span class="target-is-val">—</span></div>
       </div>`;
     }
     if (r.pushPending) {
       return `
       <div class="target-is-card target-is-card-pending">
         <div class="target-is-card-head"><b>${r.name}</b></div>
-        <div class="target-is-card-sub">Wave ${r.wave} ?? ${r.assignee}</div>
+        <div class="target-is-card-sub">Wave ${r.wave} · ${r.assignee}</div>
         <div class="target-is-row"><span>Conversion</span><span class="target-is-val ok"><i class="fa-solid fa-check"></i> Complete</span></div>
-        <div class="target-is-row"><span>Deployment</span><span class="target-is-val">Pushing to ${(S.retargetTenantName) || ($('target-tenant') ? $('target-tenant').value : '') || 'lab-sda'}???</span></div>
+        <div class="target-is-row"><span>Deployment</span><span class="target-is-val">Pushing to ${(S.retargetTenantName) || ($('target-tenant') ? $('target-tenant').value : '') || 'lab-sda'}…</span></div>
         <div class="target-is-progress"><div class="target-is-progress-fill"></div></div>
-        <div class="target-is-row"><span>Status</span><span class="target-is-val">???</span></div>
+        <div class="target-is-row"><span>Status</span><span class="target-is-val">—</span></div>
       </div>`;
     }
     const ok = r.isImportStatus === 'Success';
@@ -3981,18 +4142,18 @@ function renderIsImportResults(rowPool) {
       lumiMsg = r.isReturnMessage;
       actionHtml = `<button class="btn-btp-action-solid" onclick="runIflowTest('${r.id}')" title="Opens the Figaf regression test run for this iFlow"><i class="fa-solid fa-vial"></i> Run Test</button>`;
     }
-    // Viewer is read-only here too ??? every control that could change state is
+    // Viewer is read-only here too — every control that could change state is
     // omitted, not just disabled (the "Open in Integration Suite" link below
     // stays, since it's a read-only external link, not a trigger).
     if (isViewer()) actionHtml = '';
     const sendToProdDisabled = isApprover() || (isAdmin() && !S.pushApproved);
     const sendToProdTitle = isApprover()
-      ? 'Approve-only ??? an Admin session sends to Prod once you approve'
-      : (sendToProdDisabled ? 'Awaiting this wave\'s Approver sign-off ??? see Pending Approvals above' : 'Send this iFlow to the Prod landscape');
+      ? 'Approve-only — an Admin session sends to Prod once you approve'
+      : (sendToProdDisabled ? 'Awaiting this wave\'s Approver sign-off — see Pending Approvals above' : 'Send this iFlow to the Prod landscape');
     return `
     <div class="target-is-card ${ok ? '' : 'target-is-card-failed'}">
       <div class="target-is-card-head"><b>${r.name}</b><span class="target-is-dot ${ok ? 'ok' : 'fail'}"></span></div>
-      <div class="target-is-card-sub">Wave ${r.wave} ?? ${r.assignee}</div>
+      <div class="target-is-card-sub">Wave ${r.wave} · ${r.assignee}</div>
       <div class="target-is-row"><span>Conversion</span><span class="target-is-val ok"><i class="fa-solid fa-check"></i> Complete</span></div>
       <div class="target-is-row"><span>Deployment</span><span class="target-is-val ${ok ? 'ok' : 'fail'}"><i class="fa-solid ${ok ? 'fa-check' : 'fa-xmark'}"></i> ${ok ? 'Successfully pushed to Integration Suite' : 'Deployment failed'}</span></div>
       <div class="target-is-row"><span>Status</span><span class="target-is-val"><span class="target-is-bullet ${ok ? 'ok' : 'fail'}"></span> ${ok ? 'Deployed' : 'Action required'}</span></div>
@@ -4012,7 +4173,7 @@ function renderIsImportResults(rowPool) {
   }).join('');
   const tenantUrl = S.retargetTenantUrl || (S.adminDefaults && S.adminDefaults.btpTenantUrl) || INTEGRATION_SUITE_URL;
   const topRight = !pushStarted
-    ? `<span class="target-is-all-chip">Ready to push ??? use Push to BTP Integration Suite below</span>`
+    ? `<span class="target-is-all-chip">Ready to push — use Push to BTP Integration Suite below</span>`
     : `<span class="target-is-all-chip">All ${rows.length}</span><span class="target-is-chip ok">${succeeded.length} Deployed</span>${failed.length ? `<span class="target-is-chip fail">${failed.length} Failed</span>` : ''}`;
   return `<div class="target-is-title-row"><h4>Target Integration Suite</h4>${topRight}</div>
     <div class="target-is-tenant-url">${tenantUrl}</div>
@@ -4099,19 +4260,19 @@ function goToClose() {
   const done = S.cockpitRows.filter(r => r.status === 'Done').length;
   const p = PLATFORMS[S.platform];
   const summary = errors
-    ? `All waves processed ??? ${errors} item(s) were resolved before close. ${done} ${p.label} ${p.assetNounPlural} converted to SAP Integration Suite (CPI) ${CPI_TERMS.typeLabel}.`
+    ? `All waves processed — ${errors} item(s) were resolved before close. ${done} ${p.label} ${p.assetNounPlural} converted to SAP Integration Suite (CPI) ${CPI_TERMS.typeLabel}.`
     : `All waves converted, 0 open errors. ${done} ${p.label} ${p.assetNounPlural} are now SAP Integration Suite (CPI) ${CPI_TERMS.typeLabel} objects, ready to push or download.`;
   $('close-summary-text').textContent = summary;
   renderClosureReport();
 }
-// "What was done" per row, in plain language ??? used by both the on-screen
+// "What was done" per row, in plain language — used by both the on-screen
 // closure summary and the downloadable report so the two never drift apart.
 function rowClosureOutcome(r) {
   if (r.resolvedByAgents) return { what: 'Resolved by AI Agents', fixedBy: r.resolvedByAgents.map(a => a.label).join(' + ') };
   if (r.resolvedByHuman) return { what: 'Resolved by developer', fixedBy: r.resolvedByHuman };
-  if (r.status === 'Error' || r.status === 'Pending Fix') return { what: 'Still open', fixedBy: '???' };
-  if (r.advisory) return { what: 'Converted with advisory', fixedBy: '???' };
-  return { what: 'Converted cleanly', fixedBy: '???' };
+  if (r.status === 'Error' || r.status === 'Pending Fix') return { what: 'Still open', fixedBy: '—' };
+  if (r.advisory) return { what: 'Converted with advisory', fixedBy: '—' };
+  return { what: 'Converted cleanly', fixedBy: '—' };
 }
 function closureTotals() {
   const totalMinutes = totalEffortMinutes(S.cockpitRows);
@@ -4147,7 +4308,7 @@ function renderClosureReport() {
 async function downloadClosureReport() {
   const t = closureTotals();
   const lines = [
-    `SDAINT-AI ??? Closure Report`, `Project: ${S.projectName}`, `Platform: ${PLATFORMS[S.platform].label}`,
+    `SDAINT-AI — Closure Report`, `Project: ${S.projectName}`, `Platform: ${PLATFORMS[S.platform].label}`,
     `Generated: ${new Date().toISOString()}`, `Prepared by the SDAINTAI Brain.`, '',
     `Total time to migrate: ${formatEffort(t.totalMinutes)}`,
     `Conversion issues raised: ${t.issuesRaised}`,
@@ -4157,22 +4318,22 @@ async function downloadClosureReport() {
   ];
   S.cockpitRows.forEach(r => {
     const outcome = rowClosureOutcome(r);
-    lines.push(`  [${r.status}] ${r.name} (Wave ${r.wave}, ${r.assignee}) ??? ${outcome.what}${outcome.fixedBy !== '???' ? ` by ${outcome.fixedBy}` : ''} ??? ${formatEffort(effortMinutesForTier(rowTier(r)))}${r.convertedAt ? ` ??? converted ${new Date(r.convertedAt).toLocaleString()}` : ''}`);
+    lines.push(`  [${r.status}] ${r.name} (Wave ${r.wave}, ${r.assignee}) — ${outcome.what}${outcome.fixedBy !== '—' ? ` by ${outcome.fixedBy}` : ''} — ${formatEffort(effortMinutesForTier(rowTier(r)))}${r.convertedAt ? ` — converted ${new Date(r.convertedAt).toLocaleString()}` : ''}`);
   });
   const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
   await saveBlob(blob, `${S.projectName}-closure-report.txt`, 'Text file', { 'text/plain': ['.txt'] });
   showToast('Downloaded', `${S.projectName}-closure-report.txt saved.`, 'purple');
 }
 function archiveProject() {
-  // Idempotency guard ??? restartMigration() calls this too (so "let's start over"
+  // Idempotency guard — restartMigration() calls this too (so "let's start over"
   // in chat always archives), and a user can also hit the explicit "Archive
   // project" button first on the Close screen before hitting "Start another
-  // migration" ??? without this, that sequence would double-count the same
+  // migration" — without this, that sequence would double-count the same
   // migration in S.migrationHistory.
   if (S.archived) { showToast('Already Archived', `${S.projectName} was already archived.`, 'cyan'); return; }
   S.archived = true;
-  showToast('Archived', `${S.projectName} has been archived ??? find it under Archived projects.`, 'purple');
-  // Feeds the "Based on patterns from your last migration???" line in startNewMigration() ???
+  showToast('Archived', `${S.projectName} has been archived — find it under Archived projects.`, 'purple');
+  // Feeds the "Based on patterns from your last migration…" line in startNewMigration() —
   // the Brain "learning" from one run to the next, however lightly simulated here.
   if (S.platform) {
     S.migrationHistory = S.migrationHistory || [];
@@ -4193,14 +4354,14 @@ function archiveProject() {
   }
 }
 // This walkthrough runs entirely client-side with no persisted backend, so an
-// archived project's full state isn't stored anywhere to actually rehydrate ???
+// archived project's full state isn't stored anywhere to actually rehydrate —
 // be upfront about that rather than faking a reopen.
 function reopenArchivedProject(name) {
-  lumiSay(`Reopening <b>${name || 'that project'}</b> isn't wired to persisted state in this walkthrough yet ??? start a fresh migration instead and I'll walk you through it again.`);
+  lumiSay(`Reopening <b>${name || 'that project'}</b> isn't wired to persisted state in this walkthrough yet — start a fresh migration instead and I'll walk you through it again.`);
   openDrawer();
 }
 // Used by both the Close screen's "Start another migration" button and the
-// chat "let's start the migration over" intent (see handleComposerSend) ???
+// chat "let's start the migration over" intent (see handleComposerSend) —
 // archives whatever migration was in progress (archiveProject() is a no-op
 // if it was already archived) before wiping all state via reload.
 function restartMigration() {
@@ -4208,11 +4369,11 @@ function restartMigration() {
   location.reload();
 }
 
-// Delete/undo ??? unlike restartMigration() (which archives and wipes the whole
+// Delete/undo — unlike restartMigration() (which archives and wipes the whole
 // session back to the platform-picker landing screen), this stays within the
 // current project/connection and only throws away scanned assets + generated
 // iFlows, landing the user back on Source Object Selection to rescan. No
-// archive entry is created ??? this is meant for "that run was wrong, redo it,"
+// archive entry is created — this is meant for "that run was wrong, redo it,"
 // not a completed migration.
 function deleteMigration() {
   if (!S.assets.length && !S.cockpitRows.length) {
@@ -4220,7 +4381,7 @@ function deleteMigration() {
     return;
   }
   const count = S.cockpitRows.length || S.assets.length;
-  openModal('Delete this migration?', `<p style="font-size:0.86rem;line-height:1.5;">This permanently removes the <b>${count}</b> scanned ${PLATFORMS[S.platform].assetNounPlural} and every iFlow generated from them in this session ??? buckets, waves, packages, and the execution log all reset. You'll land back on Source Object Selection to rescan. This can't be undone.</p>`, [
+  openModal('Delete this migration?', `<p style="font-size:0.86rem;line-height:1.5;">This permanently removes the <b>${count}</b> scanned ${PLATFORMS[S.platform].assetNounPlural} and every iFlow generated from them in this session — buckets, waves, packages, and the execution log all reset. You'll land back on Source Object Selection to rescan. This can't be undone.</p>`, [
     { label: 'Cancel', cls: 'btn-btp-cancel', onClick: closeModal },
     { label: 'Delete migration', cls: 'btn-btp-danger', onClick: confirmDeleteMigration }
   ]);
@@ -4259,16 +4420,16 @@ function confirmDeleteMigration() {
   if (tbody) tbody.innerHTML = '';
   const cont = $('btn-continue-migration');
   if (cont) { cont.style.pointerEvents = 'none'; cont.style.opacity = '0.5'; }
-  showToast('Migration deleted', `Every generated iFlow was removed ??? ready to rescan ${p.label}.`, 'danger');
-  lumiSay(`Done ??? I've deleted the previous migration data, every generated iFlow is gone. Want me to rescan ${p.label} now?`);
+  showToast('Migration deleted', `Every generated iFlow was removed — ready to rescan ${p.label}.`, 'danger');
+  lumiSay(`Done — I've deleted the previous migration data, every generated iFlow is gone. Want me to rescan ${p.label} now?`);
   lumiChoices([{ label: `Rescan ${p.label}`, cls: 'primary', onClick: () => { openScreen('assets'); startAssetScan(); } }]);
   openScreen('assets');
 }
 
 // ==================== SAVE TO BRAIN / SDAINTAI PACKAGE / RE-TARGET TO QA-PROD ====================
-// "Save migration to Brain" ??? an explicit, visible action distinct from the
+// "Save migration to Brain" — an explicit, visible action distinct from the
 // automatic background logBrainEvent calls already fired during scan/plan/execute
-// (see logBrainEvent call sites) ??? this one bundles the full closure summary
+// (see logBrainEvent call sites) — this one bundles the full closure summary
 // (outcomes + which agent/developer fixed what + total effort) into a single
 // event so it reads as a deliberate "commit this migration's learnings" action.
 function saveMigrationToBrain() {
@@ -4277,9 +4438,9 @@ function saveMigrationToBrain() {
   const summaryRows = S.cockpitRows.map(r => ({ id: r.id, name: r.name, wave: r.wave, ...rowClosureOutcome(r) }));
   logBrainEvent('migration_saved', S.platform,
     { project: S.projectName, totals: t, rows: summaryRows },
-    `Migration "${S.projectName}" saved to Brain ??? ${S.cockpitRows.length} iFlows, ${t.issuesRaised} issue(s) raised, ${t.resolvedByAgents} resolved by AI Agents, ${formatEffort(t.totalMinutes)} total effort.`);
-  showToast('Saved to Brain', 'This migration???s outcomes and agent-resolution patterns were saved to the LangChain vector DB for future migrations to learn from.', 'purple');
-  lumiSay(`Saved ??? <b>${S.projectName}</b>'s outcomes and every agent resolution are now in the Brain. Next time a similar issue comes up, I'll recommend from what worked here.`);
+    `Migration "${S.projectName}" saved to Brain — ${S.cockpitRows.length} iFlows, ${t.issuesRaised} issue(s) raised, ${t.resolvedByAgents} resolved by AI Agents, ${formatEffort(t.totalMinutes)} total effort.`);
+  showToast('Saved to Brain', 'This migration’s outcomes and agent-resolution patterns were saved to the LangChain vector DB for future migrations to learn from.', 'purple');
+  lumiSay(`Saved — <b>${S.projectName}</b>'s outcomes and every agent resolution are now in the Brain. Next time a similar issue comes up, I'll recommend from what worked here.`);
 }
 
 // A named, hand-picked subset of already-converted iFlows a user can push to a
@@ -4299,7 +4460,7 @@ function renderSavePackageModalBody() {
   const rowsHtml = doneRows.map(r => `
     <label class="package-pick-row">
       <input type="checkbox" ${sel.has(r.id) ? 'checked' : ''} onchange="togglePackageDraftRow('${r.id}')">
-      <span>${r.name}</span><span class="package-pick-meta">Wave ${r.wave} ?? ${r.iflowName}</span>
+      <span>${r.name}</span><span class="package-pick-meta">Wave ${r.wave} · ${r.iflowName}</span>
     </label>`).join('');
   return `
     <div class="modal-field"><label for="package-draft-name">Package name</label>
@@ -4332,13 +4493,13 @@ function confirmSavePackage() {
   ]);
 }
 
-// Per-iFlow "Send to QA" / "Send to Prod" ??? available on each Target Integration
+// Per-iFlow "Send to QA" / "Send to Prod" — available on each Target Integration
 // Suite card right after Figaf testing passes, not just at end-of-project via
 // "Save SDAINTAI Package". Wraps the single row in the same ad-hoc "package" shape
 // openRetargetModal already expects, so the QA/Prod connection-details flow is
 // identical either way instead of a second parallel implementation.
 function sendIflowToLandscape(rowId, target) {
-  if (target === 'Prod' && !canTriggerProdAction()) return; // persona gate ??? Take to Production is Admin-only, post-approval
+  if (target === 'Prod' && !canTriggerProdAction()) return; // persona gate — Take to Production is Admin-only, post-approval
   if (target === 'QA' && isViewer()) return;
   const row = (S.cockpitRows || []).find(r => r.id === rowId);
   if (!row) return;
@@ -4352,7 +4513,7 @@ function sendIflowToLandscape(rowId, target) {
 }
 // Re-target a saved package to a new landscape: collects the new source system's
 // connection (the same PI/PO or MuleSoft platform, just a different QA/Prod
-// instance) and the new target Integration Suite tenant, then ??? once "validated" ???
+// instance) and the new target Integration Suite tenant, then — once "validated" —
 // produces a migration copy scoped to just that package's iFlows, retargeted so
 // "Push to BTP Integration Suite" fires against the new tenant on the next click.
 function openRetargetModal(packageId, target) {
@@ -4362,14 +4523,14 @@ function openRetargetModal(packageId, target) {
   S._retargetDraft = { packageId, target };
   openModal(`Send "${pkg.name}" to ${target}`, `
     <p style="font-size:0.8rem;color:var(--btp-text-muted-dark);margin-bottom:12px;">Enter the ${target} landscape's connection details. Once validated, a new migration copy targeting ${target} is created with this package's ${pkg.iflowIds.length} iFlow(s), ready to push.</p>
-    <div class="modal-field-group-label">Source ??? ${p.label} (${target})</div>
+    <div class="modal-field-group-label">Source — ${p.label} (${target})</div>
     <div class="modal-field"><label for="retarget-source-url">System URL</label><input type="text" class="btp-input" id="retarget-source-url" placeholder="https://${(pkg.sourcePlatform === 'pipo') ? 'pipo' : 'anypoint'}-${target.toLowerCase()}.example.com"></div>
     <div class="modal-field"><label for="retarget-source-user">Username</label><input type="text" class="btp-input" id="retarget-source-user" placeholder="service-account"></div>
-    <div class="modal-field"><label for="retarget-source-pass">Password</label><input type="password" class="btp-input" id="retarget-source-pass" placeholder="????????????????????????"></div>
-    <div class="modal-field-group-label">Target ??? SAP Integration Suite (${target})</div>
+    <div class="modal-field"><label for="retarget-source-pass">Password</label><input type="password" class="btp-input" id="retarget-source-pass" placeholder="••••••••"></div>
+    <div class="modal-field-group-label">Target — SAP Integration Suite (${target})</div>
     <div class="modal-field"><label for="retarget-target-url">Tenant URL</label><input type="text" class="btp-input" id="retarget-target-url" placeholder="https://sda-${target.toLowerCase()}.integrationsuite.cfapps.us10-002.hana.ondemand.com"></div>
     <div class="modal-field"><label for="retarget-target-user">Username</label><input type="text" class="btp-input" id="retarget-target-user" placeholder="service-account"></div>
-    <div class="modal-field"><label for="retarget-target-pass">Password</label><input type="password" class="btp-input" id="retarget-target-pass" placeholder="????????????????????????"></div>
+    <div class="modal-field"><label for="retarget-target-pass">Password</label><input type="password" class="btp-input" id="retarget-target-pass" placeholder="••••••••"></div>
   `, [
     { label: 'Cancel', cls: 'btn-btp-cancel', onClick: closeModal },
     { label: `Validate & Create Copy`, cls: 'btn-btp-gold', onClick: confirmRetarget }
@@ -4386,18 +4547,18 @@ function confirmRetarget() {
   const { packageId, target } = S._retargetDraft;
   const pkg = (S.savedPackages || []).find(p => p.id === packageId);
   const btn = qsa('.btn-btp-gold', $('lumi-modal-foot'))[0];
-  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Validating???'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Validating…'; }
   setTimeout(() => {
     closeModal();
     S.retargetedCopies = S.retargetedCopies || [];
-    const copyName = `${pkg.sourceProjectName} ??? ${target}`;
+    const copyName = `${pkg.sourceProjectName} — ${target}`;
     S.retargetedCopies.push({
       name: copyName, target, packageId: pkg.id, iflowIds: pkg.iflowIds,
       sourceUrl: values['retarget-source-url'], targetTenantUrl: values['retarget-target-url'],
       createdAt: new Date().toISOString()
     });
     // Retarget the session's active push destination so the next "Push to BTP
-    // Integration Suite" click (on this same cockpit) lands on the new tenant ???
+    // Integration Suite" click (on this same cockpit) lands on the new tenant —
     // this walkthrough is single-session, so "a new migration copy" is realized
     // as this retarget rather than a second parallel project space.
     S.retargetTenantUrl = values['retarget-target-url'];
@@ -4409,18 +4570,18 @@ function confirmRetarget() {
       if (r) { r.isImportStatus = null; r.testRun = false; r.monitorActive = false; }
     });
     renderPackagePreview();
-    showToast('Copy created', `"${copyName}" is ready ??? retargeted to ${target}. Push to BTP Integration Suite to deploy this package there.`, 'purple');
-    lumiSay(`Validated and created <b>${copyName}</b> ??? ${pkg.iflowIds.length} iFlow(s) from "${pkg.name}", pointed at ${values['retarget-target-url']}. Whenever you're ready, hit <b>Push to BTP Integration Suite</b> again to deploy this package to ${target}.`);
+    showToast('Copy created', `"${copyName}" is ready — retargeted to ${target}. Push to BTP Integration Suite to deploy this package there.`, 'purple');
+    lumiSay(`Validated and created <b>${copyName}</b> — ${pkg.iflowIds.length} iFlow(s) from "${pkg.name}", pointed at ${values['retarget-target-url']}. Whenever you're ready, hit <b>Push to BTP Integration Suite</b> again to deploy this package to ${target}.`);
     openScreen('cockpit');
     switchExecTab('package');
   }, 900);
 }
 
-// ==================== ADMIN ??? DEFAULTS ====================
+// ==================== ADMIN — DEFAULTS ====================
 // Session-level org defaults: default connection fields, the editable team roster
 // (backs activeTeam(), used everywhere the old TEAM constant used to be read
 // directly), and S/4HANA system-connection settings for the not-yet-built
-// S/4HANA push. No backend ??? this is client-side state like the rest of the app.
+// S/4HANA push. No backend — this is client-side state like the rest of the app.
 function renderAdminTeamList() {
   const host = $('admin-team-list');
   if (!host) return;
@@ -4450,7 +4611,7 @@ function removeAdminTeamMember(id) {
   renderAdminTeamList();
 }
 
-// AI Agents (A2A) roster ??? same copy-on-write pattern as the team roster above,
+// AI Agents (A2A) roster — same copy-on-write pattern as the team roster above,
 // so activeAgents() automatically prefers S.agents once anyone edits it here.
 function renderAdminAgentList() {
   const host = $('admin-agent-list');
@@ -4458,7 +4619,7 @@ function renderAdminAgentList() {
   host.innerHTML = activeAgents().map(a => `
     <div class="team-member-card">
       <div class="avatar-chip" style="background:#0056d2;"><i class="fa-solid fa-robot"></i></div>
-      <div class="info"><b>A2A ??? ${a.label}</b><span>${a.domain} ?? ${a.desc}</span></div>
+      <div class="info"><b>A2A – ${a.label}</b><span>${a.domain} · ${a.desc}</span></div>
       <button class="team-remove-btn" data-id="${a.id}" title="Remove ${a.label}"><i class="fa-solid fa-xmark"></i></button>
     </div>`).join('');
   qsa('.team-remove-btn', host).forEach(btn => btn.addEventListener('click', () => removeAdminAgent(btn.dataset.id)));
@@ -4472,7 +4633,7 @@ function addAdminAgent() {
   S.agents.push({ id, label: name, domain, desc: desc || `${domain} mapping & value review`, needPhrase: `${domain} mapping review`, subject: `${domain} value mapping` });
   nameEl.value = ''; domainEl.value = ''; descEl.value = '';
   renderAdminAgentList();
-  showToast('Agent Added', `A2A ??? ${name} (${domain}) can now be recommended on blocking issues.`, 'purple');
+  showToast('Agent Added', `A2A – ${name} (${domain}) can now be recommended on blocking issues.`, 'purple');
 }
 function removeAdminAgent(id) {
   if (activeAgents().length <= 1) { showToast("Can't remove", 'At least one agent is required.', 'danger'); return; }
@@ -4493,7 +4654,7 @@ function testS4Connection() {
   const statusEl = $('admin-s4-test-status');
   statusEl.style.display = 'flex';
   statusEl.className = 'conn-status';
-  statusEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Testing???';
+  statusEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Testing…';
   $('btn-admin-test-s4').disabled = true;
   setTimeout(() => {
     $('btn-admin-test-s4').disabled = false;
@@ -4504,10 +4665,10 @@ function testS4Connection() {
       return;
     }
     statusEl.className = 'conn-status ok';
-    statusEl.innerHTML = '<span class="dot"></span> Connected ??? S/4HANA system reachable';
+    statusEl.innerHTML = '<span class="dot"></span> Connected — S/4HANA system reachable';
   }, 1200);
 }
-// Wires a "Manual ??? I don't have a value yet" checkbox to disable/enable its
+// Wires a "Manual — I don't have a value yet" checkbox to disable/enable its
 // paired input, and applies the checkbox's current (HTML-default) state on load.
 function setupManualToggle(checkboxId, inputId) {
   const cb = $(checkboxId), input = $(inputId);
@@ -4518,7 +4679,7 @@ function setupManualToggle(checkboxId, inputId) {
 }
 // Reflects the SDA AI Subaccount + sda-prv-tenant checkbox into the status line
 // underneath. Shared subaccount is never "private" even if someone checks the
-// box there ??? isolation only means something once the subaccount itself is a
+// box there — isolation only means something once the subaccount itself is a
 // client-dedicated one, not the shared sandbox everyone's demos run in.
 function updatePrvTenantStatus() {
   const select = $('admin-sda-subaccount'), cb = $('admin-prv-tenant'), statusEl = $('admin-prv-tenant-status');
@@ -4528,20 +4689,20 @@ function updatePrvTenantStatus() {
   cb.disabled = isSharedSubaccount;
   if (isSharedSubaccount) {
     statusEl.className = 'conn-status';
-    statusEl.innerHTML = '<span class="dot"></span> Shared subaccount ??? demo/sandbox tenant, not isolated';
+    statusEl.innerHTML = '<span class="dot"></span> Shared subaccount — demo/sandbox tenant, not isolated';
   } else if (cb.checked) {
     statusEl.className = 'conn-status ok';
-    statusEl.innerHTML = `<span class="dot"></span> Private ??? ${select.value} is dedicated to this client only`;
+    statusEl.innerHTML = `<span class="dot"></span> Private — ${select.value} is dedicated to this client only`;
   } else {
     statusEl.className = 'conn-status fail';
-    statusEl.innerHTML = `<span class="dot"></span> ${select.value} picked, but sda-prv-tenant isn't checked ??? this subaccount can still be shared with other clients`;
+    statusEl.innerHTML = `<span class="dot"></span> ${select.value} picked, but sda-prv-tenant isn't checked — this subaccount can still be shared with other clients`;
   }
 }
 // Reflects the two Migration Acceleration checkboxes into their status line,
 // updates S.adminDefaults immediately (not gated behind Save Defaults, so the
 // slowdown is visible right away), and refreshes every duration already on
-// screen ??? wave timing, Plan approval, Readiness/Progress effort, and the
-// Migration Cockpit's own Est. Time Remaining stat ??? so unchecking an agent
+// screen — wave timing, Plan approval, Readiness/Progress effort, and the
+// Migration Cockpit's own Est. Time Remaining stat — so unchecking an agent
 // visibly slows the numbers without needing to navigate away and back.
 function updateAgentSpeedStatus() {
   const mappingCb = $('admin-agent-mapping'), conversionCb = $('admin-agent-conversion'), statusEl = $('admin-agent-speed-status');
@@ -4550,16 +4711,16 @@ function updateAgentSpeedStatus() {
   S.adminDefaults.agentConversionEnabled = conversionCb.checked;
   const agents = activeAgentCount();
   const sample = tier => formatEffort(effortMinutesForTier(tier));
-  const sampleLine = `Simple ${sample('Simple')} ?? Medium ${sample('Medium')} ?? Complex ${sample('High')}`;
+  const sampleLine = `Simple ${sample('Simple')} · Medium ${sample('Medium')} · Complex ${sample('High')}`;
   if (agents === 2) {
     statusEl.className = 'conn-status ok';
-    statusEl.innerHTML = `<span class="dot"></span> Both agents active ??? full 30x acceleration (${sampleLine})`;
+    statusEl.innerHTML = `<span class="dot"></span> Both agents active — full 30x acceleration (${sampleLine})`;
   } else if (agents === 1) {
     statusEl.className = 'conn-status';
-    statusEl.innerHTML = `<span class="dot"></span> 1 of 2 agents active ??? ~5.5x acceleration (${sampleLine})`;
+    statusEl.innerHTML = `<span class="dot"></span> 1 of 2 agents active — ~5.5x acceleration (${sampleLine})`;
   } else {
     statusEl.className = 'conn-status fail';
-    statusEl.innerHTML = `<span class="dot"></span> No agents active ??? fully manual baseline, no acceleration (${sampleLine})`;
+    statusEl.innerHTML = `<span class="dot"></span> No agents active — fully manual baseline, no acceleration (${sampleLine})`;
   }
   if (S.cockpitRows && S.cockpitRows.length) { refreshExecTabs(); refreshWaveMeter(); }
 }
@@ -4569,11 +4730,11 @@ function updateAgentSpeedStatus() {
 function updateCockpitTimeStat() {
   const valEl = $('cockpit-time-remaining'), subEl = $('cockpit-time-remaining-sub');
   if (!valEl || !subEl) return;
-  if (!S.cockpitRows || !S.cockpitRows.length) { valEl.textContent = '0m'; subEl.textContent = '???'; return; }
+  if (!S.cockpitRows || !S.cockpitRows.length) { valEl.textContent = '0m'; subEl.textContent = '—'; return; }
   const remainingTotal = totalEffortMinutes(S.cockpitRows.filter(r => !['Done', 'Error', 'Parked'].includes(r.status)));
   const estimatedTotal = totalEffortMinutes(S.cockpitRows);
   valEl.textContent = formatEffort(remainingTotal);
-  subEl.textContent = `of ${formatEffort(estimatedTotal)} ?? ${activeAgentCount()} of 2 agents active`;
+  subEl.textContent = `of ${formatEffort(estimatedTotal)} · ${activeAgentCount()} of 2 agents active`;
 }
 function saveAdminDefaults() {
   const authMode = $('admin-auth-toggle').querySelector('button.active').dataset.mode;
@@ -4617,176 +4778,17 @@ function saveAdminDefaults() {
     }
   };
   saveBrainMemory();
-  logBrainEvent('setting_changed', 'admin', S.adminDefaults, `Admin defaults saved ??? platform=${S.adminDefaults.platform || 'n/a'}, tenant=${S.adminDefaults.tenant}, subaccount=${S.adminDefaults.sdaSubaccount}${S.adminDefaults.prvTenant ? ' (sda-prv-tenant)' : ''}, PI/PO system=${S.adminDefaults.piPo.systemName}.`);
+  logBrainEvent('setting_changed', 'admin', S.adminDefaults, `Admin defaults saved — platform=${S.adminDefaults.platform || 'n/a'}, tenant=${S.adminDefaults.tenant}, subaccount=${S.adminDefaults.sdaSubaccount}${S.adminDefaults.prvTenant ? ' (sda-prv-tenant)' : ''}, PI/PO system=${S.adminDefaults.piPo.systemName}.`);
   showToast('Defaults Saved', 'New migrations will start from these connection defaults, and the updated team roster is live for wave assignment.', 'purple');
-
-  // Register PI System with backend (for Docker/SQLite demo mode)
-  if (S.adminDefaults.piPo && S.adminDefaults.piPo.systemName) {
-    registerPISystemWithBackend(S.adminDefaults.piPo);
-  }
 }
-
-// Registers PI/PO system configuration with the backend DiscoveryService.
-// This enables the Docker demo with SQLite - when users fill in Settings,
-// the system gets persisted to the database for later discovery operations.
-async function registerPISystemWithBackend(piPo) {
-  if (!piPo.systemName || !piPo.address) return;
-
-  // Parse address to extract host and port
-  let virtualHost = piPo.address;
-  let virtualPort = 443;
-  let protocol = 'https';
-  try {
-    const url = new URL(piPo.address);
-    virtualHost = url.hostname;
-    virtualPort = parseInt(url.port) || (url.protocol === 'https:' ? 443 : 80);
-    protocol = url.protocol.replace(':', '');
-  } catch (e) {
-    // If not a valid URL, use as-is
-    virtualHost = piPo.address.replace(/^https?:\/\//, '').split(':')[0];
-  }
-
-  const payload = {
-    systemName: piPo.systemName,
-    description: piPo.systemName + ' - PI/PO System (version ' + (piPo.systemVersion || '7.50') + ')',
-    virtualHost: virtualHost,
-    virtualPort: virtualPort,
-    protocol: protocol,
-    locationId: piPo.locationId || 'DEFAULT',
-    techUser: piPo.userId || 'PIPO_USER',
-    techPassword: piPo.password || '',
-    piVersion: piPo.systemVersion || '7.50'
-  };
-
-  try {
-    const res = await fetch('/api/tenant/savePipoSystem', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Basic ' + btoa('alice:')  // Mocked auth for Docker demo
-      },
-      body: JSON.stringify({ systemConfig: payload })
-    });
-    const data = await res.json();
-    if (res.ok && data.ID) {
-      console.log('[PIPO] Registered system with backend:', data);
-      // Store system ID for later discovery operations
-      S.registeredSystemId = data.ID;
-      showToast('PI System Registered', 'System "' + piPo.systemName + '" is now available for discovery.', 'success');
-    } else {
-      console.warn('[PIPO] Backend registration response:', data);
-    }
-  } catch (err) {
-    // Silent fail - this is optional for Docker demo mode
-    console.warn('[PIPO] Could not register with backend (expected if not in Docker mode):', err.message);
-  }
-}
-
-// Triggers PI/PO artifact discovery via backend TenantService.
-// Uses the registered system ID from registerPISystemWithBackend.
-// Returns discovered artifacts or null if backend unavailable.
-async function triggerBackendDiscovery(systemId) {
-  if (!systemId) {
-    console.warn('[Discovery] No system ID available for backend discovery');
-    return null;
-  }
-
-  try {
-    const res = await fetch('/api/tenant/triggerDiscovery', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Basic ' + btoa('alice:')  // Mocked auth for Docker demo
-      },
-      body: JSON.stringify({ systemId })
-    });
-    const data = await res.json();
-    if (res.ok && data.ID) {
-      console.log('[Discovery] Backend discovery triggered:', data);
-      return data;
-    } else {
-      console.warn('[Discovery] Backend discovery response:', data);
-      return null;
-    }
-  } catch (err) {
-    console.warn('[Discovery] Could not trigger backend discovery:', err.message);
-    return null;
-  }
-}
-
-// Polls discovery job progress until complete or timeout.
-// Returns final job status with discovered artifacts count.
-async function pollDiscoveryProgress(jobId, maxWaitMs = 120000) {
-  const startTime = Date.now();
-  const pollInterval = 2000; // 2 seconds
-
-  while (Date.now() - startTime < maxWaitMs) {
-    try {
-      const res = await fetch(`/odata/v4/discovery/getDiscoveryProgress(jobId=${jobId})`, {
-        method: 'GET',
-        headers: { 'Authorization': 'Basic ' + btoa('alice:') }
-      });
-      const data = await res.json();
-
-      if (data.status === 'completed' || data.status === 'failed') {
-        return data;
-      }
-
-      // Update progress UI if available
-      if (data.progressPercent !== undefined) {
-        console.log(`[Discovery] Progress: ${data.progressPercent}% - ${data.phaseName || 'Processing'}`);
-      }
-
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
-    } catch (err) {
-      console.warn('[Discovery] Error polling progress:', err.message);
-      break;
-    }
-  }
-  return null;
-}
-
-// Fetches discovered artifacts from backend cache after discovery completes.
-// Maps them to the UI's asset format for display.
-async function fetchDiscoveredArtifacts(systemId) {
-  try {
-    const res = await fetch(`/odata/v4/discovery/Artifacts?$filter=system_ID eq ${systemId}&$top=500`, {
-      method: 'GET',
-      headers: { 'Authorization': 'Basic ' + btoa('alice:') }
-    });
-    const data = await res.json();
-    if (data.value && data.value.length) {
-      return mapBackendArtifactsToAssets(data.value);
-    }
-  } catch (err) {
-    console.warn('[Discovery] Could not fetch artifacts:', err.message);
-  }
-  return null;
-}
-
-// Maps backend Artifact entities to UI asset format for display.
-function mapBackendArtifactsToAssets(artifacts) {
-  return artifacts.map((a, i) => ({
-    id: a.ID || `BK-${String(i + 1).padStart(4, '0')}`,
-    name: a.name || a.artifactType || 'Unknown',
-    type: a.artifactType || 'ICO',
-    tier: a.complexityTier || 'Simple',
-    deps: a.dependencyCount || 1,
-    status: a.migrationReadiness || 'Ready',
-    flowCount: a.subObjectCount || 3,
-    tree: [], // Simplified - tree details would need separate fetch
-    backend: true
-  }));
-}
-
-// Same mock reachability check as testS4Connection ??? validates the Integration
+// Same mock reachability check as testS4Connection — validates the Integration
 // Directory address is present, doesn't actually call out to nwjava.consultsda.com.
 function testPiPoConnection() {
   const statusEl = $('admin-pipo-test-status');
   const host = $('admin-pipo-address').value.trim();
   statusEl.style.display = 'flex';
   statusEl.className = 'conn-status';
-  statusEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Testing PI/PO Integration Directory???';
+  statusEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Testing PI/PO Integration Directory…';
   $('btn-admin-test-pipo').disabled = true;
   setTimeout(() => {
     $('btn-admin-test-pipo').disabled = false;
@@ -4797,14 +4799,14 @@ function testPiPoConnection() {
     }
     if (!$('admin-pipo-password').value) {
       statusEl.className = 'conn-status fail';
-      statusEl.innerHTML = `<span class="dot"></span> ${$('admin-pipo-userid').value || 'User'} password not set yet ??? enter it above`;
+      statusEl.innerHTML = `<span class="dot"></span> ${$('admin-pipo-userid').value || 'User'} password not set yet — enter it above`;
       return;
     }
     statusEl.className = 'conn-status ok';
-    statusEl.innerHTML = `<span class="dot"></span> Connected ??? ${$('admin-pipo-system-name').value || 'PI/PO'} Integration Directory reachable`;
+    statusEl.innerHTML = `<span class="dot"></span> Connected — ${$('admin-pipo-system-name').value || 'PI/PO'} Integration Directory reachable`;
   }, 1200);
 }
-// Real check, unlike testPiPoConnection above ??? calls mcp/pipo-rfc-server's
+// Real check, unlike testPiPoConnection above — calls mcp/pipo-rfc-server's
 // /api/pi8/ping, which proves the Cloud Connector/destination chain to PJ2
 // (PO_PJ2_ESR/PO_PJ2_DIR) actually works, no mock timer involved.
 async function testPi8Connection() {
@@ -4812,7 +4814,7 @@ async function testPi8Connection() {
   const base = $('admin-pi8-mcp-base').value.trim() || PIPO_MCP_API_BASE;
   statusEl.style.display = 'flex';
   statusEl.className = 'conn-status';
-  statusEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Checking PI8/PJ2 reachability via Cloud Connector???';
+  statusEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Checking PI8/PJ2 reachability via Cloud Connector…';
   $('btn-admin-test-pi8').disabled = true;
   try {
     const res = await fetch(base + '/api/pi8/ping');
@@ -4820,10 +4822,10 @@ async function testPi8Connection() {
     $('btn-admin-test-pi8').disabled = false;
     if (data.reachable) {
       statusEl.className = 'conn-status ok';
-      statusEl.innerHTML = '<span class="dot"></span> LIVE ??? PI8 (PJ2) reachable through PO_PJ2_ESR/PO_PJ2_DIR.';
+      statusEl.innerHTML = '<span class="dot"></span> LIVE — PI8 (PJ2) reachable through PO_PJ2_ESR/PO_PJ2_DIR.';
     } else {
       statusEl.className = 'conn-status fail';
-      statusEl.innerHTML = `<span class="dot"></span> PI8 not reachable (${(data.destinations && Object.values(data.destinations)[0] && Object.values(data.destinations)[0].error) || data.error || 'unknown error'}) ??? check the Destination/Cloud Connector mapping.`;
+      statusEl.innerHTML = `<span class="dot"></span> PI8 not reachable (${(data.destinations && Object.values(data.destinations)[0] && Object.values(data.destinations)[0].error) || data.error || 'unknown error'}) — check the Destination/Cloud Connector mapping.`;
     }
   } catch (err) {
     $('btn-admin-test-pi8').disabled = false;
@@ -4871,7 +4873,7 @@ function showTreeModal(assetId) {
 
 // ==================== COMPOSER (free-text intents) ====================
 // ==================== FREE-FORM COMMANDS ====================
-// Lightweight keyword+regex intent router ??? not a real NLU model (this is a static
+// Lightweight keyword+regex intent router — not a real NLU model (this is a static
 // client-side demo with no backend LLM call), but genuinely parses and executes
 // "update settings btp to <url>" style requests rather than just echoing a canned
 // reply, matching the ask that Lumi act like an orchestrator you can just tell to
@@ -4887,62 +4889,62 @@ function tryInterpretCommand(rawText) {
   const t = rawText.toLowerCase();
   if (!/\b(update|change|set|edit|modify|rename)\b/.test(t)) return false;
 
-  // Password is checked first ??? "update the btp tenant password" contains both
+  // Password is checked first — "update the btp tenant password" contains both
   // "btp" and "tenant" and would otherwise get misrouted to the tenant URL branch.
   if (/\bpassword\b/.test(t)) {
     const val = extractAfterTo(rawText);
     if (val) { applyDefaultPasswordCommand(val); return true; }
-    lumiSay('Sure ??? what should the password be?');
+    lumiSay('Sure — what should the password be?');
     S.pendingAnswerHandler = (val2) => applyDefaultPasswordCommand(val2.trim());
     return true;
   }
-  // ALM tenant is checked before BTP tenant since both phrases contain "tenant" ???
+  // ALM tenant is checked before BTP tenant since both phrases contain "tenant" —
   // a separate target system from BTP Integration Suite and from Figaf.
   if (/\balm\b/.test(t) && /\btenant\b/.test(t)) {
     const url = extractUrl(rawText);
     if (url) { applyAlmTenantUrlCommand(url); return true; }
-    lumiSay('Sure ??? what should I set the ALM tenant URL to? Paste it here and I\'ll save it to Settings.');
+    lumiSay('Sure — what should I set the ALM tenant URL to? Paste it here and I\'ll save it to Settings.');
     S.pendingAnswerHandler = (val) => applyAlmTenantUrlCommand(extractUrl(val) || val.trim());
     return true;
   }
   if ((/\bbtp\b|\btenant\b|integration suite/.test(t)) && !/\bfigaf\b|\balm\b/.test(t)) {
     const url = extractUrl(rawText);
     if (url) { applyBtpTenantUrlCommand(url); return true; }
-    lumiSay('Sure ??? what should I set the BTP Integration Suite tenant URL to? Paste it here and I\'ll save it to Settings.');
+    lumiSay('Sure — what should I set the BTP Integration Suite tenant URL to? Paste it here and I\'ll save it to Settings.');
     S.pendingAnswerHandler = (val) => applyBtpTenantUrlCommand(extractUrl(val) || val.trim());
     return true;
   }
   if (/\bfigaf\b|\balm target\b/.test(t)) {
     const val = extractAfterTo(rawText);
     if (val) { applyFigafTargetCommand(val); return true; }
-    lumiSay('Sure ??? what should the Figaf ALM target be?');
+    lumiSay('Sure — what should the Figaf ALM target be?');
     S.pendingAnswerHandler = (val2) => applyFigafTargetCommand(val2.trim());
     return true;
   }
   if (/\bemail\b|\busername\b/.test(t)) {
     const email = extractEmail(rawText);
     if (email) { applyDefaultEmailCommand(email); return true; }
-    lumiSay('Sure ??? what should the default integration email/username be?');
+    lumiSay('Sure — what should the default integration email/username be?');
     S.pendingAnswerHandler = (val) => applyDefaultEmailCommand(extractEmail(val) || val.trim());
     return true;
   }
   if (/\bpackage name\b|\bproject name\b/.test(t)) {
     const val = extractAfterTo(rawText);
     if (val) { applyProjectNameCommand(val); return true; }
-    lumiSay('Sure ??? what should I rename the project to?');
+    lumiSay('Sure — what should I rename the project to?');
     S.pendingAnswerHandler = (val2) => applyProjectNameCommand(val2.trim());
     return true;
   }
   return false;
 }
-// Confirms the change AND offers to pick the guided flow back up ??? the
+// Confirms the change AND offers to pick the guided flow back up — the
 // "smart orchestrator" behavior: handle the side request, then resume where
 // the conversation actually was, rather than leaving the user stranded on a
 // generic "I can help with..." message.
 function lumiSayWithResume(text) {
   lumiSay(`${text} Shall we continue where we left off?`);
   if (S.resumeAction && S.resumeAction.fn) {
-    lumiChoices([{ label: `Continue ??? ${S.resumeAction.label}`, cls: 'primary', onClick: S.resumeAction.fn }]);
+    lumiChoices([{ label: `Continue — ${S.resumeAction.label}`, cls: 'primary', onClick: S.resumeAction.fn }]);
   }
 }
 function applyBtpTenantUrlCommand(url) {
@@ -4950,40 +4952,40 @@ function applyBtpTenantUrlCommand(url) {
   S.adminDefaults.btpTenantManual = false;
   const f = $('admin-btp-tenant-url'); if (f) { f.value = url; f.disabled = false; }
   const cb = $('admin-btp-tenant-manual'); if (cb) cb.checked = false;
-  lumiSayWithResume(`Done ??? I've adjusted the settings as per your request. BTP Integration Suite tenant URL is now <b>${url}</b>.`);
+  lumiSayWithResume(`Done — I've adjusted the settings as per your request. BTP Integration Suite tenant URL is now <b>${url}</b>.`);
 }
 function applyAlmTenantUrlCommand(url) {
   S.adminDefaults.almTenantUrl = url;
   S.adminDefaults.almTenantManual = false;
   const f = $('admin-alm-tenant-url'); if (f) { f.value = url; f.disabled = false; }
   const cb = $('admin-alm-tenant-manual'); if (cb) cb.checked = false;
-  lumiSayWithResume(`Done ??? I've adjusted the settings as per your request. ALM tenant URL is now <b>${url}</b>.`);
+  lumiSayWithResume(`Done — I've adjusted the settings as per your request. ALM tenant URL is now <b>${url}</b>.`);
 }
 function applyFigafTargetCommand(val) {
   S.adminDefaults.figafAlmTarget = val;
   S.adminDefaults.figafManual = false;
   const f = $('admin-figaf-target'); if (f) { f.value = val; f.disabled = false; }
   const cb = $('admin-figaf-manual'); if (cb) cb.checked = false;
-  lumiSayWithResume(`Done ??? I've adjusted the settings as per your request. Figaf ALM target is now <b>${val}</b>.`);
+  lumiSayWithResume(`Done — I've adjusted the settings as per your request. Figaf ALM target is now <b>${val}</b>.`);
 }
 function applyDefaultEmailCommand(email) {
   S.adminDefaults.username = email;
   const f = $('admin-default-username'); if (f) f.value = email;
   const f2 = $('auth-username'); if (f2) f2.value = email;
-  lumiSayWithResume(`Done ??? I've adjusted the settings as per your request. Default integration email/username is now <b>${email}</b>.`);
+  lumiSayWithResume(`Done — I've adjusted the settings as per your request. Default integration email/username is now <b>${email}</b>.`);
 }
 function applyDefaultPasswordCommand(pw) {
   S.adminDefaults.password = pw;
   const f = $('admin-default-password'); if (f) f.value = pw;
   const f2 = $('auth-password'); if (f2) f2.value = pw;
-  lumiSayWithResume(`Done ??? I've adjusted the settings as per your request. Default connection password has been updated.`);
+  lumiSayWithResume(`Done — I've adjusted the settings as per your request. Default connection password has been updated.`);
 }
 function applyProjectNameCommand(name) {
   S.projectName = name;
   const f = $('project-selector-text'); if (f) f.textContent = name;
   if ($('project-badge-text')) $('project-badge-text').textContent = name;
-  document.title = `SDAINT-AI ??? ${name}`;
-  lumiSayWithResume(`Done ??? I've adjusted the settings as per your request. Project renamed to <b>${name}</b>.`);
+  document.title = `SDAINT-AI — ${name}`;
+  lumiSayWithResume(`Done — I've adjusted the settings as per your request. Project renamed to <b>${name}</b>.`);
 }
 function lumiHtml(html) {
   const body = $('lumi-drawer-body');
@@ -4994,7 +4996,7 @@ function lumiHtml(html) {
 }
 
 // The sidebar's "Plan" section covers three screens (buckets/wave/approve),
-// not one ??? a bare "go to plan" resolves to wherever the user actually is:
+// not one — a bare "go to plan" resolves to wherever the user actually is:
 // the furthest unlocked-but-not-yet-done screen, or null if Plan itself
 // hasn't unlocked yet (buckets still pending).
 function resolvePlanScreen() {
@@ -5003,7 +5005,7 @@ function resolvePlanScreen() {
     if (!el || el.classList.contains('pending')) return null;
     if (!el.classList.contains('done')) return id;
   }
-  return 'approve'; // all three done ??? show the last one
+  return 'approve'; // all three done — show the last one
 }
 
 function handleComposerSend() {
@@ -5026,27 +5028,27 @@ function handleComposerSend() {
 
   // "continue" / "let's continue" / "proceed" typed into the composer, instead of
   // clicking the primary chip Lumi already offered, used to fall straight through
-  // to the generic canned reply below ??? a real bug (user-reported screenshot: typed
+  // to the generic canned reply below — a real bug (user-reported screenshot: typed
   // "lets continue" after the wave-planning pie chart, got the generic help list
   // back). S.resumeAction always holds whatever primary action the last lumiChoices()
   // call offered, so honor it here instead of silently doing nothing.
   if (/\b(continue|proceed|keep going|go ahead)\b/i.test(text) || /\blet'?s\s+go\b/i.test(text)) {
     if (S.resumeAction && S.resumeAction.fn) {
       const action = S.resumeAction;
-      lumiSay(`Continuing ??? ${action.label}.`);
+      lumiSay(`Continuing — ${action.label}.`);
       action.fn();
     } else {
-      lumiSay("There's nothing queued to continue right now ??? tell me what you'd like to do next, or use the buttons on screen.");
+      lumiSay("There's nothing queued to continue right now — tell me what you'd like to do next, or use the buttons on screen.");
     }
     return;
   }
 
-  // "let's start the migration over (again)" / "restart the migration" ???
+  // "let's start the migration over (again)" / "restart the migration" —
   // archives whatever's in progress (same path as the Close screen's
   // explicit "Archive project" button, idempotent either way) and drops back
   // to platform selection, exactly like clicking "Start another migration".
   if (/\brestart\b/i.test(text) || (/\bstart\b/i.test(text) && /\b(over|again)\b/i.test(text))) {
-    lumiSay(S.platform ? "Got it ??? archiving this migration and starting fresh." : "Starting fresh.");
+    lumiSay(S.platform ? "Got it — archiving this migration and starting fresh." : "Starting fresh.");
     setTimeout(restartMigration, 600);
     return;
   }
@@ -5054,36 +5056,36 @@ function handleComposerSend() {
   const t = text.toLowerCase();
   const p = PLATFORMS[S.platform] || PLATFORMS.mulesoft;
   if (t.includes('structure') || t.includes('validate')) {
-    if (!S.assets.length) { lumiSay(`I don't have any ${p.assetNounPlural} scanned yet ??? let's finish ${p.terms.sourceStepNoun} Selection first.`); return; }
+    if (!S.assets.length) { lumiSay(`I don't have any ${p.assetNounPlural} scanned yet — let's finish ${p.terms.sourceStepNoun} Selection first.`); return; }
     const first = S.assets[0];
     lumiSay(`Here's the structure for <b>${first.name}</b>:`);
     lumiTree(renderInlineTree(first));
     lumiChoices([{ label: 'Let me edit branches', onClick: () => showTreeModal(first.id) }, { label: 'Looks good', cls: 'primary', onClick: () => { } }]);
   } else if (t.includes('show') && t.includes('detail')) {
     if ($('screen-btp-assets').classList.contains('active')) showAssetDetails();
-    else lumiSay(`Sure ??? which screen's details would you like? Try asking on the ${p.terms.sourceStepNoun} Selection or Migration Cockpit step.`);
+    else lumiSay(`Sure — which screen's details would you like? Try asking on the ${p.terms.sourceStepNoun} Selection or Migration Cockpit step.`);
   } else if (t.includes('connect') || t.includes('setup') || t.includes('set up')) {
     // lumiSay()/lumiChoices() before openScreen() everywhere in this chain, not
-    // after ??? lumiSay() calls openDrawer() internally, which re-activates the
+    // after — lumiSay() calls openDrawer() internally, which re-activates the
     // chat drawer over whatever screen just opened. openScreen() has to run
     // last or the target screen flashes then bounces back to chat (the exact
-    // bug already fixed once for the iflow-status handler below ??? same fix,
+    // bug already fixed once for the iflow-status handler below — same fix,
     // applied consistently here instead of one-off).
-    lumiSay('Here you go ??? Set Connection is open.');
+    lumiSay('Here you go — Set Connection is open.');
     openScreen('connection');
   } else if (t.includes('import asset') || t.includes('source selection') || t.includes('source object') || t.includes('object selection') || (t.includes('scan') && !t.includes('rescan'))) {
     // "Import Assets" is relabeled per platform to "{X} Source Object Selection"
-    // (applyPlatformTerminology) ??? recognize both the generic screen name and
+    // (applyPlatformTerminology) — recognize both the generic screen name and
     // whatever this platform is currently calling it, not just the static one.
-    if (!$('nav-assets').classList.contains('pending')) { lumiSay(`Here you go ??? ${p.terms.sourceStepNoun} Selection is open.`); openScreen('assets'); }
-    else lumiSay("That unlocks once Set Connection is done ??? let's finish that first.");
+    if (!$('nav-assets').classList.contains('pending')) { lumiSay(`Here you go — ${p.terms.sourceStepNoun} Selection is open.`); openScreen('assets'); }
+    else lumiSay("That unlocks once Set Connection is done — let's finish that first.");
   } else if (t.includes('bucket') || t.includes('which asset') || t.includes('pick asset')) {
     if (!$('nav-buckets').classList.contains('pending')) {
-      lumiSay(`Here you go ??? Migration Buckets is open. Want to pick which ${p.assetNounPlural} are included?`);
+      lumiSay(`Here you go — Migration Buckets is open. Want to pick which ${p.assetNounPlural} are included?`);
       lumiChoices([{ label: 'Let me pick', onClick: () => { lumiSay('Click each one to include or exclude it.'); renderAssetPickChips(); } }]);
       openScreen('buckets');
     }
-    else lumiSay(`We're not at ${p.assetNoun} selection yet ??? let's finish ${p.terms.sourceStepNoun} Selection first.`);
+    else lumiSay(`We're not at ${p.assetNoun} selection yet — let's finish ${p.terms.sourceStepNoun} Selection first.`);
   } else if (t.includes('wave') || t.includes('team')) {
     if (!$('nav-wave').classList.contains('pending')) openScreen('wave');
     else lumiSay(`Wave and team planning unlocks once ${p.assetNounPlural} are grouped into buckets.`);
@@ -5092,124 +5094,41 @@ function handleComposerSend() {
     else lumiSay("Approval unlocks once waves and team are set.");
   } else if (t.includes('plan') && !t.includes('planet')) {
     // Generic "go to plan" (the sidebar's Plan section covers 3 screens, not
-    // one) ??? resolve to wherever the user actually is in that phase: the
+    // one) — resolve to wherever the user actually is in that phase: the
     // furthest unlocked-but-not-done screen among buckets/wave/approve.
     const target = resolvePlanScreen();
-    if (target) { lumiSay("Here you go ??? that's where your migration plan is right now."); openScreen(target); }
-    else lumiSay(`Planning unlocks once ${p.assetNounPlural} are scanned ??? let's finish ${p.terms.sourceStepNoun} Selection first.`);
+    if (target) { lumiSay("Here you go — that's where your migration plan is right now."); openScreen(target); }
+    else lumiSay(`Planning unlocks once ${p.assetNounPlural} are scanned — let's finish ${p.terms.sourceStepNoun} Selection first.`);
   } else if (t.includes('cockpit') || t.includes('execute') || t.includes('convert')) {
     if (!$('nav-cockpit').classList.contains('pending')) openScreen('cockpit');
-    else lumiSay("The cockpit unlocks once the plan is approved ??? let's get there first.");
+    else lumiSay("The cockpit unlocks once the plan is approved — let's get there first.");
   } else if (t.includes('close project') || t.includes('close screen') || (t.includes('close') && t.includes('migration'))) {
     if (!$('nav-close').classList.contains('pending')) openScreen('close');
     else lumiSay("Closing unlocks once everything in the cockpit is resolved.");
   } else if (t.includes('iflow') && (t.includes('status') || t.includes('link'))) {
     if (!S.cockpitRows.length) {
-      lumiSay("There's nothing converted yet ??? once execution starts I'll have a deduced iFlow, status, and link for each item.");
+      lumiSay("There's nothing converted yet — once execution starts I'll have a deduced iFlow, status, and link for each item.");
     } else {
       const rows = S.cockpitRows.slice(0, 6);
-      const list = rows.map(r => `??? <b>${r.iflowName}</b> ??? ${iflowStatusLabel(r)} ??? <a href="${r.iflowLink}" target="_blank" rel="noopener">Open</a>`).join('<br>');
-      // lumiSay() before openScreen() (not after) ??? lumiSay() re-shows the chat
+      const list = rows.map(r => `• <b>${r.iflowName}</b> — ${iflowStatusLabel(r)} — <a href="${r.iflowLink}" target="_blank" rel="noopener">Open</a>`).join('<br>');
+      // lumiSay() before openScreen() (not after) — lumiSay() re-shows the chat
       // internally, so calling openScreen() last is what actually leaves the
       // Integration list tab on screen instead of flashing then bouncing back.
-      lumiSay(`Here's the deduced iFlow per converted item (showing ${rows.length} of ${S.cockpitRows.length} ??? see the Integration list tab for the rest):<br>${list}`);
+      lumiSay(`Here's the deduced iFlow per converted item (showing ${rows.length} of ${S.cockpitRows.length} — see the Integration list tab for the rest):<br>${list}`);
       openScreen('cockpit');
     }
   } else if (t.includes('setting') || t.includes('admin')) {
-    lumiSay("Here you go ??? Settings is open.");
+    lumiSay("Here you go — Settings is open.");
     openScreen('admin');
   } else {
-    // Try backend AI chat if Brain is activated
-    if (S.brainActivated && S.brainKey) {
-      callBackendBrainChat(text);
-      return;
-    }
     const prior = recallSimilarQuestion(text);
-    const recallPrefix = prior ? `You asked something close to this before ??? I still don't have a dedicated answer for it, but noted. ` : '';
-    lumiSay(`${recallPrefix}I can help with connecting a source, scanning ${p.assetNounPlural}, picking ${p.assetNounPlural} into buckets, planning waves and team, approving the plan, opening the cockpit, or opening Settings ??? try "go to Execute", "go to Plan", "go to Approve", "go to Close", ask about iFlow status/links, say "continue" to pick up where we left off, "start the migration over" to archive this one and begin fresh, or use the buttons above at each step.`);
+    const recallPrefix = prior ? `You asked something close to this before — I still don't have a dedicated answer for it, but noted. ` : '';
+    lumiSay(`${recallPrefix}I can help with connecting a source, scanning ${p.assetNounPlural}, picking ${p.assetNounPlural} into buckets, planning waves and team, approving the plan, opening the cockpit, or opening Settings — try "go to Execute", "go to Plan", "go to Approve", "go to Close", ask about iFlow status/links, say "continue" to pick up where we left off, "start the migration over" to archive this one and begin fresh, or use the buttons above at each step.`);
   }
 }
-
-// Calls the backend Brain service chat endpoint with LangGraph integration.
-// Uses the tenant's checkpoint saver for conversation persistence.
-async function callBackendBrainChat(message) {
-  setLumiState('thinking');
-  lumiSay('<i class="fa-solid fa-spinner fa-spin"></i> Thinking...');
-
-  try {
-    const result = await brainCall('chat', {
-      key: S.brainKey,
-      message: message,
-      threadId: S.brainSessionId || `session_${Date.now()}`,
-      tenantId: S.tenantId || 'default'
-    });
-
-    if (result.response) {
-      setLumiState('success');
-      // Remove the thinking message
-      const lumiLog = $('lumi-drawer-log');
-      if (lumiLog && lumiLog.lastChild) lumiLog.removeChild(lumiLog.lastChild);
-      lumiSay(result.response);
-
-      // If LangGraph returned artifact-related suggestions, offer actions
-      if (result.suggestedActions && result.suggestedActions.length) {
-        const choices = result.suggestedActions.map(a => ({
-          label: a.label,
-          onClick: () => handleBrainSuggestedAction(a)
-        }));
-        lumiChoices(choices);
-      }
-    } else {
-      throw new Error('No response from Brain');
-    }
-  } catch (err) {
-    setLumiState('idle');
-    console.warn('[Brain] Chat call failed:', err.message);
-    // Remove the thinking message and fall back to local response
-    const lumiLog = $('lumi-drawer-log');
-    if (lumiLog && lumiLog.lastChild) lumiLog.removeChild(lumiLog.lastChild);
-    const p = PLATFORMS[S.platform] || PLATFORMS.mulesoft;
-    const prior = recallSimilarQuestion(message);
-    const recallPrefix = prior ? `You asked something close to this before ??? I still don't have a dedicated answer for it, but noted. ` : '';
-    lumiSay(`${recallPrefix}I can help with connecting a source, scanning ${p.assetNounPlural}, picking ${p.assetNounPlural} into buckets, planning waves and team, approving the plan, opening the cockpit, or opening Settings ??? try "go to Execute", "go to Plan", "go to Approve", "go to Close", ask about iFlow status/links, say "continue" to pick up where we left off, "start the migration over" to archive this one and begin fresh, or use the buttons above at each step.`);
-  }
-}
-
-// Handles suggested actions from the Brain's LangGraph tools.
-function handleBrainSuggestedAction(action) {
-  switch (action.type) {
-    case 'viewArtifact':
-      if (action.artifactId) {
-        // Try to find the artifact in our local asset list
-        const asset = (S.assets || []).find(a => a.id === action.artifactId);
-        if (asset) showTreeModal(asset.id);
-        else lumiSay(`Artifact ${action.artifactId} not found in the current scan.`);
-      }
-      break;
-    case 'searchArtifacts':
-      if (action.query) {
-        const matches = (S.assets || []).filter(a =>
-          a.name.toLowerCase().includes(action.query.toLowerCase()) ||
-          a.type.toLowerCase().includes(action.query.toLowerCase())
-        );
-        if (matches.length) {
-          lumiSay(`Found ${matches.length} matching artifact${matches.length > 1 ? 's' : ''}: ${matches.slice(0, 5).map(m => `<b>${m.name}</b>`).join(', ')}${matches.length > 5 ? `, and ${matches.length - 5} more` : ''}.`);
-        } else {
-          lumiSay(`No artifacts matching "${action.query}" found.`);
-        }
-      }
-      break;
-    case 'analyzeMigration':
-      openScreen('buckets');
-      break;
-    default:
-      lumiSay(`I'll look into that ??? ${action.label}.`);
-  }
-}
-
 function formatTreeNodeLabel(node) {
   const text = `${node.kind}: ${node.name}`;
-  if (node.ok === false) return `<span class="node-error">??? ${text}</span>`;
+  if (node.ok === false) return `<span class="node-error">⚠ ${text}</span>`;
   if (node.kind === 'schema') return `<span class="node-schema">${text}</span>`;
   return text;
 }
@@ -5217,16 +5136,16 @@ function renderInlineTree(a) {
   let out = `<span class="app-name">${a.name}</span>  (${a.type})\n`;
   a.tree.forEach((node, i) => {
     const last = i === a.tree.length - 1;
-    out += `${last ? '??????' : '??????'} ${formatTreeNodeLabel(node)}\n`;
+    out += `${last ? '└─' : '├─'} ${formatTreeNodeLabel(node)}\n`;
     (node.children || []).forEach((c, j) => {
-      out += `${last ? '   ' : '???  '}${j === node.children.length - 1 ? '??????' : '??????'} ${formatTreeNodeLabel(c)}\n`;
+      out += `${last ? '   ' : '│  '}${j === node.children.length - 1 ? '└─' : '├─'} ${formatTreeNodeLabel(c)}\n`;
     });
   });
   return out;
 }
 
 // ==================== ACCESS LOCK ====================
-// SHA-256 of "username:password" ??? a soft deterrent against casual view-source
+// SHA-256 of "username:password" — a soft deterrent against casual view-source
 // snooping, not real access control. This is a static page with no backend,
 // so anyone determined enough to open dev tools can still bypass it; it exists
 // to keep the page from being an obvious open link during pre-sales walkthroughs.
@@ -5234,7 +5153,7 @@ function renderInlineTree(a) {
 const LOCK_HASHES = [
   '082ceb39c81b133d1046f09ddf1533bc0502e6eacda68aa200320828abf82a3c', // primary
   'e0d014e36895b189e47990158f4e31535b38fca9204d3a3cb8249b72afbc8624', // backup
-  // Seeded per-client test users (username:TEST123) ??? one per pilot client, so
+  // Seeded per-client test users (username:TEST123) — one per pilot client, so
   // each can be handed their own login without going through Sign Up.
   '92de7eb88481687fae819e02ab483df03a5fb3dcd268917f6ae9e04693cfd7a4', // ALDO_SDA_MIGUSER1
   'b805667168080d202b2391f934c4643fc696bf423a124b80ae310a1b3414bdb9', // CN_SDA_MIGUSER2
@@ -5245,7 +5164,7 @@ async function sha256Hex(text) {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 // Self-service accounts created through the Sign Up step live alongside the two
-// hardcoded demo pairs ??? stored as hashes only, same "soft deterrent, not real
+// hardcoded demo pairs — stored as hashes only, same "soft deterrent, not real
 // auth" posture as LOCK_HASHES (see note above), just persisted in localStorage
 // instead of baked into the source so a client's own created login survives reloads.
 const SIGNUP_HASHES_KEY = 'sdaintai_signup_hashes';
@@ -5257,7 +5176,7 @@ function addSignupHash(hash) {
     const hashes = getSignupHashes();
     if (!hashes.includes(hash)) hashes.push(hash);
     localStorage.setItem(SIGNUP_HASHES_KEY, JSON.stringify(hashes));
-  } catch (e) { /* localStorage unavailable ??? the session still unlocks, just won't be rememberable */ }
+  } catch (e) { /* localStorage unavailable — the session still unlocks, just won't be rememberable */ }
 }
 // Shows exactly one of the four lock-overlay steps (login / signup / verify / onboard).
 function showLockStep(id) {
@@ -5298,25 +5217,54 @@ function setupAccessLock() {
 
   $('signup-form').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const name = $('signup-name').value.trim();
     const identifier = $('signup-identifier').value.trim();
     const pass = $('signup-password').value;
     const confirm = $('signup-password-confirm').value;
     const errorEl = $('signup-error');
-    if (!identifier || !pass) { errorEl.textContent = 'Enter an email or username, and a password.'; return; }
-    if (pass !== confirm) { errorEl.textContent = 'Passwords don???t match.'; return; }
+    if (!name) { errorEl.textContent = 'Enter your full name.'; return; }
+    if (!identifier || !pass) { errorEl.textContent = 'Enter a business email and a password.'; return; }
+    if (pass !== confirm) { errorEl.textContent = 'Passwords don’t match.'; return; }
     errorEl.textContent = '';
-    S.pendingSignup = { identifier, pass };
+    S.pendingSignup = { name, identifier, pass, provider: 'business-email' };
     $('verify-identifier-label').textContent = identifier;
     showLockStep('verify-card');
+
+    // Try a real email via SignupService (SendGrid) — this needs the real
+    // CAP backend, so it simply fails/404s on a static Docker preview with
+    // no backend at all, same as any other backend call attempted there.
+    // Falls back to the existing mock note either way; the "Open
+    // Verification Link" button below still continues the in-app flow
+    // regardless, so a real send failing never blocks the demo.
+    const noteEl = $('verify-mode-note');
+    try {
+      const result = await signupCall('sendVerificationEmail', { name, email: identifier });
+      if (result.success && !result.simulated) {
+        noteEl.innerHTML = `<i class="fa-solid fa-circle-check"></i> A real verification email was just sent to <b>${identifier}</b> via SendGrid — check your inbox, or click below to continue here without waiting for it.`;
+      } else {
+        noteEl.innerHTML = `<i class="fa-solid fa-circle-info"></i> Email sending isn't configured yet (${result.message || 'SendGrid not set up'}) — simulating it instead. Click below to continue.`;
+      }
+    } catch (err) {
+      // Expected on the static Docker preview (no backend) — leave the
+      // original mock-note text in place, don't surface this as an error.
+      console.warn('[Signup] sendVerificationEmail unreachable (expected on a static preview):', err.message);
+    }
   });
 
   $('btn-verify-simulate').addEventListener('click', async () => {
     if (!S.pendingSignup) { showLockStep('signup-card'); return; }
-    const { identifier, pass } = S.pendingSignup;
+    const { name, identifier, pass } = S.pendingSignup;
     const hash = await sha256Hex(`${identifier}:${pass}`);
     addSignupHash(hash);
+    completeFederatedSignup(S.pendingSignup);
     showLockStep('onboard-card');
   });
+
+  // Federated Google sign-in itself (handleGoogleSignIn, called by
+  // Google's own library) is wired at top level, outside this function —
+  // see "FEDERATED GOOGLE SIGN-IN" below. Nothing to attach here; Google's
+  // own rendered button (the g_id_signin div in the HTML) handles its own
+  // click.
 
   $('onboard-form').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -5339,8 +5287,76 @@ function setupAccessLock() {
     saveBrainMemory();
     populateAdminFormFromDefaults();
     unlockApp();
-    showToast('Welcome to SDAINTAI', `Account created and your first migration settings are saved ??? ${PLATFORMS[S.adminDefaults.platform] ? PLATFORMS[S.adminDefaults.platform].label : S.adminDefaults.platform} on ${S.adminDefaults.sdaSubaccount}${S.adminDefaults.prvTenant ? ' (sda-prv-tenant)' : ''}. Ready when you are.`, 'purple');
+    showToast('Welcome to SDAINTAI', `Account created and your first migration settings are saved — ${PLATFORMS[S.adminDefaults.platform] ? PLATFORMS[S.adminDefaults.platform].label : S.adminDefaults.platform} on ${S.adminDefaults.sdaSubaccount}${S.adminDefaults.prvTenant ? ' (sda-prv-tenant)' : ''}. Ready when you are.`, 'purple');
   });
+}
+
+// ==================== FEDERATED GOOGLE SIGN-IN (real, not mocked) ====================
+// Google Identity Services (the <script src="https://accounts.google.com/
+// gsi/client"> tag + the g_id_onload/g_id_signin divs in btp_cockpit.html)
+// renders Google's own button and runs the whole OAuth popup flow itself —
+// nothing here drives that UI. All this does is receive the result: a
+// signed ID token (JWT) Google hands back once the user actually picks a
+// real Google account. Decoded client-side below for the email/name
+// claims; the signature itself is NOT verified here (that needs a backend
+// call to Google's tokeninfo endpoint or a server-side JWKS check — out of
+// scope until this moves off a static Docker preview) — good enough to
+// prove "a real Google sign-in happened" and read who it was, not yet a
+// substitute for a verified server-side session.
+//
+// Needs GOOGLE_CLIENT_ID below to be a real OAuth 2.0 Client ID from
+// Google Cloud Console (APIs & Services -> Credentials -> OAuth client ID
+// -> Web application), with this page's exact origin added under
+// "Authorized JavaScript origins" (http://localhost:8083 works for this
+// Docker preview; the production origin needs adding separately once this
+// ships). See docs/SDAINTAI-Federated-Google-Signin-Setup.md.
+const GOOGLE_CLIENT_ID = '866561366401-n90sqc0b2qb411ud18atf9rbf2g82qii.apps.googleusercontent.com';
+
+// Decodes a JWT's payload segment only (no signature check) -- base64url,
+// not plain base64, so '-'/'_' need remapping and padding restored first.
+function decodeJwtPayload(jwt) {
+  const payload = jwt.split('.')[1];
+  const b64 = payload.replace(/-/g, '+').replace(/_/g, '/').padEnd(payload.length + (4 - payload.length % 4) % 4, '=');
+  return JSON.parse(decodeURIComponent(atob(b64).split('').map(c => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join('')));
+}
+
+// Called by Google's library itself (referenced by name in the
+// data-callback attribute) once the user completes the real Google
+// account picker. Skips the Verify step entirely, same as a real
+// federated identity provider would — Google already vouches for the
+// email (claims.email_verified), nothing left to confirm.
+async function handleGoogleSignIn(response) {
+  let claims;
+  try {
+    claims = decodeJwtPayload(response.credential);
+  } catch (err) {
+    showToast('Google sign-in failed', 'Could not read the returned credential — see console.', 'danger');
+    console.error('[Google Sign-In] JWT decode failed:', err);
+    return;
+  }
+  const name = claims.name || [claims.given_name, claims.family_name].filter(Boolean).join(' ') || claims.email;
+  const email = claims.email;
+  if (!claims.email_verified) {
+    showToast('Google account not verified', `${email} hasn't been verified by Google — can't trust this sign-in.`, 'danger');
+    return;
+  }
+  const hash = await sha256Hex(`${email}:google-federated`);
+  addSignupHash(hash);
+  completeFederatedSignup({ name, identifier: email, provider: 'google' });
+  showToast('Signed in with Google', `${name} <${email}> — verified by Google.`, 'green');
+  showLockStep('onboard-card');
+}
+
+// Shared tail end of either signup path (business email or Google):
+// remembers who signed up (for Lumi's own greeting, so it doesn't re-ask
+// "what's your name" right after this) and logs the event — best-effort,
+// no-op until the Brain is actually activated elsewhere in the app, same
+// as every other logBrainEvent call site.
+function completeFederatedSignup({ name, identifier, provider }) {
+  if (name) setUserName(name);
+  logBrainEvent('user_signup', provider,
+    { name, identifier, provider },
+    `New account via ${provider === 'google' ? 'Google federated login' : 'business email'}: ${name} <${identifier}>.`);
 }
 
 // ==================== INIT ====================
@@ -5368,9 +5384,9 @@ document.addEventListener('DOMContentLoaded', () => {
   qsa('.sidebar-item').forEach(a => {
     a.addEventListener('click', (e) => {
       e.preventDefault();
-      if (a.classList.contains('pending')) { lumiSay("That step isn't unlocked yet ??? let's finish the current one first."); openDrawer(false); return; }
+      if (a.classList.contains('pending')) { lumiSay("That step isn't unlocked yet — let's finish the current one first."); openDrawer(false); return; }
       if (a.dataset.screen === 'details') {
-        lumiSay(`<b>${S.projectName || '???'}</b> on <b>${S.platform ? PLATFORMS[S.platform].label : '???'}</b>. This step is just the project name and sponsor ??? there's nothing else to review here unless I flag a naming conflict.`);
+        lumiSay(`<b>${S.projectName || '—'}</b> on <b>${S.platform ? PLATFORMS[S.platform].label : '—'}</b>. This step is just the project name and sponsor — there's nothing else to review here unless I flag a naming conflict.`);
         openDrawer(false);
         return;
       }
@@ -5395,7 +5411,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // landing
   $('btn-start-new').addEventListener('click', startNewMigration);
   $('btn-open-cockpit-shortcut').addEventListener('click', () => {
-    if (!S.platform) { lumiSay("You'll need to start a migration first ??? let's connect a platform."); startNewMigration(); }
+    if (!S.platform) { lumiSay("You'll need to start a migration first — let's connect a platform."); startNewMigration(); }
     else openScreen('cockpit');
   });
 
@@ -5467,7 +5483,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btn-save-admin-defaults').addEventListener('click', saveAdminDefaults);
   $('btn-open-btp-tenant').addEventListener('click', (e) => {
     e.preventDefault();
-    if ($('admin-btp-tenant-manual').checked) { showToast('No Tenant Set', "This target's marked Manual ??? uncheck it and enter a tenant URL first.", 'danger'); return; }
+    if ($('admin-btp-tenant-manual').checked) { showToast('No Tenant Set', "This target's marked Manual — uncheck it and enter a tenant URL first.", 'danger'); return; }
     const url = $('admin-btp-tenant-url').value.trim();
     if (url) window.open(url, '_blank', 'noopener');
   });
@@ -5477,7 +5493,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupManualToggle('admin-alm-tenant-manual', 'admin-alm-tenant-url');
   setupManualToggle('admin-figaf-manual', 'admin-figaf-target');
   // Brain memory may have loaded saved admin defaults (incl. PI/PO credentials)
-  // above the hardcoded HTML values ??? push them into the form now that every
+  // above the hardcoded HTML values — push them into the form now that every
   // admin listener (incl. the Manual-toggle ones) is wired.
   populateAdminFormFromDefaults();
 
@@ -5485,14 +5501,14 @@ document.addEventListener('DOMContentLoaded', () => {
   $('lumi-modal-close').addEventListener('click', closeModal);
   $('lumi-modal-overlay').addEventListener('click', (e) => { if (e.target.id === 'lumi-modal-overlay') closeModal(); });
 
-  // Auto-activate the real AI Brain on every load ??? explicit user request for
+  // Auto-activate the real AI Brain on every load — explicit user request for
   // active testing, not the default posture (the feature normally stays off
   // until someone hits Activate). Fire-and-forget: a network hiccup here
   // shouldn't block the rest of the app from loading.
   activateBrainEngine();
 
   // The landing screen (#screen-landing) already carries this same greeting +
-  // "Start a new migration" action as the resting Home view ??? Lumi's chat log
+  // "Start a new migration" action as the resting Home view — Lumi's chat log
   // stays empty until startNewMigration() actually begins the conversation,
   // instead of hijacking the panel out from under the Home screen on load.
 });

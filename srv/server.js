@@ -441,7 +441,27 @@ cds.on('bootstrap', async app => {
     res.json(readDesignRequests());
   });
 
-  // Serves the frontend (btp_cockpit.html etc.) from this same app/origin,
+  // Landing page for the real verification email's link (see
+  // srv/signup-service.js's sendVerificationEmail action, which builds
+  // this exact URL). Stateless: recomputes the same HMAC signature rather
+  // than looking up a stored token anywhere, so there's no DB table for
+  // this. A plain GET so it's directly clickable from an email client.
+  app.get('/verify-email', (req, res) => {
+    const { email, name, exp, sig } = req.query;
+    const fail = (msg) => res.status(400).send(`<!doctype html><html><body style="font-family:sans-serif;text-align:center;padding:60px;"><h2>Verification failed</h2><p>${msg}</p></body></html>`);
+    if (!email || !exp || !sig) return fail('Missing link parameters.');
+    if (Date.now() > Number(exp)) return fail('This verification link has expired — please sign up again to get a new one.');
+    const { signToken } = require('./signup-service');
+    const expected = signToken(email, exp);
+    if (expected !== sig) return fail('This verification link is invalid.');
+    res.send(`<!doctype html><html><body style="font-family:sans-serif;text-align:center;padding:60px;">
+      <h2>✅ Email verified</h2>
+      <p>${name ? name + ', your' : 'Your'} email <b>${email}</b> is confirmed.</p>
+      <p>You can close this tab and return to SDAINTAI to continue.</p>
+    </body></html>`);
+  });
+
+  // Serves the aiconx frontend (btp_cockpit.html etc.) from this same app/origin,
   // so its relative fetch('/odata/v4/documents/...') calls reach this backend
   // instead of 404ing against a separate static-only host.
   app.use(express.static(path.join(__dirname, '..', 'app', 'aiconx', 'webapp')));

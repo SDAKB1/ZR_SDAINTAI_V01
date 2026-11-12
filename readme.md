@@ -145,3 +145,13 @@ route quota, so new per-developer CF routes aren't available right now).
    the `containerize.yaml` / `chart/` (Helm) / `Jenkinsfile` setup already
    in this repo, which is the real build-and-deploy pipeline for
    Kubernetes/CF, not a per-developer sandbox.
+
+New here? Start with
+[`HOW-TO-USE-YOUR-OWN-BRANCH-FOR-DEVS.md`](HOW-TO-USE-YOUR-OWN-BRANCH-FOR-DEVS.md)
+— the full onboarding doc, including why you get GitHub **Write** access
+(and why that's safe only once `main` has branch protection turned on).
+
+See [`DOCKER-DEVELOPERS-PRODUCTION-ROUTE.md`](DOCKER-DEVELOPERS-PRODUCTION-ROUTE.md)
+for how this scales once *multiple* developers are doing the above at the
+same time, and what the one person who actually runs `cf deploy` needs to
+know about the shared production route before they do it.
