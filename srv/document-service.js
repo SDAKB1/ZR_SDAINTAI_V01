@@ -1,4 +1,5 @@
 const cds = require('@sap/cds');
+const LOG = cds.log('document-service');
 const crypto = require('crypto');
 const Anthropic = require('@anthropic-ai/sdk');
 
@@ -137,7 +138,7 @@ module.exports = class DocumentService extends cds.ApplicationService {
           });
           brainEventId = eventRecord?.[0]?.ID || null;
         } catch (err) {
-          console.error('[DocumentService] Could not write BrainEvent (continuing):', err.message);
+          LOG.error('Could not write BrainEvent (continuing)', { error: err.message });
         }
       }
 

@@ -1,4 +1,5 @@
 const cds = require('@sap/cds');
+const LOG = cds.log('brain-service');
 const { verifyKey, readState, writeState, isBrainEnabled } = require('./ai/brainConfig');
 const { getVectorStore } = require('./ai/vectorStore');
 
@@ -45,6 +46,392 @@ const HUB_PACKAGE_MAP = {
   DESADV: 'SAP S/4HANA ↔ 3rd Party WMS', WMMBXY: 'SAP S/4HANA ↔ 3rd Party WMS',
   FIDCCP02: 'SAP S/4HANA Finance Integration', BPMAS: 'SAP BP Replication Add-On',
 };
+
+// ── SAP Migration Course Gap #1: Scenario Pattern Classification ─────────────
+// Based on SAP PO-to-IS migration course taxonomy
+const SCENARIO_PATTERNS = {
+  P2P_ASYNC: {
+    code: 'P2P_ASYNC',
+    name: 'Point-to-Point Asynchronous',
+    isTarget: 'Standard iFlow (Async)',
+    baseComplexity: 'simple',
+    typicalHours: 8,
+    detectionRules: { sync: false, receiverCount: 1, bpm: false },
+  },
+  P2P_SYNC: {
+    code: 'P2P_SYNC',
+    name: 'Point-to-Point Synchronous',
+    isTarget: 'Standard iFlow (Sync)',
+    baseComplexity: 'medium',
+    typicalHours: 12,
+    detectionRules: { sync: true, receiverCount: 1, bpm: false },
+  },
+  MULTICAST: {
+    code: 'MULTICAST',
+    name: 'Multicast/Split (1:N)',
+    isTarget: 'iFlow with Splitter/Multicast',
+    baseComplexity: 'medium',
+    typicalHours: 20,
+    detectionRules: { sync: false, receiverCount: { min: 2 }, bpm: false },
+  },
+  CCBPM: {
+    code: 'CCBPM',
+    name: 'Cross-Component BPM',
+    isTarget: 'SAP Build Process Automation / Custom iFlow',
+    baseComplexity: 'complex',
+    typicalHours: 80,
+    detectionRules: { bpm: true, stateful: true },
+  },
+  BPM: {
+    code: 'BPM',
+    name: 'Simple BPM (stateless)',
+    isTarget: 'iFlow with Orchestration',
+    baseComplexity: 'complex',
+    typicalHours: 40,
+    detectionRules: { bpm: true, stateful: false },
+  },
+  CUSTOM: {
+    code: 'CUSTOM',
+    name: 'Custom/Non-Standard Pattern',
+    isTarget: 'Custom iFlow (requires analysis)',
+    baseComplexity: 'complex',
+    typicalHours: 60,
+    detectionRules: {},
+  },
+};
+
+// ── SAP Migration Course Gap #2: SAP Status Terminology ──────────────────────
+// Maps internal tiers to official SAP Migration Assessment Tool statuses
+const SAP_STATUS_MAP = {
+  simple: 'Ready to migrate',
+  medium: 'Adjustment required',
+  complex: 'Evaluation required',
+};
+
+// ── SAP Migration Course Gap #3: Known IS Limitations ────────────────────────
+// Pre-defined limitations from SAP official documentation and course materials
+const KNOWN_LIMITATIONS = {
+  NFS_ADAPTER: {
+    code: 'NFS_ADAPTER',
+    name: 'NFS Adapter Not Supported',
+    category: 'adapter',
+    severity: 'blocker',
+    description: 'Integration Suite does not support NFS adapter. File-based integration requires SFTP or alternative.',
+    workaroundType: 'manual',
+    workaroundDesc: 'Replace with SFTP adapter or use Edge Integration Cell with local file system access.',
+    effortMultiplier: 2.0,
+    detectionRules: { adapterTypes: ['nfs', 'file'] },
+  },
+  ASMA_HEADER: {
+    code: 'ASMA_HEADER',
+    name: 'ASMA/Dynamic Configuration',
+    category: 'runtime',
+    severity: 'major',
+    description: 'Adapter-Specific Message Attributes (ASMA) and Dynamic Configuration require manual conversion to Camel headers or Content Modifier.',
+    workaroundType: 'script',
+    workaroundDesc: 'Convert ASMA lookups to Camel exchange properties using Groovy script in iFlow.',
+    effortMultiplier: 1.5,
+    detectionRules: { features: ['asma', 'dynamicConfiguration', 'adapter.udf'] },
+  },
+  ACK_HANDLING: {
+    code: 'ACK_HANDLING',
+    name: 'Acknowledgment Handling Differs',
+    category: 'feature',
+    severity: 'major',
+    description: 'PI/PO acknowledgment handling (ALEAUD, positive/negative acks) works differently in IS.',
+    workaroundType: 'manual',
+    workaroundDesc: 'Implement acknowledgment logic using iFlow exception handling and custom status tracking.',
+    effortMultiplier: 1.3,
+    detectionRules: { features: ['ack', 'acknowledgment', 'aleaud'] },
+  },
+  CCBPM_STATEFUL: {
+    code: 'CCBPM_STATEFUL',
+    name: 'ccBPM Stateful Process',
+    category: 'feature',
+    severity: 'blocker',
+    description: 'Cross-component BPM with stateful correlation cannot be directly migrated. Requires redesign.',
+    workaroundType: 'none',
+    workaroundDesc: 'Redesign using SAP Build Process Automation or stateless iFlow patterns with external state management.',
+    effortMultiplier: 3.0,
+    detectionRules: { isBpmProcess: true, patterns: ['ccbpm', 'correlation'] },
+  },
+  JAVA_MAPPING: {
+    code: 'JAVA_MAPPING',
+    name: 'Java Mapping Programs',
+    category: 'mapping',
+    severity: 'major',
+    description: 'Custom Java mappings must be converted to Groovy scripts or iFlow message mapping.',
+    workaroundType: 'script',
+    workaroundDesc: 'Convert Java logic to Groovy script step or use XSLT. Complex logic may need external microservice.',
+    effortMultiplier: 1.8,
+    detectionRules: { mappingTypes: ['java'] },
+  },
+  ABAP_MAPPING: {
+    code: 'ABAP_MAPPING',
+    name: 'ABAP Mapping Programs',
+    category: 'mapping',
+    severity: 'major',
+    description: 'ABAP mappings are not supported in IS and must be rewritten.',
+    workaroundType: 'manual',
+    workaroundDesc: 'Rewrite ABAP logic as Groovy script or expose as BAPI/Function Module and call via RFC adapter.',
+    effortMultiplier: 2.0,
+    detectionRules: { mappingTypes: ['abap'] },
+  },
+  JMS_ADAPTER: {
+    code: 'JMS_ADAPTER',
+    name: 'JMS Adapter Differences',
+    category: 'adapter',
+    severity: 'major',
+    description: 'JMS adapter in IS has different configuration and may not support all JMS provider features.',
+    workaroundType: 'manual',
+    workaroundDesc: 'Verify JMS provider compatibility. Consider AMQP adapter or Advanced Event Mesh as alternative.',
+    effortMultiplier: 1.5,
+    detectionRules: { adapterTypes: ['jms'] },
+  },
+  JDBC_STORED_PROC: {
+    code: 'JDBC_STORED_PROC',
+    name: 'JDBC Stored Procedure Calls',
+    category: 'adapter',
+    severity: 'minor',
+    description: 'JDBC adapter stored procedure syntax differs between PI/PO and IS.',
+    workaroundType: 'manual',
+    workaroundDesc: 'Adjust stored procedure call syntax. Complex procedures may need wrapper functions.',
+    effortMultiplier: 1.2,
+    detectionRules: { adapterTypes: ['jdbc'], features: ['storedProcedure'] },
+  },
+  RFC_TRFC: {
+    code: 'RFC_TRFC',
+    name: 'tRFC/qRFC Transaction Handling',
+    category: 'adapter',
+    severity: 'minor',
+    description: 'Transactional RFC and queued RFC handling differs in IS RFC adapter.',
+    workaroundType: 'manual',
+    workaroundDesc: 'Review tRFC/qRFC requirements. May need to use synchronous RFC with custom retry logic.',
+    effortMultiplier: 1.2,
+    detectionRules: { adapterTypes: ['rfc'], features: ['trfc', 'qrfc'] },
+  },
+  AS2_MDN: {
+    code: 'AS2_MDN',
+    name: 'AS2 MDN Handling',
+    category: 'adapter',
+    severity: 'minor',
+    description: 'AS2 MDN (Message Disposition Notification) configuration differs in IS.',
+    workaroundType: 'manual',
+    workaroundDesc: 'Reconfigure MDN settings in IS AS2 adapter. Verify with trading partner.',
+    effortMultiplier: 1.1,
+    detectionRules: { adapterTypes: ['as2'] },
+  },
+};
+
+// ── Helper: Classify scenario pattern ────────────────────────────────────────
+function classifyScenarioPattern(input) {
+  const { isBpmProcess, receiverCount, isSync, hasCorrelation } = input;
+
+  if (isBpmProcess) {
+    return hasCorrelation ? SCENARIO_PATTERNS.CCBPM : SCENARIO_PATTERNS.BPM;
+  }
+  if ((receiverCount || 1) > 1) {
+    return SCENARIO_PATTERNS.MULTICAST;
+  }
+  if (isSync) {
+    return SCENARIO_PATTERNS.P2P_SYNC;
+  }
+  return SCENARIO_PATTERNS.P2P_ASYNC;
+}
+
+// ── Helper: Map tier to SAP Migration Status ─────────────────────────────────
+function tierToSapStatus(tier) {
+  return SAP_STATUS_MAP[tier] || 'Evaluation required';
+}
+
+// ── Helper: Identify applicable limitations ──────────────────────────────────
+function identifyLimitations(input) {
+  const detected = [];
+  const { adapterType, mappingType, isBpmProcess, hasCorrelation, features = [] } = input;
+  const adapterLower = (adapterType || '').toLowerCase();
+  const mappingLower = (mappingType || '').toLowerCase();
+  const featuresLower = features.map(f => f.toLowerCase());
+
+  for (const [code, limitation] of Object.entries(KNOWN_LIMITATIONS)) {
+    const rules = limitation.detectionRules;
+    let matches = false;
+
+    // Check adapter type rules
+    if (rules.adapterTypes && rules.adapterTypes.some(a => adapterLower.includes(a))) {
+      matches = true;
+    }
+    // Check mapping type rules
+    if (rules.mappingTypes && rules.mappingTypes.some(m => mappingLower.includes(m))) {
+      matches = true;
+    }
+    // Check BPM rules
+    if (rules.isBpmProcess && isBpmProcess) {
+      if (!rules.patterns || rules.patterns.some(p => hasCorrelation && p === 'correlation')) {
+        matches = true;
+      }
+    }
+    // Check feature rules
+    if (rules.features && rules.features.some(f => featuresLower.includes(f))) {
+      matches = true;
+    }
+
+    if (matches) {
+      detected.push({
+        code: limitation.code,
+        name: limitation.name,
+        severity: limitation.severity,
+        category: limitation.category,
+        workaroundType: limitation.workaroundType,
+        workaroundDesc: limitation.workaroundDesc,
+        effortMultiplier: limitation.effortMultiplier,
+      });
+    }
+  }
+
+  return detected;
+}
+
+// ── SAP Migration Guide Gap #2: Standard Adapter Migration Matrix ────────────
+// Source: btp-process-orchestration-migration-guide/docs/30-connectivity/standard-adapter-migration-2622c30.md
+const ADAPTER_MIGRATION_MATRIX = {
+  // Sender adapters
+  AS2_SENDER: { pipoAdapter: 'AS2', direction: 'sender', isAdapter: 'AS2, AS4', migrationStatus: 'direct', effortMultiplier: 1.0 },
+  EDI_SENDER: { pipoAdapter: 'EDISeparator', direction: 'sender', isAdapter: null, migrationStatus: 'alternative', alternativeAdapter: 'AS2/AS4/SFTP + EDI Splitter step', effortMultiplier: 1.3 },
+  FILE_SENDER: { pipoAdapter: 'File', direction: 'sender', isAdapter: null, migrationStatus: 'alternative', alternativeAdapter: 'FTP or SFTP adapter', limitations: 'Content Conversion via CSV to XML step or script', effortMultiplier: 1.2 },
+  HTTP_SENDER: { pipoAdapter: 'HTTP_AAE', direction: 'sender', isAdapter: 'HTTPS', migrationStatus: 'direct', effortMultiplier: 1.0 },
+  IDOC_SENDER: { pipoAdapter: 'IDoc_AAE', direction: 'sender', isAdapter: 'IDoc', migrationStatus: 'partial', limitations: 'HTTP protocol only - RFC packing not supported', effortMultiplier: 1.2 },
+  JDBC_SENDER: { pipoAdapter: 'JDBC', direction: 'sender', isAdapter: null, migrationStatus: 'alternative', alternativeAdapter: 'Timer + JDBC receiver', limitations: 'Transaction handling limited', effortMultiplier: 1.5 },
+  JMS_SENDER: { pipoAdapter: 'JMS', direction: 'sender', isAdapter: null, migrationStatus: 'alternative', alternativeAdapter: 'AMQP or IBM MQ adapter', limitations: 'JMS only for internal use - external requires AMQP', effortMultiplier: 1.4 },
+  MAIL_SENDER: { pipoAdapter: 'Mail', direction: 'sender', isAdapter: 'Mail', migrationStatus: 'direct', effortMultiplier: 1.0 },
+  ODATA_SENDER: { pipoAdapter: 'OData', direction: 'sender', isAdapter: 'OData', migrationStatus: 'direct', effortMultiplier: 1.0 },
+  REST_SENDER: { pipoAdapter: 'REST', direction: 'sender', isAdapter: null, migrationStatus: 'alternative', alternativeAdapter: 'HTTP adapter', limitations: 'Use iFlow steps for HTTP verbs and URI handling', effortMultiplier: 1.1 },
+  RFC_SENDER: { pipoAdapter: 'RFC', direction: 'sender', isAdapter: null, migrationStatus: 'partial', alternativeAdapter: 'Edge Integration Cell', limitations: 'Alternative: SOAP proxy in ABAP', effortMultiplier: 2.0 },
+  SFTP_SENDER: { pipoAdapter: 'SFTP', direction: 'sender', isAdapter: 'SFTP', migrationStatus: 'direct', limitations: 'Limited advanced file selection', effortMultiplier: 1.0 },
+  SOAP_SENDER: { pipoAdapter: 'SOAP', direction: 'sender', isAdapter: 'SOAP', migrationStatus: 'direct', effortMultiplier: 1.0 },
+  SOAPXI_SENDER: { pipoAdapter: 'SOAP-XI', direction: 'sender', isAdapter: 'XI', migrationStatus: 'direct', limitations: 'Proxy generation differs in S/4HANA', effortMultiplier: 1.2 },
+  SFSF_SENDER: { pipoAdapter: 'SFSF', direction: 'sender', isAdapter: 'SuccessFactors', migrationStatus: 'direct', effortMultiplier: 1.0 },
+  X400_SENDER: { pipoAdapter: 'X400', direction: 'sender', isAdapter: null, migrationStatus: 'planned', effortMultiplier: 3.0 },
+  BC_SENDER: { pipoAdapter: 'BC', direction: 'sender', isAdapter: null, migrationStatus: 'planned', effortMultiplier: 3.0 },
+  CIDX_SENDER: { pipoAdapter: 'CIDX', direction: 'sender', isAdapter: null, migrationStatus: 'planned', effortMultiplier: 3.0 },
+  RNIF_SENDER: { pipoAdapter: 'RNIF', direction: 'sender', isAdapter: null, migrationStatus: 'planned', effortMultiplier: 3.0 },
+  OFTP_SENDER: { pipoAdapter: 'OFTP', direction: 'sender', isAdapter: null, migrationStatus: 'none', alternativeAdapter: 'External OFTP-to-HTTP bridge', effortMultiplier: 3.0 },
+  // Receiver adapters
+  AS2_RECEIVER: { pipoAdapter: 'AS2', direction: 'receiver', isAdapter: 'AS2, AS4', migrationStatus: 'direct', effortMultiplier: 1.0 },
+  FILE_RECEIVER: { pipoAdapter: 'File', direction: 'receiver', isAdapter: null, migrationStatus: 'alternative', alternativeAdapter: 'FTP or SFTP adapter', effortMultiplier: 1.2 },
+  HTTP_RECEIVER: { pipoAdapter: 'HTTP_AAE', direction: 'receiver', isAdapter: 'HTTP', migrationStatus: 'direct', effortMultiplier: 1.0 },
+  IDOC_RECEIVER: { pipoAdapter: 'IDoc_AAE', direction: 'receiver', isAdapter: 'IDoc', migrationStatus: 'partial', limitations: 'HTTP protocol only', effortMultiplier: 1.2 },
+  JDBC_RECEIVER: { pipoAdapter: 'JDBC', direction: 'receiver', isAdapter: 'JDBC', migrationStatus: 'partial', limitations: 'Limited database vendor support', effortMultiplier: 1.3 },
+  JMS_RECEIVER: { pipoAdapter: 'JMS', direction: 'receiver', isAdapter: null, migrationStatus: 'alternative', alternativeAdapter: 'AMQP or IBM MQ adapter', effortMultiplier: 1.4 },
+  MAIL_RECEIVER: { pipoAdapter: 'Mail', direction: 'receiver', isAdapter: 'Mail', migrationStatus: 'direct', effortMultiplier: 1.0 },
+  ODATA_RECEIVER: { pipoAdapter: 'OData', direction: 'receiver', isAdapter: 'OData', migrationStatus: 'direct', effortMultiplier: 1.0 },
+  REST_RECEIVER: { pipoAdapter: 'REST', direction: 'receiver', isAdapter: null, migrationStatus: 'alternative', alternativeAdapter: 'HTTP adapter', effortMultiplier: 1.1 },
+  RFC_RECEIVER: { pipoAdapter: 'RFC', direction: 'receiver', isAdapter: 'RFC', migrationStatus: 'direct', effortMultiplier: 1.0 },
+  SFTP_RECEIVER: { pipoAdapter: 'SFTP', direction: 'receiver', isAdapter: 'SFTP', migrationStatus: 'direct', effortMultiplier: 1.0 },
+  SOAP_RECEIVER: { pipoAdapter: 'SOAP', direction: 'receiver', isAdapter: 'SOAP', migrationStatus: 'direct', effortMultiplier: 1.0 },
+  SOAPXI_RECEIVER: { pipoAdapter: 'SOAP-XI', direction: 'receiver', isAdapter: 'XI', migrationStatus: 'direct', limitations: 'Proxy generation differs', effortMultiplier: 1.2 },
+  SFSF_RECEIVER: { pipoAdapter: 'SFSF', direction: 'receiver', isAdapter: 'SuccessFactors', migrationStatus: 'direct', effortMultiplier: 1.0 },
+};
+
+// ── SAP Migration Guide Gap #3: Adapter Module Replacement Mapping ───────────
+// Source: btp-process-orchestration-migration-guide/docs/30-connectivity/adapter-modules-e402f4a.md
+const ADAPTER_MODULE_MAPPING = {
+  MESSAGE_TRANSFORM: {
+    moduleClass: 'AF_Modules/MessageTransformBean',
+    moduleName: 'Message Transform Bean',
+    description: 'Runtime format conversion - Plain to XML and XML to Plain',
+    isEquivalent: 'XSLT step or Groovy script',
+    migrationApproach: 'script',
+    effortHours: 4,
+    transformationPackage: 'Message Transformation Utilities',
+  },
+  PAYLOAD_SWAP: {
+    moduleClass: 'AF_Modules/PayloadSwapBean',
+    moduleName: 'Payload Swap Bean',
+    description: 'Replace application payload with attachment',
+    isEquivalent: 'Mail adapter mapping or Groovy script',
+    migrationApproach: 'script',
+    effortHours: 2,
+  },
+  STRICT_XML2PLAIN: {
+    moduleClass: 'AF_Modules/StrictXml2PlainBean',
+    moduleName: 'Strict XML to Plain',
+    description: 'Convert XML to text format',
+    isEquivalent: 'XML to CSV/EDI/JSON converter steps',
+    migrationApproach: 'auto',
+    effortHours: 1,
+  },
+  XML_ANONYMIZER: {
+    moduleClass: 'AF_Modules/XMLAnonymizerBean',
+    moduleName: 'XML Anonymizer',
+    description: 'Remove namespaces or prefixes from XML',
+    isEquivalent: 'XSLT step',
+    migrationApproach: 'script',
+    effortHours: 2,
+    transformationPackage: 'Message Transformation Utilities',
+  },
+  IDOC_XML_TO_FLAT: {
+    moduleClass: 'SAP_XI_IDOC/IDOCXmlToFlatConvertor',
+    moduleName: 'IDoc XML to Flat',
+    description: 'Convert IDoc XML to IDoc Flat format',
+    isEquivalent: 'XML to CSV converter',
+    migrationApproach: 'auto',
+    effortHours: 1,
+  },
+  IDOC_FLAT_TO_XML: {
+    moduleClass: 'SAP_XI_IDOC/IDOCFlatToXmlConvertor',
+    moduleName: 'IDoc Flat to XML',
+    description: 'Convert IDoc Flat format to XML',
+    isEquivalent: 'Custom Groovy/JavaScript script',
+    migrationApproach: 'script',
+    effortHours: 8,
+  },
+  PAYLOAD_ZIP: {
+    moduleClass: 'AF_Modules/PayloadZipBean',
+    moduleName: 'Payload Zip',
+    description: 'Compress or extract payloads',
+    isEquivalent: 'Encoder/Decoder steps (ZIP, GZIP, Base64, MIME)',
+    migrationApproach: 'auto',
+    effortHours: 0.5,
+  },
+  DYNAMIC_CONFIG: {
+    moduleClass: 'AF_Modules/DynamicConfigurationBean',
+    moduleName: 'Dynamic Configuration',
+    description: 'Edit adapter-specific message attributes (ASMA)',
+    isEquivalent: 'External parameters or runtime parameters',
+    migrationApproach: 'manual',
+    effortHours: 4,
+  },
+  ARCHIVER: {
+    moduleClass: 'localejbs/ArchiverModuleBean',
+    moduleName: 'Archiver Module',
+    description: 'Archive messages from channels',
+    isEquivalent: 'Data archiving feature or Splunk external logging',
+    migrationApproach: 'manual',
+    effortHours: 8,
+  },
+};
+
+// ── Helper: Lookup adapter migration info ────────────────────────────────────
+function lookupAdapterMigration(adapterType, direction = 'sender') {
+  const normalized = (adapterType || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const key = `${normalized}_${direction.toUpperCase()}`;
+  return ADAPTER_MIGRATION_MATRIX[key] || null;
+}
+
+// ── Helper: Identify adapter modules in channel ──────────────────────────────
+function identifyAdapterModules(moduleChain = []) {
+  const detected = [];
+  for (const module of moduleChain) {
+    const moduleClass = (typeof module === 'string' ? module : module.moduleName || '').toLowerCase();
+    for (const [key, mapping] of Object.entries(ADAPTER_MODULE_MAPPING)) {
+      const targetClass = mapping.moduleClass.toLowerCase();
+      if (moduleClass.includes(targetClass) || targetClass.includes(moduleClass.split('/').pop())) {
+        detected.push({ code: key, ...mapping });
+      }
+    }
+  }
+  return detected;
+}
 
 // ── LangGraph Migration Advisor pipeline ─────────────────────────────────────
 let _migrationGraph = null;
@@ -216,7 +603,7 @@ Reply with valid JSON only.`;
     _migrationGraph = graph.compile();
     return _migrationGraph;
   } catch (err) {
-    console.warn('[Brain] Migration graph unavailable, using rule-based fallback:', err.message);
+    LOG.warn('Migration graph unavailable, using rule-based fallback', { error: err.message });
     return null;
   }
 }
@@ -232,8 +619,49 @@ function ruleMigrationAdvisor(input) {
   const recommendedTool = tier === 'simple' ? 'BAPI' : tier === 'medium' ? 'iFlow_SemiAuto' : 'iFlow_Custom';
   const specificTool = tier === 'simple' ? (BAPI_MAP[idUpper] || 'BAPI_SAVE')
     : (HUB_PACKAGE_MAP[idUpper] || `Custom iFlow: ${idUpper}_MIGRATION`);
-  const estimatedHours = known ? known.hours
+
+  // Gap #1: Classify scenario pattern
+  const pattern = classifyScenarioPattern(input);
+
+  // Gap #2: Map to SAP Migration Assessment status
+  const sapMigrationStatus = tierToSapStatus(tier);
+
+  // Gap #3: Identify known limitations
+  const limitations = identifyLimitations(input);
+
+  // SAP Migration Guide Gap #2: Lookup adapter migration info
+  const adapterMigration = lookupAdapterMigration(input.adapterType, input.direction || 'sender');
+  let adapterMigrationStatus = 'unknown';
+  let adapterAlternative = null;
+  let adapterLimitations = null;
+  if (adapterMigration) {
+    adapterMigrationStatus = adapterMigration.migrationStatus;
+    adapterAlternative = adapterMigration.alternativeAdapter || adapterMigration.isAdapter;
+    adapterLimitations = adapterMigration.limitations;
+    // Apply adapter-specific effort multiplier if not direct
+    if (adapterMigration.migrationStatus !== 'direct') {
+      limitations.push({
+        code: `ADAPTER_${input.adapterType?.toUpperCase()}`,
+        name: `${input.adapterType} Adapter Migration`,
+        severity: adapterMigration.migrationStatus === 'none' ? 'blocker' : 'major',
+        category: 'adapter',
+        workaroundType: adapterMigration.alternativeAdapter ? 'alternative' : 'manual',
+        workaroundDesc: adapterMigration.alternativeAdapter || adapterMigration.limitations || '',
+        effortMultiplier: adapterMigration.effortMultiplier || 1.0,
+      });
+    }
+  }
+
+  // Calculate effort multiplier from all limitations
+  const effortMultiplier = limitations.reduce((mult, lim) => mult * (lim.effortMultiplier || 1), 1);
+
+  // Base hours calculation with limitation multiplier
+  let baseHours = known ? known.hours
     : tier === 'simple' ? 6 : tier === 'medium' ? 20 : 60;
+  const estimatedHours = Math.round(baseHours * effortMultiplier);
+
+  // Find matching SAP template
+  const matchedTemplate = HUB_PACKAGE_MAP[idUpper] || pattern.isTarget;
 
   return {
     objectType: known ? `MASTER_DATA_${idUpper}` : 'UNKNOWN',
@@ -244,6 +672,17 @@ function ruleMigrationAdvisor(input) {
     rationale: `Rule-based assessment: ${tier} complexity for ${idUpper} based on ${input.segmentCount} segments, adapter=${input.adapterType}, z-fields=${input.hasZFields}.`,
     steps: JSON.stringify(['Assess source', 'Configure adapter', 'Build mapping', 'Test', 'Deploy']),
     prereqs: JSON.stringify(['IS tenant', 'RFC destination', 'Source credentials']),
+    // SAP Migration Course aligned fields (Gaps #1, #2, #3)
+    scenarioPattern: pattern.code,
+    scenarioPatternName: pattern.name,
+    sapMigrationStatus,
+    matchedTemplate,
+    limitations: JSON.stringify(limitations),
+    limitationCount: limitations.length,
+    hasBlockers: limitations.some(l => l.severity === 'blocker'),
+    // SAP Migration Guide Gap #2: Adapter migration info
+    adapterMigrationStatus,
+    adapterAlternative,
   };
 }
 
@@ -324,7 +763,7 @@ Reply with valid JSON only.`;
     return _graph;
   } catch (err) {
     // If Anthropic key missing or langgraph unavailable, fall back to rule-based
-    console.warn('[Brain] LangGraph unavailable, using rule-based fallback:', err.message);
+    LOG.warn('LangGraph unavailable, using rule-based fallback', { error: err.message });
     return null;
   }
 }
@@ -392,7 +831,7 @@ module.exports = class BrainService extends cds.ApplicationService {
           processed: false,
         });
       } catch (err) {
-        console.error('[Brain] Events insert failed, continuing on vector store alone:', err.message);
+        LOG.error('Events insert failed, continuing on vector store alone', { error: err.message });
       }
 
       // Run LangGraph analysis inline (best-effort)
@@ -421,7 +860,7 @@ module.exports = class BrainService extends cds.ApplicationService {
               });
               insights = 1;
             } catch (err) {
-              console.error('[Brain] Insights insert failed:', err.message);
+              LOG.error('Insights insert failed', { error: err.message });
             }
           }
         }
@@ -431,7 +870,7 @@ module.exports = class BrainService extends cds.ApplicationService {
           await UPDATE(Events).set({ category }).where({ ID: eventRecord[0].ID });
         }
       } catch (err) {
-        console.error('[Brain] Analysis error:', err.message);
+        LOG.error('Analysis error', { error: err.message });
       }
 
       return {
@@ -483,7 +922,7 @@ module.exports = class BrainService extends cds.ApplicationService {
           }
         }
       } catch (err) {
-        console.error('[Brain] runAnalysis error:', err.message);
+        LOG.error('runAnalysis error', { error: err.message });
       }
 
       return {
@@ -504,8 +943,8 @@ module.exports = class BrainService extends cds.ApplicationService {
       // the status dashboard itself unreachable; fall back to 0 and let
       // vectorCount (always available) carry the real signal.
       let eventsCount = 0, insightsCount = 0;
-      try { eventsCount = (await SELECT.from(Events).columns('count(*) as n'))[0]?.n || 0; } catch (err) { console.error('[Brain] Events count failed:', err.message); }
-      try { insightsCount = (await SELECT.from(Insights).columns('count(*) as n'))[0]?.n || 0; } catch (err) { console.error('[Brain] Insights count failed:', err.message); }
+      try { eventsCount = (await SELECT.from(Events).columns('count(*) as n'))[0]?.n || 0; } catch (err) { LOG.error('Events count failed', { error: err.message }); }
+      try { insightsCount = (await SELECT.from(Insights).columns('count(*) as n'))[0]?.n || 0; } catch (err) { LOG.error('Insights count failed', { error: err.message }); }
       const vectorCount = await vs.count();
 
       return {
@@ -587,7 +1026,7 @@ module.exports = class BrainService extends cds.ApplicationService {
           };
         }
       } catch (err) {
-        console.error('[Brain] migrationAdvisor error:', err.message);
+        LOG.error('migrationAdvisor error', { error: err.message });
       }
 
       // Store in vector store for future RAG learning
@@ -625,6 +1064,17 @@ module.exports = class BrainService extends cds.ApplicationService {
         rationale: result.rationale,
         steps: result.steps,
         prereqs: result.prereqs,
+        // SAP Migration Course aligned fields (Gaps #1, #2, #3)
+        scenarioPattern: result.scenarioPattern,
+        scenarioPatternName: result.scenarioPatternName,
+        sapMigrationStatus: result.sapMigrationStatus,
+        matchedTemplate: result.matchedTemplate,
+        limitations: result.limitations,
+        limitationCount: result.limitationCount,
+        hasBlockers: result.hasBlockers,
+        // SAP Migration Guide Gap #2: Adapter Migration Info
+        adapterMigrationStatus: result.adapterMigrationStatus,
+        adapterAlternative: result.adapterAlternative,
         message: `Migration analysis complete for ${input.objectId}`,
       };
     });
@@ -700,6 +1150,127 @@ module.exports = class BrainService extends cds.ApplicationService {
       }
 
       return { seeded, message: `Seeded ${seeded} migration knowledge vectors into brain` };
+    });
+
+    // ── seedLimitationRef (Gap #3: Known Limitations Database) ───────────────
+    this.on('seedLimitationRef', async (req) => {
+      const { key } = req.data;
+      if (!verifyKey(key)) return req.error(403, 'Invalid master key');
+
+      // Get tenant-aware database access
+      const db = await cds.connect.to('db');
+      const { MigrationLimitationRef, ScenarioPatternRef } = db.entities('tenant');
+
+      let seeded = 0;
+
+      // Seed KNOWN_LIMITATIONS into MigrationLimitationRef
+      for (const [code, lim] of Object.entries(KNOWN_LIMITATIONS)) {
+        try {
+          await db.run(
+            INSERT.into(MigrationLimitationRef).entries({
+              code: lim.code,
+              name: lim.name,
+              category: lim.category,
+              severity: lim.severity,
+              description: lim.description,
+              detectionRules: JSON.stringify(lim.detectionRules),
+              workaroundType: lim.workaroundType,
+              workaroundDesc: lim.workaroundDesc,
+              effortMultiplier: lim.effortMultiplier,
+            })
+          );
+          seeded++;
+        } catch (err) {
+          // Skip if already exists (unique constraint on code)
+          if (!err.message?.includes('unique') && !err.message?.includes('duplicate')) {
+            LOG.warn('Failed to seed limitation', { code, error: err.message });
+          }
+        }
+      }
+
+      // Seed SCENARIO_PATTERNS into ScenarioPatternRef
+      for (const [code, pattern] of Object.entries(SCENARIO_PATTERNS)) {
+        try {
+          await db.run(
+            INSERT.into(ScenarioPatternRef).entries({
+              code: pattern.code,
+              name: pattern.name,
+              description: `Detection: ${JSON.stringify(pattern.detectionRules)}`,
+              detectionRules: JSON.stringify(pattern.detectionRules),
+              isTargetPattern: pattern.isTarget,
+              migrationApproach: `Standard migration to ${pattern.isTarget}`,
+              standardTemplates: JSON.stringify([]),
+              baseComplexity: pattern.baseComplexity,
+              typicalHours: pattern.typicalHours,
+            })
+          );
+          seeded++;
+        } catch (err) {
+          if (!err.message?.includes('unique') && !err.message?.includes('duplicate')) {
+            LOG.warn('Failed to seed pattern', { code, error: err.message });
+          }
+        }
+      }
+
+      return { seeded, message: `Seeded ${seeded} reference records (limitations + scenario patterns)` };
+    });
+
+    // ── seedAdapterMigrationRef (SAP Migration Guide Gaps #2, #3) ────────────
+    this.on('seedAdapterMigrationRef', async (req) => {
+      const { key } = req.data;
+      if (!verifyKey(key)) return req.error(403, 'Invalid master key');
+
+      const db = await cds.connect.to('db');
+      const { AdapterMigrationRef, AdapterModuleMigrationRef } = db.entities('tenant');
+
+      let seeded = 0;
+
+      // Seed ADAPTER_MIGRATION_MATRIX into AdapterMigrationRef
+      for (const [key, mapping] of Object.entries(ADAPTER_MIGRATION_MATRIX)) {
+        try {
+          await db.run(
+            INSERT.into(AdapterMigrationRef).entries({
+              pipoAdapter: mapping.pipoAdapter,
+              direction: mapping.direction,
+              isAdapter: mapping.isAdapter || '',
+              migrationStatus: mapping.migrationStatus,
+              alternativeAdapter: mapping.alternativeAdapter || '',
+              limitations: mapping.limitations ? JSON.stringify({ note: mapping.limitations }) : '',
+              migrationNotes: mapping.limitations || '',
+              effortMultiplier: mapping.effortMultiplier || 1.0,
+            })
+          );
+          seeded++;
+        } catch (err) {
+          if (!err.message?.includes('unique') && !err.message?.includes('duplicate')) {
+            LOG.warn('Failed to seed adapter mapping', { key, error: err.message });
+          }
+        }
+      }
+
+      // Seed ADAPTER_MODULE_MAPPING into AdapterModuleMigrationRef
+      for (const [key, mapping] of Object.entries(ADAPTER_MODULE_MAPPING)) {
+        try {
+          await db.run(
+            INSERT.into(AdapterModuleMigrationRef).entries({
+              moduleClass: mapping.moduleClass,
+              moduleName: mapping.moduleName,
+              description: mapping.description,
+              isEquivalent: mapping.isEquivalent,
+              migrationApproach: mapping.migrationApproach,
+              effortHours: mapping.effortHours,
+              transformationPackage: mapping.transformationPackage || '',
+            })
+          );
+          seeded++;
+        } catch (err) {
+          if (!err.message?.includes('unique') && !err.message?.includes('duplicate')) {
+            LOG.warn('Failed to seed module mapping', { key, error: err.message });
+          }
+        }
+      }
+
+      return { seeded, message: `Seeded ${seeded} adapter/module migration reference records` };
     });
 
     // ── importBrain ──────────────────────────────────────────────────────────

@@ -11,8 +11,11 @@
 // documented in TDDKARAHR001's security section) instead of its own stubs.
 // Kept as a single narrow module so swapping stub→real later touches one file.
 
+const cds = require('@sap/cds');
+const LOG = cds.log('adt-mcp-client');
+
 async function callTool(toolName, args) {
-  console.warn(`[adtMcpClient] STUB — would call MCP tool "${toolName}" with`, args);
+  LOG.warn('STUB — would call MCP tool', { toolName, args });
 
   switch (toolName) {
     case 'getBehaviorDefinition':

@@ -1,4 +1,5 @@
 const cds = require('@sap/cds');
+const LOG = cds.log('rap-dev-orchestrator');
 const { verifyKey } = require('./ai/brainConfig');
 const { getVectorStore } = require('./ai/vectorStore');
 const adt = require('./ai/adtMcpClient');
@@ -8,16 +9,26 @@ const adt = require('./ai/adtMcpClient');
 // a blank slate. Sourced from real RAP objects already documented in this
 // repo's Kara HR TDDs (TDDKARAHR001/002), not invented.
 const RAPDEV_KNOWLEDGE = [
-  { pattern: 'basic interface view, no association',
-    note: 'A basic CDS interface view (e.g. ZI_CDS_KARA_WORKTIME) wraps one infotype table 1:1 — no associations at this layer, associations belong on the composite/consumption view.' },
-  { pattern: 'composite/consumption view with restricted field',
-    note: 'A field that must never leak into a general-purpose query (e.g. PA0077 diversity data) is deliberately left OUT of the composite view\'s associations, not merely access-controlled — access control alone is not enough if the field is joinable by default.' },
-  { pattern: 'payroll-cluster read',
-    note: 'Cluster tables (PCL2-style, e.g. PC2BF/PT_BAL00) are not relational — no CDS view, standard or custom, can read them directly. The correct mechanism is a CDS Custom Entity backed by an ABAP class implementing IF_RAP_QUERY_PROVIDER, which can call the ABAP-layer function modules (CU_READ_RGDIR, PYXX_READ_PAYROLL_RESULT) that a SQLScript/AMDP table function cannot.' },
-  { pattern: 'field-level authorization',
-    note: '@AccessControl.authorizationCheck: #CHECK on a view must be paired with a matching DCL `define role` object checking the querying user\'s own PFCG authorization (P_ORGIN structural, P_PERNR infotype-level) — without the DCL object the view silently returns zero rows for everyone, which is the safe failure mode, not a silent bypass.' },
-  { pattern: 'PII field annotation',
-    note: '@Semantics.piiCategory + @DataProtection.personalData: true classify a field for SAP ILM tooling — this does NOT encrypt the stored value, encryption is a HANA-layer concern, not a CDS annotation.' },
+  {
+    pattern: 'basic interface view, no association',
+    note: 'A basic CDS interface view (e.g. ZI_CDS_KARA_WORKTIME) wraps one infotype table 1:1 — no associations at this layer, associations belong on the composite/consumption view.'
+  },
+  {
+    pattern: 'composite/consumption view with restricted field',
+    note: 'A field that must never leak into a general-purpose query (e.g. PA0077 diversity data) is deliberately left OUT of the composite view\'s associations, not merely access-controlled — access control alone is not enough if the field is joinable by default.'
+  },
+  {
+    pattern: 'payroll-cluster read',
+    note: 'Cluster tables (PCL2-style, e.g. PC2BF/PT_BAL00) are not relational — no CDS view, standard or custom, can read them directly. The correct mechanism is a CDS Custom Entity backed by an ABAP class implementing IF_RAP_QUERY_PROVIDER, which can call the ABAP-layer function modules (CU_READ_RGDIR, PYXX_READ_PAYROLL_RESULT) that a SQLScript/AMDP table function cannot.'
+  },
+  {
+    pattern: 'field-level authorization',
+    note: '@AccessControl.authorizationCheck: #CHECK on a view must be paired with a matching DCL `define role` object checking the querying user\'s own PFCG authorization (P_ORGIN structural, P_PERNR infotype-level) — without the DCL object the view silently returns zero rows for everyone, which is the safe failure mode, not a silent bypass.'
+  },
+  {
+    pattern: 'PII field annotation',
+    note: '@Semantics.piiCategory + @DataProtection.personalData: true classify a field for SAP ILM tooling — this does NOT encrypt the stored value, encryption is a HANA-layer concern, not a CDS annotation.'
+  },
 ];
 
 async function seed(vs) {
@@ -36,7 +47,7 @@ async function buildRapDevGraph() {
   if (_rapDevGraph) return _rapDevGraph;
   try {
     const { StateGraph, END } = await import('@langchain/langgraph');
-    const { ChatAnthropic }   = await import('@langchain/anthropic');
+    const { ChatAnthropic } = await import('@langchain/anthropic');
     const model = new ChatAnthropic({ model: 'claude-sonnet-4-6', maxTokens: 1024 });
 
     async function retrievePrecedentNode(state) {
@@ -82,7 +93,7 @@ If no discovered operation actually matches, say so honestly in rationale rather
     _rapDevGraph = graph.compile();
     return _rapDevGraph;
   } catch (err) {
-    console.warn('[RapDevOrchestrator] LangGraph unavailable, no rule-based fallback for this domain yet:', err.message);
+    LOG.warn('LangGraph unavailable, no rule-based fallback for this domain yet', { error: err.message });
     return null;
   }
 }
@@ -111,8 +122,10 @@ module.exports = class RapDevOrchestratorService extends cds.ApplicationService 
       const runId = await startRun(Runs, { objectId, objectType: 'BEHAVIOR_IMPL', agentType: 'BEHAVIOR_GEN', requestedBy, input: { spec } });
       try {
         const def = await adt.callTool('getBehaviorDefinition', { objectId });
-        await finishRun(Runs, runId, { status: def.found ? 'DONE' : 'ERROR', result: def,
-          message: def.found ? 'Behavior definition read — generation not yet implemented against a live system' : 'No live ADT connection configured (stub)' });
+        await finishRun(Runs, runId, {
+          status: def.found ? 'DONE' : 'ERROR', result: def,
+          message: def.found ? 'Behavior definition read — generation not yet implemented against a live system' : 'No live ADT connection configured (stub)'
+        });
       } catch (err) {
         await finishRun(Runs, runId, { status: 'ERROR', result: { error: err.message }, message: err.message });
       }
