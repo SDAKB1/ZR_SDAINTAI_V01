@@ -1,5 +1,4 @@
 const cds = require('@sap/cds');
-const pipoExtract = require('./utils/pipoExtract');
 
 const MOCK_ASSETS = [
   {
@@ -13,7 +12,7 @@ const MOCK_ASSETS = [
     supported: true,
     mode: 'Auto',
     size: '1.2 GB',
-    projectId: 'Mule2BTP'
+    projectId: 'Mule2BTP',
   },
   {
     assetCode: 'newemployee',
@@ -26,7 +25,7 @@ const MOCK_ASSETS = [
     supported: true,
     mode: 'Auto',
     size: '800 MB',
-    projectId: 'Mule2BTP'
+    projectId: 'Mule2BTP',
   },
   {
     assetCode: 'newcustomer',
@@ -39,8 +38,8 @@ const MOCK_ASSETS = [
     supported: true,
     mode: 'Auto',
     size: '450 MB',
-    projectId: 'Mule2BTP'
-  }
+    projectId: 'Mule2BTP',
+  },
 ];
 
 const SIMULATE_TEMPLATES = {
@@ -48,50 +47,39 @@ const SIMULATE_TEMPLATES = {
     source: 'Postgres',
     query: "INSERT INTO transactions (user_id, total, status) VALUES (108, 49.99, 'completed')",
     status: '200 OK',
-    logType: 'DB'
+    logType: 'DB',
   },
   db_error: {
     source: 'Postgres',
     query: "SELECT * FROM payment_methods WHERE card_hash = '8x903' LIMIT 1",
     status: '500 Transaction Aborted',
     duration: '120ms',
-    logType: 'DB'
+    logType: 'DB',
   },
   api_fetch: {
     source: 'SymphonyGateway',
     query: 'GET /api/v3/adaptation/grow-structures',
     status: '200 OK',
-    logType: 'API'
+    logType: 'API',
   },
   state_mutation: {
     source: 'Client',
     query: 'Navigation tab mutation detected',
     status: 'MUTATED',
     duration: '-',
-    logType: 'STATE'
-  }
+    logType: 'STATE',
+  },
 };
 
 const DEFAULT_METRICS = [
   { metricKey: 'syncsCount', metricValue: '1402' },
   { metricKey: 'latency', metricValue: '42' },
-  { metricKey: 'listeners', metricValue: '28' }
+  { metricKey: 'listeners', metricValue: '28' },
 ];
 
 module.exports = class AiconxService extends cds.ApplicationService {
-
   async init() {
-    const { DbActivityLogs, SystemMetrics, MigrationAssets, PipoArtifacts } = this.entities;
-
-    // Import PI/PO artifacts from connected system
-    this.on('importPipoArtifacts', async (req) => {
-      const options = {
-        destination: req.data.destination || 'PO_PJ2_DIR',
-        sourceSystem: req.data.sourceSystem || 'PJ2_PI',
-        projectId: req.data.projectId || 'PO2IS'
-      };
-      return pipoExtract.importAll(PipoArtifacts, options);
-    });
+    const { DbActivityLogs, SystemMetrics, MigrationAssets } = this.entities;
 
     this.on('simulateEvent', async (req) => {
       const eventType = req.data.eventType || 'api_fetch';
@@ -101,7 +89,7 @@ module.exports = class AiconxService extends cds.ApplicationService {
         ID: cds.utils.uuid(),
         logTimestamp: new Date().toISOString(),
         duration: tpl.duration || `${Math.floor(Math.random() * 40) + 5}ms`,
-        ...tpl
+        ...tpl,
       };
 
       await INSERT.into(DbActivityLogs).entries(entry);
@@ -111,7 +99,7 @@ module.exports = class AiconxService extends cds.ApplicationService {
     this.on('importBtpAssets', async (req) => {
       await DELETE.from(MigrationAssets).where({ projectId: 'Mule2BTP' });
 
-      const entries = MOCK_ASSETS.map(a => ({ ID: cds.utils.uuid(), ...a }));
+      const entries = MOCK_ASSETS.map((a) => ({ ID: cds.utils.uuid(), ...a }));
       await INSERT.into(MigrationAssets).entries(entries);
 
       return SELECT.from(MigrationAssets).where({ projectId: 'Mule2BTP' });
@@ -121,9 +109,7 @@ module.exports = class AiconxService extends cds.ApplicationService {
     this.before('READ', SystemMetrics, async () => {
       const count = await SELECT.one`count(*) as n`.from(SystemMetrics);
       if (!count || count.n === 0) {
-        await INSERT.into(SystemMetrics).entries(
-          DEFAULT_METRICS.map(m => ({ ID: cds.utils.uuid(), ...m }))
-        );
+        await INSERT.into(SystemMetrics).entries(DEFAULT_METRICS.map((m) => ({ ID: cds.utils.uuid(), ...m })));
       }
     });
 
