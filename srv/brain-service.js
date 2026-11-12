@@ -2,6 +2,8 @@ const cds = require('@sap/cds');
 const LOG = cds.log('brain-service');
 const { verifyKey, readState, writeState, isBrainEnabled } = require('./ai/brainConfig');
 const { getVectorStore } = require('./ai/vectorStore');
+// DRY-2 fix: Import centralized complexity scorer
+const { scoreMultiDimensional } = require('./utils/complexityScorer');
 
 // ── SAP Migration knowledge base (seeded into vector store) ──────────────────
 const MIGRATION_KNOWLEDGE = [
@@ -469,25 +471,12 @@ Reply with just the category name.`;
     }
 
     // Node 2: Score complexity (rule-based + AI refinement)
+    // DRY-2 fix: Delegate to centralized complexityScorer module
     async function scoreComplexityNode(state) {
       const { input, objectType } = state;
-      // Rule-based scoring dimensions
-      let score = 0;
-      score += input.segmentCount > 15 ? 6 : input.segmentCount > 5 ? 3 : 1;
-      score += input.hasZFields ? 4 : 0;
-      score += input.mappingType === 'java' || input.mappingType === 'abap' ? 6
-        : input.mappingType === 'xslt' ? 3 : 0;
-      score += input.volumePerDay > 100000 ? 6 : input.volumePerDay > 10000 ? 3 : 0;
-      score += input.adapterType === 'as2' || input.adapterType === 'jms' || input.adapterType === 'custom' ? 6
-        : input.adapterType === 'jdbc' || input.adapterType === 'rfc' ? 3 : 0;
-      score += input.isEdiBased ? 4 : 0;
-      score += input.isBpmProcess ? 10 : 0;
-      // Finance/HR always elevated
-      if (objectType && (objectType.includes('_FI') || objectType.includes('_HR'))) score += 3;
-
-      const tier = score <= 8 ? 'simple' : score <= 18 ? 'medium' : 'complex';
-      const complexityScore = Math.min(100, Math.round((score / 30) * 100));
-      return { tier, complexityScore };
+      // Use centralized multi-dimensional scoring
+      const result = scoreMultiDimensional({ ...input, objectType });
+      return { tier: result.tier.toLowerCase(), complexityScore: result.score };
     }
 
     // Node 3: Recommend the best migration tool
