@@ -20,6 +20,17 @@ mta_archives/
 .DS_Store
 .env
 
+# Build/test output files
+*.log
+*-output.txt
+*-status.txt
+*-images.txt
+docker-*.txt
+compose-*.txt
+test.txt
+scripts/*.log
+scripts/*.txt
+
 # @cap-js/cds-typer
 @cds-models
 
