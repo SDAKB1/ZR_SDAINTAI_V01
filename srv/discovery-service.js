@@ -29,6 +29,14 @@ const DISCOVERY_PHASES = [
   { name: 'Value Mappings', types: ['ValueMappingGroup'], weight: 10, category: 'dir' },
 ];
 
+// Import discovery worker
+let DiscoveryWorker;
+try {
+  DiscoveryWorker = require('./workers/discoveryWorker').DiscoveryWorker;
+} catch (e) {
+  // Worker module not available
+}
+
 module.exports = class DiscoveryService extends cds.ApplicationService {
   async init() {
     const { PISystem, DiscoveryJob, Artifact, AuditLog, DependencyGraph } = cds.entities('tenant');
@@ -114,17 +122,37 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
           options,
         });
 
-        // Start async discovery (non-blocking)
-        const discoveryPromise = this._runDiscoveryAsync(
-          jobId,
-          system,
-          {
-            includeInactive,
-            includeHistory,
-            artifactTypes: artifactTypes ? JSON.parse(artifactTypes) : null,
-          },
-          tenantId
-        )
+        // Start async discovery using the worker module if available
+        let discoveryPromise;
+        if (DiscoveryWorker) {
+          // Use new discovery worker
+          const worker = new DiscoveryWorker({
+            tenantId,
+            jobId,
+            system,
+            options: {
+              includeInactive,
+              includeHistory,
+              artifactTypes: artifactTypes ? JSON.parse(artifactTypes) : null,
+            },
+          });
+          discoveryPromise = worker.run();
+        } else {
+          // Fall back to inline async discovery
+          discoveryPromise = this._runDiscoveryAsync(
+            jobId,
+            system,
+            {
+              includeInactive,
+              includeHistory,
+              artifactTypes: artifactTypes ? JSON.parse(artifactTypes) : null,
+            },
+            tenantId
+          );
+        }
+
+        // Handle completion/failure
+        discoveryPromise
           .catch(err => {
             LOG.error('Discovery job failed', { jobId, tenantId, error: err.message, stack: err.stack });
             return this._updateJobStatus(jobId, tenantId, 'failed', err.message);
@@ -879,13 +907,13 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
         completedAt: new Date(),
         errorLog: errorMessage
           ? JSON.stringify([
-              {
-                ts: new Date().toISOString(),
-                phase: 'execution',
-                type: 'error',
-                message: errorMessage,
-              },
-            ])
+            {
+              ts: new Date().toISOString(),
+              phase: 'execution',
+              type: 'error',
+              message: errorMessage,
+            },
+          ])
           : '[]',
       })
       .where({ ID: jobId, tenantId });
@@ -922,12 +950,12 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
             artifactsFound: data.totalArtifacts || data.artifactsFound || 0,
             ...(data.type === 'discovery_complete'
               ? {
-                  completedAt: new Date().toISOString(),
-                  artifactsCount: data.totalArtifacts,
-                  newArtifacts: data.newArtifacts,
-                  updatedArtifacts: data.updatedArtifacts,
-                  errorsCount: data.errorsCount,
-                }
+                completedAt: new Date().toISOString(),
+                artifactsCount: data.totalArtifacts,
+                newArtifacts: data.newArtifacts,
+                updatedArtifacts: data.updatedArtifacts,
+                errorsCount: data.errorsCount,
+              }
               : {}),
           });
         }

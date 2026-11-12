@@ -179,14 +179,50 @@ service DiscoveryService @(path: '/odata/v4/discovery') {
 
   /**
    * Emitted for SSE progress updates during discovery.
+   * Clients can subscribe to receive real-time progress notifications.
    */
   event DiscoveryProgress {
     tenantId       : String(64);
     jobId          : UUID;
+    type           : String(30);       // phase_start | phase_complete | artifact_found | error | discovery_complete
     phase          : Integer;
     phaseName      : String;
     progressPercent: Integer;
     artifactsFound : Integer;
+    newArtifacts   : Integer;
+    updatedArtifacts: Integer;
+    errorsCount    : Integer;
     currentItem    : String;
+    timestamp      : DateTime;
+  };
+
+  /**
+   * Emitted when a discovery job completes (success or failure).
+   * Used for UI notifications and email alerts.
+   */
+  event DiscoveryComplete {
+    tenantId       : String(64);
+    jobId          : UUID;
+    systemId       : UUID;
+    systemName     : String;
+    status         : String;           // completed | failed | cancelled
+    artifactsFound : Integer;
+    newArtifacts   : Integer;
+    updatedArtifacts: Integer;
+    errorsCount    : Integer;
+    durationMs     : Integer;
+    timestamp      : DateTime;
+  };
+
+  /**
+   * Emitted when artifact assessment completes.
+   */
+  event AssessmentComplete {
+    tenantId       : String(64);
+    artifactId     : UUID;
+    tier           : String;
+    complexityScore: Integer;
+    recommendedTool: String;
+    timestamp      : DateTime;
   };
 }

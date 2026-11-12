@@ -29,13 +29,25 @@ entity PISystem : cuid, managed {
   piVersion       : String(20) default '7.50';  // 7.31 | 7.40 | 7.50
 
   // System status
-  status          : String(20) default 'configured';  // configured | testing | active | error | disabled
+  status          : String(20) default 'configured';  // configured | testing | active | error | disabled | destination_pending
   lastTestedAt    : DateTime;
   lastTestResult  : LargeString;          // JSON: { success, dirOk, esrOk, version, errors }
 
   // Statistics
   totalArtifacts  : Integer default 0;
   lastDiscoveryAt : DateTime;
+
+  // Auto-discovery configuration (AC-003.5)
+  autoDiscoveryEnabled: Boolean default true;   // Toggle auto-discovery after successful test
+  discoveryOptions    : LargeString;            // JSON: default options for auto-discovery
+
+  // Destination status tracking (AC-009.7, AC-009.9)
+  destinationStatus   : String(20) default 'pending';  // pending | created | failed
+  destinationError    : LargeString;                   // Error details if creation failed
+  destinationCreatedAt: DateTime;
+
+  // Connection test history (AC-002.7)
+  testHistory         : LargeString;            // JSON array of last 10 test results
 
   // Relations
   jobs            : Composition of many DiscoveryJob on jobs.system = $self;
@@ -59,6 +71,7 @@ entity DiscoveryJob : cuid, managed {
   startedAt       : DateTime;
   completedAt     : DateTime;
   startedBy       : String(100);          // User who initiated
+  triggeredBy     : String(20) default 'manual';  // manual | auto_test | scheduled
 
   // Progress tracking (6 phases)
   totalPhases     : Integer default 6;
@@ -82,6 +95,19 @@ entity DiscoveryJob : cuid, managed {
 
   // Duration tracking
   durationMs      : Integer;
+
+  // Phase-level tracking (detailed progress per phase)
+  phaseProgress   : LargeString;          // JSON: { phase1: {status, count, duration}, ... }
+
+  // Cancellation support (UC-003)
+  cancelledBy     : String(100);
+  cancelledAt     : DateTime;
+  cancellationReason: String(500);
+
+  // Retry tracking (BR-006)
+  attemptNumber   : Integer default 1;
+  lastError       : LargeString;
+  nextRetryAt     : DateTime;
 }
 
 // -------------------------------------------------------------------------------
@@ -213,6 +239,52 @@ entity ArtifactType {
   supportsQuery   : Boolean default true;
   supportsRead    : Boolean default true;
   description     : String(500);
+}
+
+// -------------------------------------------------------------------------------
+// DISCOVERY PHASE REFERENCE (per design)
+// -------------------------------------------------------------------------------
+
+/**
+ * Reference data for discovery phases and their configuration.
+ * Used for progress tracking and phase-level reporting.
+ */
+entity DiscoveryPhase {
+  key code            : String(50);    // IntegratedConfiguration, CommunicationChannel, etc.
+  name                : String(100);
+  displayOrder        : Integer;
+  category            : String(20);    // directory | esr
+  soapService         : String(200);
+  weight              : Integer;       // Progress weight (percentage contribution)
+  description         : String(500);
+  timeout             : Integer default 60000;  // Milliseconds
+}
+
+// -------------------------------------------------------------------------------
+// DISCOVERY JOB PHASE TRACKING (per design)
+// -------------------------------------------------------------------------------
+
+/**
+ * Detailed phase-level tracking for discovery jobs.
+ * Enables granular progress reporting and phase-specific error handling.
+ */
+entity DiscoveryJobPhase : cuid, managed {
+  tenantId            : String(50);
+  job                 : Association to DiscoveryJob;
+  phase               : Association to DiscoveryPhase;
+
+  status              : String(20) default 'pending';  // pending | running | completed | failed | skipped
+  startedAt           : DateTime;
+  completedAt         : DateTime;
+  durationMs          : Integer;
+
+  artifactsQueried    : Integer default 0;
+  artifactsProcessed  : Integer default 0;
+  artifactsNew        : Integer default 0;
+  artifactsUpdated    : Integer default 0;
+
+  errorCount          : Integer default 0;
+  errors              : LargeString;            // JSON array of phase-specific errors
 }
 
 // -------------------------------------------------------------------------------

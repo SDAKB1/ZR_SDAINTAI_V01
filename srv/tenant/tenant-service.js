@@ -6,6 +6,12 @@
  * Implements tenant-isolated PI/PO system management and discovery triggering.
  * All operations use cds.context.tenant for tenant isolation.
  *
+ * Key Features:
+ * - Auto-discovery trigger after successful connection test (AC-003.1)
+ * - BTP destination provisioning per subscription (AC-009.1-AC-009.9)
+ * - Connection test history tracking (AC-002.7)
+ * - Audit logging for all operations (BR-007)
+ *
  * Uses CAP Native Event Queues (cds.queued) for async discovery processing.
  */
 
@@ -29,9 +35,12 @@ const MAX_STRING_LENGTHS = {
   protocol: 10,
 };
 
+// Maximum test history entries to retain
+const MAX_TEST_HISTORY = 10;
+
 module.exports = class TenantService extends cds.ApplicationService {
   async init() {
-    const { PISystem, DiscoveryJob } = cds.entities('tenant');
+    const { PISystem, DiscoveryJob, AuditLog } = cds.entities('tenant');
 
     // ═══════════════════════════════════════════════════════════════════════════
     // ACTION: savePipoSystem
@@ -57,6 +66,8 @@ module.exports = class TenantService extends cds.ApplicationService {
         techUser,
         techPassword,
         piVersion = '7.50',
+        autoDiscoveryEnabled = true,
+        discoveryOptions,
       } = systemConfig;
 
       try {
@@ -78,10 +89,17 @@ module.exports = class TenantService extends cds.ApplicationService {
             locationId,
             techUser,
             piVersion,
+            autoDiscoveryEnabled,
+            discoveryOptions: discoveryOptions || existing.discoveryOptions,
             status: 'configured',
           };
 
           await UPDATE(PISystem).set(updateData).where({ ID: systemId, tenantId });
+
+          // Audit log
+          await this._audit(tenantId, req.user, 'system_updated', 'PISystem', systemId, systemName, {
+            changes: Object.keys(updateData),
+          });
 
           LOG.info('PI/PO system updated', { tenantId, systemId, systemName });
 
@@ -91,7 +109,7 @@ module.exports = class TenantService extends cds.ApplicationService {
         // Create new system
         const newSystemId = randomUUID();
 
-        // Generate destination names
+        // Generate destination names (BR-002)
         const destSuffix = `${systemName}_${tenantId}`.toUpperCase().replace(/[^A-Z0-9]/g, '_');
         const destinationDir = `PO_${destSuffix}_DIR`;
         const destinationEsr = `PO_${destSuffix}_ESR`;
@@ -111,12 +129,26 @@ module.exports = class TenantService extends cds.ApplicationService {
           piVersion,
           status: 'configured',
           totalArtifacts: 0,
+          autoDiscoveryEnabled,
+          discoveryOptions: discoveryOptions || JSON.stringify({
+            includeInactive: false,
+            includeHistory: false,
+            artifactTypes: null,
+          }),
+          destinationStatus: 'pending',
+          testHistory: '[]',
+        });
+
+        // Audit log
+        await this._audit(tenantId, req.user, 'system_added', 'PISystem', newSystemId, systemName, {
+          virtualHost,
+          locationId,
+          piVersion,
         });
 
         LOG.info('PI/PO system created', { tenantId, systemId: newSystemId, systemName });
 
         // Create BTP destinations (best-effort, non-blocking)
-        // Store a reference to update system status after completion
         this._createDestinationsAsync(tenantId, newSystemId, systemConfig, destinationDir, destinationEsr);
 
         // Return with destination_pending status to indicate async creation is in progress
@@ -133,7 +165,7 @@ module.exports = class TenantService extends cds.ApplicationService {
     });
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // ACTION: testConnection
+    // ACTION: testConnection - Enhanced with auto-discovery trigger
     // ═══════════════════════════════════════════════════════════════════════════
     this.on('testConnection', async req => {
       const tenantId = cds.context?.tenant || req.user?.tenant || 'default';
@@ -151,6 +183,12 @@ module.exports = class TenantService extends cds.ApplicationService {
         return req.error(404, 'PI/PO system not found');
       }
 
+      // Update status to testing
+      await UPDATE(PISystem)
+        .set({ status: 'testing' })
+        .where({ ID: systemId, tenantId });
+
+      let testResult;
       try {
         // Import SOAP client
         const { PIPoSoapClient } = require('../utils/pipoSoapClient');
@@ -171,18 +209,7 @@ module.exports = class TenantService extends cds.ApplicationService {
 
         const success = dirTest.success !== false && esrTest.success !== false;
 
-        // Update system status
-        await UPDATE(PISystem)
-          .set({
-            status: success ? 'active' : 'error',
-            lastTestedAt: new Date(),
-            lastTestResult: JSON.stringify({ dirTest, esrTest }),
-          })
-          .where({ ID: systemId, tenantId });
-
-        LOG.info('Connection test completed', { tenantId, systemId, success });
-
-        return {
+        testResult = {
           success,
           dirStatus: dirTest.success !== false ? 'ok' : dirTest.error || 'failed',
           esrStatus: esrTest.success !== false ? 'ok' : esrTest.error || 'failed',
@@ -191,8 +218,159 @@ module.exports = class TenantService extends cds.ApplicationService {
           swcvCount: esrTest.swcvCount || 0,
           channelCount: dirTest.channelCount || 0,
         };
+
+        // Update test history (keep last 10 results)
+        const testHistoryEntry = {
+          timestamp: new Date().toISOString(),
+          success,
+          dirStatus: testResult.dirStatus,
+          esrStatus: testResult.esrStatus,
+          piVersion: testResult.piVersion,
+          message: testResult.message,
+        };
+
+        let testHistory = [];
+        try {
+          testHistory = JSON.parse(system.testHistory || '[]');
+        } catch {
+          testHistory = [];
+        }
+        testHistory.unshift(testHistoryEntry);
+        if (testHistory.length > MAX_TEST_HISTORY) {
+          testHistory = testHistory.slice(0, MAX_TEST_HISTORY);
+        }
+
+        // Update system status
+        await UPDATE(PISystem)
+          .set({
+            status: success ? 'active' : 'error',
+            lastTestedAt: new Date(),
+            lastTestResult: JSON.stringify({ dirTest, esrTest }),
+            testHistory: JSON.stringify(testHistory),
+          })
+          .where({ ID: systemId, tenantId });
+
+        // Audit log
+        await this._audit(tenantId, req.user, 'connection_tested', 'PISystem', systemId, system.systemName, {
+          success,
+          dirStatus: testResult.dirStatus,
+          esrStatus: testResult.esrStatus,
+        });
+
+        LOG.info('Connection test completed', { tenantId, systemId, success });
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // AUTO-DISCOVERY TRIGGER (AC-003.1, AC-003.3)
+        // ═══════════════════════════════════════════════════════════════════════
+        if (success && system.autoDiscoveryEnabled !== false) {
+          LOG.info('Auto-discovery enabled, triggering discovery', { tenantId, systemId });
+
+          try {
+            // Check if there's already a running discovery job (BR-003)
+            const runningJob = await SELECT.one
+              .from(DiscoveryJob)
+              .where({ system_ID: systemId, tenantId, status: { in: ['pending', 'running'] } });
+
+            if (runningJob) {
+              LOG.info('Discovery already running, skipping auto-trigger', { tenantId, systemId, jobId: runningJob.ID });
+              testResult.autoDiscovery = {
+                triggered: false,
+                reason: 'Discovery already in progress',
+                existingJobId: runningJob.ID,
+              };
+            } else {
+              // Create DiscoveryJob record
+              const jobId = randomUUID();
+              const now = new Date();
+
+              // Use system's default discovery options or defaults
+              let options;
+              try {
+                options = JSON.parse(system.discoveryOptions || '{}');
+              } catch {
+                options = {};
+              }
+              const discoveryOptions = JSON.stringify({
+                includeInactive: options.includeInactive || false,
+                includeHistory: options.includeHistory || false,
+                artifactTypes: options.artifactTypes || null,
+              });
+
+              await INSERT.into(DiscoveryJob).entries({
+                ID: jobId,
+                tenantId,
+                system_ID: systemId,
+                status: 'pending',
+                startedAt: now,
+                startedBy: req.user?.id || 'system',
+                triggeredBy: 'auto_test',
+                options: discoveryOptions,
+                progressLog: '[]',
+                errorLog: '[]',
+                totalPhases: 6,
+                currentPhase: 0,
+                currentPhaseName: 'Initializing',
+                progressPercent: 0,
+                artifactsFound: 0,
+                artifactsNew: 0,
+                artifactsUpdated: 0,
+                errorsCount: 0,
+                warningsCount: 0,
+                attemptNumber: 1,
+              });
+
+              // Queue discovery event via cds.queued() for async processing (AC-003.3)
+              const queuedService = cds.queued(this);
+              await queuedService.emit('DiscoveryRequested', {
+                tenantId,
+                systemId,
+                jobId,
+                options: discoveryOptions,
+                triggeredBy: 'auto_test',
+                timestamp: now.toISOString(),
+              });
+
+              // Audit log
+              await this._audit(tenantId, req.user, 'discovery_auto_triggered', 'DiscoveryJob', jobId, system.systemName, {
+                systemId,
+                trigger: 'connection_test_success',
+              });
+
+              LOG.info('Auto-discovery triggered', { tenantId, systemId, jobId });
+
+              testResult.autoDiscovery = {
+                triggered: true,
+                jobId,
+                message: `Discovery job ${jobId} started automatically after successful connection test`,
+              };
+            }
+          } catch (discoveryError) {
+            LOG.error('Failed to trigger auto-discovery', { tenantId, systemId, error: discoveryError.message });
+            testResult.autoDiscovery = {
+              triggered: false,
+              reason: `Failed to start discovery: ${discoveryError.message}`,
+            };
+          }
+        } else if (success) {
+          testResult.autoDiscovery = {
+            triggered: false,
+            reason: 'Auto-discovery is disabled for this system',
+          };
+        }
+
+        return testResult;
       } catch (error) {
         LOG.error('Connection test failed', { tenantId, systemId, error: error.message });
+
+        // Update system status to error
+        await UPDATE(PISystem)
+          .set({
+            status: 'error',
+            lastTestedAt: new Date(),
+            lastTestResult: JSON.stringify({ error: error.message }),
+          })
+          .where({ ID: systemId, tenantId });
+
         return {
           success: false,
           dirStatus: 'error',
@@ -206,7 +384,7 @@ module.exports = class TenantService extends cds.ApplicationService {
     });
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // ACTION: triggerDiscovery
+    // ACTION: triggerDiscovery - Manual trigger (UC-002, US-010)
     // ═══════════════════════════════════════════════════════════════════════════
     this.on('triggerDiscovery', async req => {
       const tenantId = cds.context?.tenant || req.user?.tenant || 'default';
@@ -232,6 +410,15 @@ module.exports = class TenantService extends cds.ApplicationService {
       }
 
       try {
+        // Check for running jobs (BR-003)
+        const runningJob = await SELECT.one
+          .from(DiscoveryJob)
+          .where({ system_ID: systemId, tenantId, status: { in: ['pending', 'running'] } });
+
+        if (runningJob) {
+          return req.error(409, `Discovery already running for this system. Job ID: ${runningJob.ID}`);
+        }
+
         // Create DiscoveryJob record
         const jobId = randomUUID();
         const now = new Date();
@@ -248,6 +435,7 @@ module.exports = class TenantService extends cds.ApplicationService {
           status: 'pending',
           startedAt: now,
           startedBy: req.user?.id || 'system',
+          triggeredBy: 'manual',
           options,
           progressLog: '[]',
           errorLog: '[]',
@@ -260,6 +448,7 @@ module.exports = class TenantService extends cds.ApplicationService {
           artifactsUpdated: 0,
           errorsCount: 0,
           warningsCount: 0,
+          attemptNumber: 1,
         });
 
         // Queue discovery event via cds.queued() for async processing
@@ -271,6 +460,12 @@ module.exports = class TenantService extends cds.ApplicationService {
           options,
           triggeredBy: req.user?.id || 'system',
           timestamp: now.toISOString(),
+        });
+
+        // Audit log
+        await this._audit(tenantId, req.user, 'discovery_started', 'DiscoveryJob', jobId, system.systemName, {
+          systemId,
+          trigger: 'manual',
         });
 
         LOG.info('Discovery triggered', { tenantId, systemId, jobId });
@@ -315,6 +510,7 @@ module.exports = class TenantService extends cds.ApplicationService {
           .set({
             status: 'failed',
             completedAt: new Date(),
+            lastError: error.message,
             errorLog: JSON.stringify([
               {
                 ts: new Date().toISOString(),
@@ -399,7 +595,7 @@ module.exports = class TenantService extends cds.ApplicationService {
     try {
       const destinationService = require('../utils/destinationService');
 
-      await destinationService.createPISystemDestinations({
+      const result = await destinationService.createPISystemDestinations({
         tenantId,
         systemName: config.systemName,
         virtualHost: config.virtualHost,
@@ -416,10 +612,13 @@ module.exports = class TenantService extends cds.ApplicationService {
       await UPDATE(PISystem)
         .set({
           status: 'configured',
-          lastTestedAt: null,
+          destinationStatus: 'created',
+          destinationCreatedAt: new Date(),
+          destinationError: null,
           lastTestResult: JSON.stringify({ destinationsCreated: true }),
         })
         .where({ ID: systemId, tenantId });
+
     } catch (error) {
       LOG.warn('BTP destination creation failed (manual creation required)', {
         tenantId,
@@ -433,6 +632,8 @@ module.exports = class TenantService extends cds.ApplicationService {
       await UPDATE(PISystem)
         .set({
           status: 'destination_pending',
+          destinationStatus: 'failed',
+          destinationError: error.message,
           lastTestResult: JSON.stringify({
             destinationsCreated: false,
             error: error.message,
@@ -440,6 +641,31 @@ module.exports = class TenantService extends cds.ApplicationService {
           }),
         })
         .where({ ID: systemId, tenantId });
+    }
+  }
+
+  /**
+   * Create audit log entry
+   * @private
+   */
+  async _audit(tenantId, user, action, entityType, entityId, entityName, details) {
+    const { AuditLog } = cds.entities('tenant');
+
+    try {
+      await INSERT.into(AuditLog).entries({
+        ID: randomUUID(),
+        tenantId,
+        userId: user?.id || 'system',
+        userName: user?.name || user?.id || 'system',
+        userRole: user?.roles?.[0] || 'unknown',
+        action,
+        entityType,
+        entityId,
+        entityName,
+        details: JSON.stringify(details),
+      });
+    } catch (error) {
+      LOG.warn('Failed to create audit log', { action, error: error.message });
     }
   }
 };

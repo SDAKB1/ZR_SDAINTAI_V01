@@ -2,10 +2,10 @@ using { tenant } from '../../db/tenant-schema';
 
 /**
  * Tenant Service
- * 
+ *
  * Handles tenant-specific PI/PO system configuration and discovery triggering.
  * Implements tenant isolation via cds.context.tenant.
- * 
+ *
  * Uses CAP Native Event Queues (cds.queued) for async discovery processing.
  */
 service TenantService @(path: '/api/tenant', requires: 'authenticated-user') {
@@ -60,6 +60,8 @@ service TenantService @(path: '/api/tenant', requires: 'authenticated-user') {
       techUser       : String(50);      // Required
       techPassword   : String(100);     // Required for new, optional for update
       piVersion      : String(20);      // 7.31 | 7.40 | 7.50
+      autoDiscoveryEnabled: Boolean;    // Toggle auto-discovery after successful test (default: true)
+      discoveryOptions: LargeString;    // JSON: default options for auto-discovery
     }
   ) returns tenant.PISystem;
 
