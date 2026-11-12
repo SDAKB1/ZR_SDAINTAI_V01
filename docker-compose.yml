@@ -1,0 +1,86 @@
+# =============================================================================
+# SDAINTAI Multi-Tenant SaaS - Docker Compose
+# Full stack: CAP Server + MTX Sidecar + PI/PO Mock (optional)
+# =============================================================================
+
+services:
+  # Main CAP Application Server
+  sdaintai-srv:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sdaintai-srv
+    ports:
+      - "4004:4004"
+    volumes:
+      - db-data:/app/db-data
+    environment:
+      NODE_ENV: development
+      PORT: "4004"
+      # Multi-tenancy configuration
+      CDS_REQUIRES_MULTITENANCY: "true"
+      CDS_MTX_SIDECAR_URL: "http://sdaintai-mtx:4005"
+      # Database (SQLite for local dev)
+      CDS_REQUIRES_DB_KIND: sql
+      # Logging
+      CDS_LOG_LEVELS_CDS: info
+      CDS_LOG_LEVELS_APP: debug
+      # Brain service
+      BRAIN_MASTER_KEY: "${BRAIN_MASTER_KEY:-AYMAN2026}"
+    depends_on:
+      sdaintai-mtx:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    networks:
+      - sdaintai-net
+
+  # MTX Sidecar - Tenant Provisioning & HDI Management
+  sdaintai-mtx:
+    build:
+      context: ./mtx/sidecar
+      dockerfile: Dockerfile
+    container_name: sdaintai-mtx
+    ports:
+      - "4005:4005"
+    volumes:
+      - db-data:/app/db-data
+    environment:
+      NODE_ENV: development
+      PORT: "4005"
+      CDS_REQUIRES_DB_KIND: sql
+      CDS_LOG_LEVELS_CDS: info
+      CDS_LOG_LEVELS_MTX: debug
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4005/-/cds/saas-provisioning/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+    networks:
+      - sdaintai-net
+
+  # WireMock - PI/PO SOAP API Stub (for testing without real PI/PO)
+  pipo-mock:
+    image: wiremock/wiremock:3.3.1
+    container_name: pipo-mock
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./test/wiremock:/home/wiremock
+    command: ["--verbose"]
+    networks:
+      - sdaintai-net
+    profiles:
+      - with-mock
+
+networks:
+  sdaintai-net:
+    driver: bridge
+
+volumes:
+  db-data:

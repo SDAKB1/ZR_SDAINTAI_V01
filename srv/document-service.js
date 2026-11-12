@@ -45,11 +45,11 @@ function extractJSONArray(text) {
     const parsed = JSON.parse(arrayMatch[0]);
     if (!Array.isArray(parsed)) return null;
     return parsed
-      .map((item) => ({
+      .map(item => ({
         field: String(item.field ?? item.key ?? '').trim(),
         value: String(item.value ?? '').trim(),
       }))
-      .filter((row) => row.field);
+      .filter(row => row.field);
   } catch {
     return null;
   }
@@ -58,13 +58,11 @@ function extractJSONArray(text) {
 function fallbackLineRows(text) {
   return text
     .split(/\r?\n/)
-    .map((line) => line.trim())
+    .map(line => line.trim())
     .filter(Boolean)
     .map((line, i) => {
       const m = line.match(/^([^:]{1,80}):\s*(.*)$/);
-      return m
-        ? { field: m[1].trim(), value: m[2].trim() }
-        : { field: `Line ${i + 1}`, value: line };
+      return m ? { field: m[1].trim(), value: m[2].trim() } : { field: `Line ${i + 1}`, value: line };
     });
 }
 
@@ -72,7 +70,7 @@ module.exports = class DocumentService extends cds.ApplicationService {
   async init() {
     const { Documents, DocumentFields } = this.entities;
 
-    this.on('parseDocument', async (req) => {
+    this.on('parseDocument', async req => {
       const { key, fileName, mimeType, contentBase64, sourceContext } = req.data;
 
       if (!verifyKey(key)) return req.error(403, 'Invalid master key');
@@ -97,15 +95,13 @@ module.exports = class DocumentService extends cds.ApplicationService {
         message = await anthropic.messages.create({
           model: MODEL,
           max_tokens: 8192,
-          messages: [
-            { role: 'user', content: [block, { type: 'text', text: buildExtractionPrompt(fileName) }] },
-          ],
+          messages: [{ role: 'user', content: [block, { type: 'text', text: buildExtractionPrompt(fileName) }] }],
         });
       } catch (err) {
         return req.error(502, 'Claude request failed: ' + (err.message || String(err)));
       }
 
-      const textBlock = message.content.find((c) => c.type === 'text');
+      const textBlock = message.content.find(c => c.type === 'text');
       const rawText = textBlock ? textBlock.text : '';
       const rows = extractJSONArray(rawText) || fallbackLineRows(rawText);
 
@@ -114,7 +110,7 @@ module.exports = class DocumentService extends cds.ApplicationService {
       //    BrainEvent so it shows up in the Brain UI/exports like any other capture. ──
       const documentId = `sdaintdoc_id_${crypto.randomUUID()}`;
       const vs = getVectorStore();
-      const embeddingText = rows.map((r) => `${r.field}: ${r.value}`).join('\n');
+      const embeddingText = rows.map(r => `${r.field}: ${r.value}`).join('\n');
       const vectorId = vs.add(embeddingText, {
         source: 'document_parser',
         documentId,

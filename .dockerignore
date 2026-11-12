@@ -1,0 +1,43 @@
+﻿# Dependencies
+node_modules/
+
+# Build artifacts
+gen/
+mta_archives/
+*.mtar
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+coverage/
+.nyc_output/
+
+# Docker
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Temp files
+*.tmp
+*.bak

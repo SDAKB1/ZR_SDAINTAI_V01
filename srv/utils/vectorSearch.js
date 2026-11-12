@@ -132,7 +132,7 @@ class HANAVectorSearch {
       contentText: textContent,
       embedding: JSON.stringify(embedding),
       metadata: JSON.stringify({ ...metadata, artifactName: artifact.name }),
-      createdAt: new Date()
+      createdAt: new Date(),
     });
 
     return { indexed: true, artifactId, textLength: textContent.length };
@@ -144,7 +144,10 @@ class HANAVectorSearch {
   async indexArtifacts(artifacts, artifactType) {
     const results = [];
     for (const artifact of artifacts) {
-      const artifactId = artifact.id || artifact.ID || artifact.artifactId ||
+      const artifactId =
+        artifact.id ||
+        artifact.ID ||
+        artifact.artifactId ||
         `${artifactType}:${artifact.name}:${artifact.namespace || 'default'}`;
       try {
         const result = await this.indexArtifact(artifactId, artifact, artifactType);
@@ -162,12 +165,7 @@ class HANAVectorSearch {
    * @param {object} options - Search options
    */
   async search(query, options = {}) {
-    const {
-      topK = 5,
-      threshold = 0.5,
-      artifactType = null,
-      includeContent = true
-    } = options;
+    const { topK = 5, threshold = 0.5, artifactType = null, includeContent = true } = options;
 
     const db = await cds.connect.to('db');
     const { PIPOEmbeddings } = db.entities('tenant');
@@ -183,24 +181,26 @@ class HANAVectorSearch {
     const embeddings = await SELECT.from(PIPOEmbeddings).where(where);
 
     // Calculate similarities (in production, HANA Vector Engine does this natively)
-    const results = embeddings.map(row => {
-      let storedEmbedding;
-      try {
-        storedEmbedding = JSON.parse(row.embedding);
-      } catch (e) {
-        return null;
-      }
+    const results = embeddings
+      .map(row => {
+        let storedEmbedding;
+        try {
+          storedEmbedding = JSON.parse(row.embedding);
+        } catch (e) {
+          return null;
+        }
 
-      const similarity = this._cosineSimilarity(queryEmbedding, storedEmbedding);
+        const similarity = this._cosineSimilarity(queryEmbedding, storedEmbedding);
 
-      return {
-        artifactId: row.resourceId,
-        artifactType: row.resourceType,
-        similarity: similarity,
-        content: includeContent ? row.contentText : undefined,
-        metadata: row.metadata ? JSON.parse(row.metadata) : {}
-      };
-    }).filter(r => r && r.similarity >= threshold);
+        return {
+          artifactId: row.resourceId,
+          artifactType: row.resourceType,
+          similarity: similarity,
+          content: includeContent ? row.contentText : undefined,
+          metadata: row.metadata ? JSON.parse(row.metadata) : {},
+        };
+      })
+      .filter(r => r && r.similarity >= threshold);
 
     // Sort by similarity and take top K
     results.sort((a, b) => b.similarity - a.similarity);
@@ -217,7 +217,7 @@ class HANAVectorSearch {
     // Get the source artifact embedding
     const source = await SELECT.one.from(PIPOEmbeddings).where({
       tenant_ID: this.tenantId,
-      resourceId: artifactId
+      resourceId: artifactId,
     });
 
     if (!source) {
@@ -265,7 +265,7 @@ class HANAVectorSearch {
 
     await DELETE.from(PIPOEmbeddings).where({
       tenant_ID: this.tenantId,
-      resourceId: artifactId
+      resourceId: artifactId,
     });
   }
 
@@ -277,7 +277,7 @@ class HANAVectorSearch {
     const { PIPOEmbeddings } = db.entities('tenant');
 
     await DELETE.from(PIPOEmbeddings).where({
-      tenant_ID: this.tenantId
+      tenant_ID: this.tenantId,
     });
   }
 
@@ -288,7 +288,8 @@ class HANAVectorSearch {
     const db = await cds.connect.to('db');
     const { PIPOEmbeddings } = db.entities('tenant');
 
-    const total = await SELECT.one.from(PIPOEmbeddings)
+    const total = await SELECT.one
+      .from(PIPOEmbeddings)
       .columns('count(*) as count')
       .where({ tenant_ID: this.tenantId });
 
@@ -303,7 +304,7 @@ class HANAVectorSearch {
       byArtifactType: byType.reduce((acc, row) => {
         acc[row.resourceType] = row.count;
         return acc;
-      }, {})
+      }, {}),
     };
   }
 }

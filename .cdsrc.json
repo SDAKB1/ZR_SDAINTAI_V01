@@ -1,0 +1,12 @@
+{
+  "server": {
+    "static": {
+      "paths": ["app"]
+    }
+  },
+  "folders": {
+    "app": "app",
+    "db": "db",
+    "srv": "srv"
+  }
+}

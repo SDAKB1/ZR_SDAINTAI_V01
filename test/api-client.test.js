@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// NOSONAR javascript:S2187 - custom test runner, not a Jest/Mocha suite
 'use strict';
 
 /**
@@ -551,7 +552,7 @@ async function testNegativeCases() {
 
         const result = await ApiClient.callFunction('/odata/v4/test', 'noParamsFunc', {});
 
-        const funcCall = fetchCalls.find(c => c.url.includes('noParamsFunc'));
+        const funcCall = fetchCalls.find(c => c.url.includes('noParamsFunc')); // eslint-disable-line no-unused-vars
         // Should work without throwing
         assert(result.result === 'ok', 'Should return result');
     });

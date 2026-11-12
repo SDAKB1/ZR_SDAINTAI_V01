@@ -1,6 +1,6 @@
 _schema-version: 3.3.0
 ID: SDAINTAI
-version: 0.0.92
+version: 0.0.93
 description: "SDA-INTAI Platform — Static Web Console + Brain AI (LangChain/LangGraph)"
 parameters:
   enable-parallel-deployments: true
@@ -31,6 +31,7 @@ modules:
     requires:
       - name: AICONX-auth
       - name: AICONX-db
+      - name: AICONX-registry
       - name: AICONX-brain-hana
       - name: AICONX-messaging
       - name: AICONX-connectivity

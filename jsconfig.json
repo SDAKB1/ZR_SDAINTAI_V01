@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "checkJs": true,
+    "noEmit": true,
+    "strict": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@sap/cds": ["node_modules/@sap/cds"]
+    }
+  },
+  "include": ["srv/**/*.js", "db/**/*.cds", "app/**/*.js"],
+  "exclude": ["node_modules", "gen", "mta_archives"]
+}

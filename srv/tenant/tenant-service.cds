@@ -1,98 +1,102 @@
-﻿using { tenant } from '../db/tenant-schema';
+using { tenant } from '../../db/tenant-schema';
 
 /**
- * Tenant Onboarding Service
- * Handles tenant profile management and discovery triggering
- * per North Star multitenancy flow
- *
- * Uses CAP Native Event Queues (cds.queued) instead of custom outbox.
- * Events are stored in the built-in cds.outbox.Messages table.
+ * Tenant Service
+ * 
+ * Handles tenant-specific PI/PO system configuration and discovery triggering.
+ * Implements tenant isolation via cds.context.tenant.
+ * 
+ * Uses CAP Native Event Queues (cds.queued) for async discovery processing.
  */
-service TenantService @(path: '/api/tenant') {
+service TenantService @(path: '/api/tenant', requires: 'authenticated-user') {
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // TENANT PROFILE - Admin completes after subscription
+  // ENTITY PROJECTIONS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  entity TenantProfile @(restrict: [{ grant: '*', to: 'TenantAdmin' }]) {
-    key tenantId         : String(64);
-    organizationName     : String(200) not null;
-    adminEmail           : String(200);
-    locale               : String(10) default 'en';  // en | fr
-    sourceMode           : String(10) default 'MOCK'; // MOCK | LIVE
-    destinationName      : String(100);  // BTP Destination for live PI/PO
-    status               : String(30) default 'PROFILE_PENDING';
-    // SUBSCRIPTION_PENDING | PROVISIONING | TECHNICALLY_READY | PROFILE_PENDING | ACTIVE | FAILED | SUSPENDED | OFFBOARDING | OFFBOARDED
-    profileVersion       : Integer default 1;
-    createdAt            : DateTime default $now;
-    modifiedAt           : DateTime default $now;
-  }
+  @readonly
+  entity PISystems as projection on tenant.PISystem {
+    ID,
+    tenantId,
+    systemName,
+    description,
+    virtualHost,
+    virtualPort,
+    protocol,
+    locationId,
+    destinationDir,
+    destinationEsr,
+    techUser,
+    piVersion,
+    status,
+    lastTestedAt,
+    totalArtifacts,
+    lastDiscoveryAt
+  };
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // DISCOVERY RUN - Tracks PI/PO discovery progress
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  entity DiscoveryRun @(restrict: [{ grant: 'READ', to: 'Viewer' }, { grant: '*', to: 'TenantAdmin' }]) {
-    key ID               : UUID;
-    tenantId             : String(64);
-    status               : String(30) default 'PENDING';
-    // PENDING | RUNNING | COMPLETED | PARTIAL | FAILED_CONNECTIVITY
-    sourceMode           : String(10);  // MOCK | LIVE
-    checkpoint           : String(500); // Resume point
-    artifactsFound       : Integer default 0;
-    artifactsNew         : Integer default 0;
-    artifactsUpdated     : Integer default 0;
-    errorsCount          : Integer default 0;
-    correlationId        : String(50);
-    startedAt            : DateTime;
-    completedAt          : DateTime;
-    errorMessage         : LargeString;
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // NOTE: Custom OutboxEvent entity REMOVED - Using CAP native cds.outbox.Messages
-  // Events are now queued via cds.queued(discoveryService).emit('DiscoveryRequested', {...})
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // EVENTS - Processed asynchronously via CAP Event Queues
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  // Discovery request event - triggers async PI/PO discovery
-  event DiscoveryRequested {
-    tenantId        : String(64);
-    runId           : UUID;
-    sourceMode      : String(10);
-    destinationName : String(100);
-    triggeredBy     : String(50);
-    timestamp       : DateTime;
-  }
+  @readonly
+  entity DiscoveryJobs as projection on tenant.DiscoveryJob {
+    *
+  } excluding { progressLog, errorLog };
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ACTIONS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // Submit or update tenant profile (triggers discovery)
-  action submitProfile(
-    organizationName : String(200),
-    locale           : String(10),
-    sourceMode       : String(10),
-    destinationName  : String(100)
-  ) returns TenantProfile;
+  /**
+   * Save or update a PI/PO system configuration.
+   * Validates URL format, port range, and required fields.
+   * Creates BTP destinations automatically on first save.
+   */
+  action savePipoSystem(
+    systemConfig: {
+      systemId       : UUID;            // null for new, ID for update
+      systemName     : String(50);      // Required
+      description    : String(200);
+      virtualHost    : String(200);     // Required - must be valid hostname
+      virtualPort    : Integer;         // 1-65535
+      protocol       : String(10);      // http | https
+      locationId     : String(50);      // Required - Cloud Connector Location ID
+      techUser       : String(50);      // Required
+      techPassword   : String(100);     // Required for new, optional for update
+      piVersion      : String(20);      // 7.31 | 7.40 | 7.50
+    }
+  ) returns tenant.PISystem;
 
-  // Get tenant readiness status
-  function getTenantReadiness() returns {
-    tenantId         : String;
-    subscriptionStatus : String;
-    profileStatus    : String;
-    discoveryStatus  : String;
-    isReady          : Boolean;
-    lastDiscoveryRun : DiscoveryRun;
+  /**
+   * Test connection to a PI/PO system.
+   * Verifies Cloud Connector connectivity and PI/PO credentials via DIR and ESR endpoints.
+   */
+  action testConnection(systemId: UUID) returns {
+    success        : Boolean;
+    dirStatus      : String;
+    esrStatus      : String;
+    message        : String;
+    piVersion      : String;
+    swcvCount      : Integer;
+    channelCount   : Integer;
   };
 
-  // Manually trigger discovery (admin only)
-  action triggerDiscovery() returns DiscoveryRun;
+  /**
+   * Trigger discovery for a PI/PO system.
+   * Creates a DiscoveryJob record and queues async processing via cds.queued().
+   */
+  action triggerDiscovery(systemId: UUID) returns tenant.DiscoveryJob;
 
-  // Switch source mode (MOCK <-> LIVE)
-  action switchSourceMode(mode : String(10)) returns TenantProfile;
+  // ═══════════════════════════════════════════════════════════════════════════
+  // EVENTS - Processed asynchronously via CAP Event Queues
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Discovery request event - triggers async PI/PO discovery.
+   * Emitted by triggerDiscovery action, processed by DiscoveryService.
+   */
+  event DiscoveryRequested {
+    tenantId        : String(64);
+    systemId        : UUID;
+    jobId           : UUID;
+    options         : LargeString;      // JSON: { includeInactive, includeHistory, artifactTypes[] }
+    triggeredBy     : String(100);
+    timestamp       : DateTime;
+  };
 }

@@ -20,16 +20,7 @@ const DESTINATION_SERVICE_PATH = '/destination-configuration/v1';
  * Creates both DIR (Directory) and ESR (Enterprise Services Repository) destinations.
  */
 async function createPISystemDestinations(config) {
-  const {
-    tenantId,
-    systemName,
-    virtualHost,
-    virtualPort,
-    protocol,
-    locationId,
-    techUser,
-    techPassword,
-  } = config;
+  const { tenantId, systemName, virtualHost, virtualPort, protocol, locationId, techUser, techPassword } = config;
 
   // Generate destination names
   const destSuffix = `${systemName}_${tenantId}`.toUpperCase().replace(/[^A-Z0-9]/g, '_');
@@ -48,12 +39,12 @@ async function createPISystemDestinations(config) {
     User: techUser,
     Password: techPassword,
     'sap-client': '',
-    'CloudConnectorLocationId': locationId,
+    CloudConnectorLocationId: locationId,
     Description: `PI/PO Directory API for ${systemName} (Tenant: ${tenantId})`,
     // Additional properties for Cloud Connector
     'HTML5.DynamicDestination': 'true',
-    'WebIDEEnabled': 'true',
-    'WebIDEUsage': 'odata_gen',
+    WebIDEEnabled: 'true',
+    WebIDEUsage: 'odata_gen',
   };
 
   // ESR API destination (for Message Mappings, Data Types, etc.)
@@ -66,11 +57,11 @@ async function createPISystemDestinations(config) {
     User: techUser,
     Password: techPassword,
     'sap-client': '',
-    'CloudConnectorLocationId': locationId,
+    CloudConnectorLocationId: locationId,
     Description: `PI/PO ESR API for ${systemName} (Tenant: ${tenantId})`,
     'HTML5.DynamicDestination': 'true',
-    'WebIDEEnabled': 'true',
-    'WebIDEUsage': 'odata_gen',
+    WebIDEEnabled: 'true',
+    WebIDEUsage: 'odata_gen',
   };
 
   const results = {
@@ -243,9 +234,7 @@ async function listPISystemDestinations(tenantId) {
   const allDestinations = response.data || [];
   const pattern = `_${tenantId}`.toUpperCase().replace(/[^A-Z0-9]/g, '_');
 
-  return allDestinations.filter(dest =>
-    dest.Name.startsWith('PO_') && dest.Name.includes(pattern)
-  );
+  return allDestinations.filter(dest => dest.Name.startsWith('PO_') && dest.Name.includes(pattern));
 }
 
 /**

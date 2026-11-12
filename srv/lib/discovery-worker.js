@@ -61,16 +61,14 @@ async function processDiscoveryEvent(payload, context) {
       status: 'RUNNING',
       sourceMode,
       correlationId: 'disc-' + newRunId.substring(0, 8),
-      startedAt: new Date().toISOString()
+      startedAt: new Date().toISOString(),
     };
     await db.run(INSERT.into(DiscoveryRun).entries(run));
     LOG.info('Created new discovery run', { runId: run.ID, correlationId: run.correlationId });
   } else {
     // Update existing run
     await db.run(
-      UPDATE(DiscoveryRun)
-        .set({ status: 'RUNNING', startedAt: new Date().toISOString() })
-        .where({ ID: run.ID })
+      UPDATE(DiscoveryRun).set({ status: 'RUNNING', startedAt: new Date().toISOString() }).where({ ID: run.ID })
     );
     LOG.info('Updating existing discovery run', { runId: run.ID });
   }
@@ -102,7 +100,7 @@ async function processDiscoveryEvent(payload, context) {
         SELECT.one.from(Artifact).where({
           tenantId,
           artifactType: artifact.artifactType,
-          objectId: artifact.objectId
+          objectId: artifact.objectId,
         })
       );
 
@@ -122,7 +120,7 @@ async function processDiscoveryEvent(payload, context) {
               namespace: artifact.namespace,
               piStatus: artifact.piStatus,
               rawDefinition: artifact.rawDefinition,
-              modifiedAt: now
+              modifiedAt: now,
             })
             .where({ ID: existingArtifact.ID })
         );
@@ -150,7 +148,7 @@ async function processDiscoveryEvent(payload, context) {
             rawFormat: artifact.rawFormat || 'json',
             migrationStatus: 'discovered',
             createdAt: now,
-            modifiedAt: now
+            modifiedAt: now,
           })
         );
         newCount++;
@@ -165,7 +163,7 @@ async function processDiscoveryEvent(payload, context) {
           artifactsFound: artifacts.length,
           artifactsNew: newCount,
           artifactsUpdated: updatedCount,
-          completedAt: new Date().toISOString()
+          completedAt: new Date().toISOString(),
         })
         .where({ ID: run.ID })
     );
@@ -175,15 +173,13 @@ async function processDiscoveryEvent(payload, context) {
       runId: run.ID,
       found: artifacts.length,
       new: newCount,
-      updated: updatedCount
+      updated: updatedCount,
     });
-
   } catch (error) {
     LOG.error('Discovery failed', { tenantId, runId: run.ID, error: error.message });
 
     // Determine failure type
-    const isConnectivityError = error.message.includes('Connection') ||
-      error.message.includes('LIVE mode');
+    const isConnectivityError = error.message.includes('Connection') || error.message.includes('LIVE mode');
 
     await db.run(
       UPDATE(DiscoveryRun)
@@ -191,7 +187,7 @@ async function processDiscoveryEvent(payload, context) {
           status: isConnectivityError ? 'FAILED_CONNECTIVITY' : 'FAILED',
           errorMessage: error.message,
           errorsCount: 1,
-          completedAt: new Date().toISOString()
+          completedAt: new Date().toISOString(),
         })
         .where({ ID: run.ID })
     );

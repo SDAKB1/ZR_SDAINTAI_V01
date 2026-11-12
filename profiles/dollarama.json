@@ -1,0 +1,12 @@
+﻿{
+  "tenantId": "t-dollarama",
+  "organizationName": "Dollarama Inc.",
+  "locale": "fr",
+  "sourceMode": "MOCK",
+  "industry": "Retail",
+  "description": "Dollarama Retail - PI/PO Migration Demo Tenant",
+  "adminEmail": "admin@dollarama-demo.local",
+  "patterns": ["EDI", "IDoc", "SFTP"],
+  "expectedArtifacts": 150,
+  "notes": "Synthetic demo tenant for retail EDI patterns"
+}

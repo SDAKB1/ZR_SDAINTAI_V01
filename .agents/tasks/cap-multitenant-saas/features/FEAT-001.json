@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "CDS Schema Extensions for Multitenancy, Caching, and Checkpoints. Foundation layer that extends db/tenant-schema.cds (from main repo) into the worktree with ArtifactCache, LangGraphCheckpoint, LangGraphMessage, IdempotencyRecord entities. Also ports PISystem, DiscoveryJob, Artifact entities and creates new cache-schema.cds and checkpoint-schema.cds files. Updates db/index.cds to use all schemas. No service or UI changes - pure data model.",
+  "status": "completed",
+  "steps": [
+    "1. Create db/tenant-schema.cds in worktree by copying and extending from main repo db/tenant-schema.cds - ensure all existing entities (PISystem, DiscoveryJob, Artifact, AuditLog, etc.) are present",
+    "2. Create db/cache-schema.cds with ArtifactCache entity: tenantId String(36), cacheKey String(512), artifactType String(100), payload LargeString, metadata LargeString, ttlSeconds Integer default -1, expiresAt Timestamp, hitCount Integer default 0, lastAccessedAt Timestamp, version Integer default 1, checksum String(64). Add unique index on (tenantId, cacheKey)",
+    "3. Create db/checkpoint-schema.cds with: LangGraphCheckpoint entity (tenantId, threadId, checkpointId, parentId, state LargeString, metadata LargeString, createdAt Timestamp) and LangGraphMessage entity (tenantId, threadId, messageId, role String(20), content LargeString, toolCalls LargeString, createdAt Timestamp)",
+    "4. Create db/idempotency-schema.cds with IdempotencyRecord entity: tenantId String(36), idempotencyKey String(256), operation String(100), status String(20), result LargeString, expiresAt Timestamp, createdAt Timestamp. Add unique index on (tenantId, idempotencyKey)",
+    "5. Create db/index.cds that uses all schema files: using from './aiconx-schema'; using from './brain-schema'; using from './tenant-schema'; using from './cache-schema'; using from './checkpoint-schema'; using from './idempotency-schema';",
+    "6. Update package.json cds.requires section to ensure db model points to db/ folder"
+  ],
+  "acceptance_criteria": [
+    "Running 'npx cds build --production' succeeds without errors",
+    "Generated csn.json contains all entities: ArtifactCache, LangGraphCheckpoint, LangGraphMessage, IdempotencyRecord, PISystem, DiscoveryJob, Artifact",
+    "All entities have tenantId field for tenant isolation"
+  ],
+  "verification": [
+    "npx cds compile db/index.cds --to json succeeded with all entities compiled",
+    "Verified cache.ArtifactCache, checkpoint.LangGraphCheckpoint, checkpoint.LangGraphMessage, idempotency.IdempotencyRecord entities present in compiled output",
+    "Verified tenant.PISystem, tenant.DiscoveryJob, tenant.Artifact, tenant.AuditLog entities present in compiled output",
+    "All entities have tenantId String(36) not null field for tenant isolation",
+    "Unique constraints applied via @assert.unique annotations"
+  ],
+  "blocked_reason": null,
+  "findings": "CDS compilation succeeded. Note: Step 6 (update package.json cds.requires) was not needed as CAP auto-discovers models from db/ and srv/ folders. All entities compiled successfully with proper tenant isolation via tenantId field."
+}

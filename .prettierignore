@@ -1,0 +1,6 @@
+node_modules/
+gen/
+mta_archives/
+*.min.js
+*.min.css
+package-lock.json

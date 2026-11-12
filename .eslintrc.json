@@ -1,0 +1,44 @@
+{
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2022": true
+  },
+  "extends": [
+    "eslint:recommended"
+  ],
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module"
+  },
+  "rules": {
+    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
+    "no-console": "off",
+    "semi": ["error", "always"],
+    "quotes": ["warn", "single", { "avoidEscape": true }],
+    "indent": ["warn", 2, { "SwitchCase": 1 }],
+    "comma-dangle": ["warn", "only-multiline"],
+    "no-trailing-spaces": "warn",
+    "eol-last": ["warn", "always"]
+  },
+  "overrides": [
+    {
+      "files": ["srv/utils/pipoClient-improved.js"],
+      "rules": {
+        "indent": ["warn", 4, { "SwitchCase": 1 }]
+      }
+    },
+    {
+      "files": ["test/**/*.js"],
+      "rules": {
+        "indent": ["warn", 4, { "SwitchCase": 1 }]
+      }
+    }
+  ],
+  "ignorePatterns": [
+    "node_modules/",
+    "gen/",
+    "mta_archives/",
+    "*.min.js"
+  ]
+}

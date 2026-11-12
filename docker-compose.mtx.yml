@@ -1,0 +1,80 @@
+﻿# SDAINT-AI Migration Cockpit - Docker Compose for Multitenancy Demo
+# Runs CAP app + MTX sidecar with SQLite for local tenant provisioning
+
+services:
+  # Main CAP application
+  sdaintai-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sdaintai-app
+    ports:
+      - "4004:4004"
+    volumes:
+      - ./db-data:/app/db-data
+      - ./profiles:/app/profiles:ro
+    environment:
+      NODE_ENV: development
+      CDS_REQUIRES_DB_KIND: sql
+      CDS_REQUIRES_MULTITENANCY: "true"
+      CDS_MTX_SIDECAR_URL: "http://sdaintai-mtx:4005"
+      CDS_LOG_LEVELS_CDS: info
+      CDS_LOG_LEVELS_APP: debug
+    depends_on:
+      sdaintai-mtx:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: "no"
+    networks:
+      - sdaintai-net
+
+  # MTX Sidecar for tenant management
+  sdaintai-mtx:
+    build:
+      context: ./mtx/sidecar
+      dockerfile: Dockerfile.sidecar
+    container_name: sdaintai-mtx
+    ports:
+      - "4005:4005"
+    volumes:
+      - ./db-data:/app/db-data
+    environment:
+      NODE_ENV: development
+      CDS_REQUIRES_DB_KIND: sql
+      CDS_LOG_LEVELS_CDS: info
+      CDS_LOG_LEVELS_MTX: debug
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4005/-/cds/saas-provisioning/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+    restart: "no"
+    networks:
+      - sdaintai-net
+
+  # WireMock for PI/PO SOAP stub (optional, for live adapter testing)
+  pipo-mock:
+    image: wiremock/wiremock:3.3.1
+    container_name: pipo-mock
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./test/wiremock:/home/wiremock
+    command: ["--verbose"]
+    networks:
+      - sdaintai-net
+    profiles:
+      - with-pipo-mock
+
+networks:
+  sdaintai-net:
+    driver: bridge
+
+volumes:
+  db-data:

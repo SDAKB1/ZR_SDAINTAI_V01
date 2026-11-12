@@ -60,6 +60,17 @@ service BrainService @(path: '/odata/v4/brain', requires: 'any') {
     message      : String;
   };
 
+  // ── Chat endpoint for LangGraph-backed conversations ──
+  action chat(
+    message   : String,          // User message
+    threadId  : String,          // Conversation thread ID (optional, new thread if null)
+    tenantId  : String           // Tenant context (optional, uses cds.context.tenant)
+  ) returns {
+    response  : String;          // AI response message
+    threadId  : String;          // Thread ID for continuing conversation
+    toolUsage : array of String; // JSON array of tools used during response
+  };
+
   // ── SAP Migration Advisor — AI-powered object analysis ──
   action migrationAdvisor(
     key         : String,
@@ -93,5 +104,73 @@ service BrainService @(path: '/odata/v4/brain', requires: 'any') {
   action seedMigrationKnowledge(key: String) returns {
     seeded  : Integer;
     message : String;
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LANGGRAPH TOOLS - For artifact operations in chat/agent workflows
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Get artifact by ID - fetches from cache first, then DB
+   * Used by LangGraph agents to retrieve artifact details
+   */
+  action getArtifact(
+    key        : String,
+    artifactId : String         // Artifact ID or objectId
+  ) returns {
+    success    : Boolean;
+    artifact   : String;        // JSON serialized artifact data
+    fromCache  : Boolean;
+    message    : String;
+  };
+
+  /**
+   * Search artifacts using semantic similarity
+   * Used by LangGraph agents for natural language artifact queries
+   */
+  action searchArtifacts(
+    key        : String,
+    query      : String,        // Natural language search query
+    limit      : Integer        // Maximum results (default 10)
+  ) returns {
+    success    : Boolean;
+    results    : String;        // JSON array of matching artifacts with scores
+    count      : Integer;
+    message    : String;
+  };
+
+  /**
+   * Get dependencies for an artifact
+   * Used by LangGraph agents to understand artifact relationships
+   */
+  action getDependencies(
+    key        : String,
+    artifactId : String         // Source artifact ID
+  ) returns {
+    success    : Boolean;
+    dependencies: String;       // JSON array of dependent artifacts
+    inboundCount : Integer;     // Number of artifacts depending on this
+    outboundCount: Integer;     // Number of artifacts this depends on
+    message    : String;
+  };
+
+  /**
+   * Analyze migration path for multiple artifacts
+   * Used by LangGraph agents to assess migration complexity
+   */
+  action analyzeMigrationPath(
+    key        : String,
+    artifactIds: String         // JSON array of artifact IDs
+  ) returns {
+    success         : Boolean;
+    artifactCount   : Integer;
+    overallComplexity: String;  // simple | medium | complex
+    totalEstimatedHours: Integer;
+    byTier          : String;   // JSON: { simple: n, medium: n, complex: n }
+    byAdapter       : String;   // JSON: { soap: n, idoc: n, ... }
+    blockers        : String;   // JSON array of blocker messages
+    recommendations : String;   // JSON array of recommendations
+    waveAssignment  : String;   // JSON array of wave assignments
+    message         : String;
   };
 }

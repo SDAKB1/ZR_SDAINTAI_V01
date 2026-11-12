@@ -1,0 +1,20 @@
+# Fullstack Dockerfile for HANA Cloud deployment
+# Lighter than development Dockerfile - no SQLite/dev dependencies
+
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+COPY db/ ./db/
+COPY srv/ ./srv/
+COPY app/ ./app/
+COPY mtx/ ./mtx/
+
+EXPOSE 4004
+
+# VCAP_SERVICES must be injected at runtime with HANA Cloud credentials.
+# Example: docker run -e VCAP_SERVICES='...' sdaintai-fullstack
+CMD ["npx", "cds-serve"]

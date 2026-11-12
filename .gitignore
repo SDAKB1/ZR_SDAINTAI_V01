@@ -3,6 +3,9 @@ target/
 _out/
 gen/
 
+# Git worktrees (local only)
+.worktrees/
+
 .cdsrc-private.json
 default-*.json
 *.sqlite*

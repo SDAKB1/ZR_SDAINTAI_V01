@@ -1,0 +1,26 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Artifact Cache Service and LangGraph Checkpoint Saver implementations. Creates srv/cache/artifactCacheService.js with get/set/invalidate/warmCache methods that use tenant HDI. Creates srv/ai/capCheckpointSaver.js implementing LangGraph BaseCheckpointSaver interface with put/get/list methods. Creates srv/utils/idempotencyService.js for duplicate request handling. All services are tenant-aware using cds.context.tenant.",
+  "status": "completed",
+  "steps": [
+    "1. Create srv/cache/artifactCacheService.js with: get(tenantId, key) - check HDI, return if valid and not expired, increment hitCount; set(tenantId, key, value, ttl, metadata) - upsert with versioning and checksum; invalidate(tenantId, key) - delete by key; invalidateByPattern(tenantId, pattern) - delete matching LIKE pattern; warmCache(tenantId, systemId) - pre-populate from discovery; _isExpired(record) - check ttlSeconds and expiresAt. Use cds.context.tenant for isolation. TTL=-1 means indefinite.",
+    "2. Create srv/ai/capCheckpointSaver.js implementing LangGraph checkpoint interface: constructor(tenantId) stores tenant; put(config, checkpoint, metadata) - INSERT/UPDATE into LangGraphCheckpoint using threadId+checkpointId as key; get(config) - SELECT latest by threadId; list(config, options) - SELECT ordered by createdAt DESC with limit; getTuple(config) - return checkpoint and config for resume; Uses cds.context.tenant for all queries.",
+    "3. Create srv/utils/idempotencyService.js with: checkAndLock(tenantId, key, operation, ttlSeconds) - check if key exists and not expired, if so return existing result, else insert with status='processing'; complete(tenantId, key, result) - update status='completed' and store result; fail(tenantId, key, error) - update status='failed'; cleanExpired(tenantId) - delete where expiresAt < now. Default TTL 3600 seconds.",
+    "4. Add saveOnError wrapper function in capCheckpointSaver.js: wraps async operations and calls put() before rethrowing errors for fault tolerance",
+    "5. Export modules properly with module.exports and add LOG = cds.log() for structured logging in each file"
+  ],
+  "acceptance_criteria": [
+    "Running 'npx cds build --production' succeeds",
+    "artifactCacheService.js exports get, set, invalidate, invalidateByPattern, warmCache functions",
+    "capCheckpointSaver.js exports a class that can be instantiated with tenantId",
+    "idempotencyService.js exports checkAndLock, complete, fail, cleanExpired functions"
+  ],
+  "verification": [
+    "npx cds build --production",
+    "Verify srv/cache/artifactCacheService.js exists and exports expected functions",
+    "Verify srv/ai/capCheckpointSaver.js exists and exports CapCheckpointSaver class"
+  ],
+  "blocked_reason": null,
+  "findings": "Implemented all three services with full CAP patterns. artifactCacheService.js exports get/set/invalidate/invalidateByPattern/warmCache/cleanExpired/getStats functions with SHA-256 checksum and TTL=-1 indefinite support. capCheckpointSaver.js exports CapCheckpointSaver class and saveOnError wrapper implementing LangGraph BaseCheckpointSaver interface. idempotencyService.js exports checkAndLock/complete/fail/cleanExpired/getStatus/remove functions with default 3600s TTL. All services use cds.context.tenant for isolation and cds.log for structured logging. Verified: npx cds build --production succeeded, gen/ directory created with compiled output."
+}

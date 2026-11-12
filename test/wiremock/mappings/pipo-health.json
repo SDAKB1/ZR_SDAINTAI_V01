@@ -1,0 +1,17 @@
+﻿{
+  "mappings": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "/dir/health"
+      },
+      "response": {
+        "status": 200,
+        "body": "{\"status\":\"ok\",\"version\":\"7.50\"}",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      }
+    }
+  ]
+}

@@ -24,8 +24,14 @@ function textToEmbedding(text) {
 
 function cosineSimilarity(a, b) {
   if (!a || !b || a.length !== b.length) return 0;
-  let dot = 0, na = 0, nb = 0;
-  for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+  let dot = 0,
+    na = 0,
+    nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
   return na && nb ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0;
 }
 
@@ -40,11 +46,17 @@ class LocalVectorStore {
   _load() {
     try {
       if (fs.existsSync(STORE_FILE)) return JSON.parse(fs.readFileSync(STORE_FILE, 'utf8'));
-    } catch { /* file absent or corrupt — start empty */ }
+    } catch {
+      /* file absent or corrupt — start empty */
+    }
     return [];
   }
   _save() {
-    try { fs.writeFileSync(STORE_FILE, JSON.stringify(this._vectors)); } catch { /* non-fatal: ephemeral FS */ }
+    try {
+      fs.writeFileSync(STORE_FILE, JSON.stringify(this._vectors));
+    } catch {
+      /* non-fatal: ephemeral FS */
+    }
   }
   async add(content, metadata = {}) {
     const id = `v_${crypto.randomUUID()}`;
@@ -60,8 +72,12 @@ class LocalVectorStore {
       .sort((a, b) => b.score - a.score)
       .slice(0, k);
   }
-  async getAll() { return this._vectors; }
-  async count() { return this._vectors.length; }
+  async getAll() {
+    return this._vectors;
+  }
+  async count() {
+    return this._vectors.length;
+  }
   async replaceAll(vectors) {
     this._vectors = vectors;
     this._save();
@@ -85,7 +101,9 @@ class HanaVectorStore {
     this._idleTimeout = 300000; // 5 minutes idle timeout
     this._idleCheckInterval = null;
   }
-  _table() { return `"${this._creds.schema}"."BRAIN_BRAINVECTOR"`; }
+  _table() {
+    return `"${this._creds.schema}"."BRAIN_BRAINVECTOR"`;
+  }
   _getClient() {
     if (this._client) {
       this._lastActivity = Date.now();
@@ -100,12 +118,12 @@ class HanaVectorStore {
       password: this._creds.password,
       useTLS: true,
     });
-    client.on('error', (err) => {
+    client.on('error', err => {
       LOG.error('HANA connection error', { error: err.message });
       this._cleanup();
     });
     this._connecting = new Promise((resolve, reject) => {
-      client.connect((err) => {
+      client.connect(err => {
         this._connecting = null;
         if (err) return reject(err);
         this._client = client;
@@ -149,11 +167,12 @@ class HanaVectorStore {
   async _exec(sql, params) {
     const client = await this._getClient();
     this._lastActivity = Date.now();
-    if (!params) return new Promise((resolve, reject) => client.exec(sql, (err, rows) => err ? reject(err) : resolve(rows)));
+    if (!params)
+      return new Promise((resolve, reject) => client.exec(sql, (err, rows) => (err ? reject(err) : resolve(rows))));
     return new Promise((resolve, reject) => {
       client.prepare(sql, (err, statement) => {
         if (err) return reject(err);
-        statement.exec(params, (err, rows) => err ? reject(err) : resolve(rows));
+        statement.exec(params, (err, rows) => (err ? reject(err) : resolve(rows)));
       });
     });
   }
@@ -173,14 +192,26 @@ class HanaVectorStore {
   async search(queryText, k = 5) {
     const all = await this.getAll();
     const qe = textToEmbedding(queryText);
-    return all.map(v => ({ ...v, score: cosineSimilarity(qe, v.embedding) })).sort((a, b) => b.score - a.score).slice(0, k);
+    return all
+      .map(v => ({ ...v, score: cosineSimilarity(qe, v.embedding) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, k);
   }
   async getAll() {
     const rows = await this._exec(`SELECT ID, CONTENT, EMBEDDING, METADATA, TS FROM ${this._table()}`);
     return rows.map(r => {
-      let embedding = [], metadata = {};
-      try { embedding = JSON.parse(HanaVectorStore._text(r.EMBEDDING) || '[]'); } catch { /* malformed — default to [] */ }
-      try { metadata = JSON.parse(HanaVectorStore._text(r.METADATA) || '{}'); } catch { /* malformed — default to {} */ }
+      let embedding = [],
+        metadata = {};
+      try {
+        embedding = JSON.parse(HanaVectorStore._text(r.EMBEDDING) || '[]');
+      } catch {
+        /* malformed — default to [] */
+      }
+      try {
+        metadata = JSON.parse(HanaVectorStore._text(r.METADATA) || '{}');
+      } catch {
+        /* malformed — default to {} */
+      }
       return { id: r.ID, content: HanaVectorStore._text(r.CONTENT), embedding, metadata, ts: r.TS };
     });
   }
@@ -219,7 +250,9 @@ function getVectorStore() {
   if (!_instance) {
     const creds = findBrainHanaCredentials();
     _instance = creds ? new HanaVectorStore(creds) : new LocalVectorStore();
-    LOG.info('vector store initialized', { type: creds ? 'HANA-backed (AICONX-brain-hana, persists across redeploys)' : 'local-file (ephemeral)' });
+    LOG.info('vector store initialized', {
+      type: creds ? 'HANA-backed (AICONX-brain-hana, persists across redeploys)' : 'local-file (ephemeral)',
+    });
   }
   return _instance;
 }

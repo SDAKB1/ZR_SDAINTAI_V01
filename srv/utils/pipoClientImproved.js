@@ -102,12 +102,12 @@ class PIPOClientImproved {
     this.options = {
       timeout: options.timeout || 30000,
       piVersion: options.piVersion || '7.50',
-      ...options
+      ...options,
     };
     this.parser = new xml2js.Parser({
       explicitArray: false,
       ignoreAttrs: false,
-      tagNameProcessors: [xml2js.processors.stripPrefix]
+      tagNameProcessors: [xml2js.processors.stripPrefix],
     });
   }
 
@@ -122,9 +122,9 @@ class PIPOClientImproved {
       url: path,
       headers: {
         'Content-Type': body ? 'text/xml; charset=utf-8' : 'application/json',
-        ...headers
+        ...headers,
       },
-      timeout: this.options.timeout
+      timeout: this.options.timeout,
     };
 
     if (body) config.data = body;
@@ -147,8 +147,8 @@ class PIPOClientImproved {
 </soapenv:Envelope>`;
 
     const response = await this._request(endpoint, 'POST', soapEnvelope, {
-      'SOAPAction': action,
-      'Content-Type': 'text/xml; charset=utf-8'
+      SOAPAction: action,
+      'Content-Type': 'text/xml; charset=utf-8',
     });
 
     return this.parser.parseStringPromise(response);
@@ -268,9 +268,10 @@ class PIPOClientImproved {
    * List Integrated Configurations (ICOs)
    */
   async listICOs() {
-    const endpoint = this.options.piVersion >= '7.50'
-      ? ID_ENDPOINTS.IntegratedConfiguration750InService
-      : ID_ENDPOINTS.IntegratedConfigurationInService;
+    const endpoint =
+      this.options.piVersion >= '7.50'
+        ? ID_ENDPOINTS.IntegratedConfiguration750InService
+        : ID_ENDPOINTS.IntegratedConfigurationInService;
 
     const body = `<urn:IntegratedConfigurationQueryRequest xmlns:urn="urn:com.sap.xi.basis">
       <urn:IntegratedConfigurationID>
@@ -286,9 +287,10 @@ class PIPOClientImproved {
    * Get ICO details
    */
   async getICODetails(senderComponent, interfaceName, interfaceNamespace) {
-    const endpoint = this.options.piVersion >= '7.50'
-      ? ID_ENDPOINTS.IntegratedConfiguration750InService
-      : ID_ENDPOINTS.IntegratedConfigurationInService;
+    const endpoint =
+      this.options.piVersion >= '7.50'
+        ? ID_ENDPOINTS.IntegratedConfiguration750InService
+        : ID_ENDPOINTS.IntegratedConfigurationInService;
 
     const body = `<urn:IntegratedConfigurationReadRequest xmlns:urn="urn:com.sap.xi.basis">
       <urn:IntegratedConfigurationID>
@@ -352,11 +354,7 @@ class PIPOClientImproved {
       </urn:ValueMappingID>
     </urn:ValueMappingQueryRequest>`;
 
-    const result = await this._soapRequest(
-      ID_ENDPOINTS.ValueMappingInService,
-      'ValueMappingQuery',
-      body
-    );
+    const result = await this._soapRequest(ID_ENDPOINTS.ValueMappingInService, 'ValueMappingQuery', body);
     return this._extractValueMappings(result);
   }
 
@@ -388,11 +386,7 @@ class PIPOClientImproved {
       </urn:SenderAgreementID>
     </urn:SenderAgreementQueryRequest>`;
 
-    const result = await this._soapRequest(
-      ID_ENDPOINTS.SenderAgreementInService,
-      'SenderAgreementQuery',
-      body
-    );
+    const result = await this._soapRequest(ID_ENDPOINTS.SenderAgreementInService, 'SenderAgreementQuery', body);
     return this._extractAgreements(result, 'Sender');
   }
 
@@ -406,11 +400,7 @@ class PIPOClientImproved {
       </urn:ReceiverAgreementID>
     </urn:ReceiverAgreementQueryRequest>`;
 
-    const result = await this._soapRequest(
-      ID_ENDPOINTS.ReceiverAgreementInService,
-      'ReceiverAgreementQuery',
-      body
-    );
+    const result = await this._soapRequest(ID_ENDPOINTS.ReceiverAgreementInService, 'ReceiverAgreementQuery', body);
     return this._extractAgreements(result, 'Receiver');
   }
 
@@ -469,7 +459,7 @@ class PIPOClientImproved {
       messageTypes: [],
       functionLibraries: [],
       integrationProcesses: [],
-      errors: []
+      errors: [],
     };
 
     const phases = [
@@ -638,7 +628,6 @@ class PIPOClientImproved {
     }
   }
 
-
   // ---------------------------------------------------------------------------
   // MODULE CONFIGURATION EXTRACTION (Critical for migration)
   // ---------------------------------------------------------------------------
@@ -667,7 +656,7 @@ class PIPOClientImproved {
           moduleName: mod.ModuleName || mod.moduleName || '',
           moduleType: mod.ModuleType || mod.moduleType || 'Module',
           processingSequence: index + 1,
-          parameters: {}
+          parameters: {},
         };
 
         // Extract module parameters
@@ -696,20 +685,20 @@ class PIPOClientImproved {
    */
   _mapModuleToISEquivalent(moduleName) {
     const moduleMap = {
-      'PayloadSwapBean': 'Content Modifier / Groovy Script',
+      PayloadSwapBean: 'Content Modifier / Groovy Script',
       'AF_Modules/PayloadSwapBean': 'Content Modifier / Groovy Script',
-      'XMLAnonymizer': 'XSLT / Groovy Script',
+      XMLAnonymizer: 'XSLT / Groovy Script',
       'AF_Modules/XMLAnonymizer': 'XSLT / Groovy Script',
-      'MessageTransformBean': 'Content Modifier',
+      MessageTransformBean: 'Content Modifier',
       'AF_Modules/MessageTransformBean': 'Content Modifier',
-      'TextCodec': 'Encoder Step',
+      TextCodec: 'Encoder Step',
       'AF_Modules/TextCodec': 'Encoder Step',
-      'StrictXml2PlainBean': 'XML to JSON Converter',
+      StrictXml2PlainBean: 'XML to JSON Converter',
       'AF_Modules/StrictXml2PlainBean': 'XML to JSON Converter',
-      'Plain2XmlBean': 'JSON to XML Converter',
-      'DynamicConfigurationBean': 'Content Modifier (Headers)',
-      'RequestResponseBean': 'Request-Reply Pattern',
-      'CallSapAdapter': 'RFC Adapter / Process Call',
+      Plain2XmlBean: 'JSON to XML Converter',
+      DynamicConfigurationBean: 'Content Modifier (Headers)',
+      RequestResponseBean: 'Request-Reply Pattern',
+      CallSapAdapter: 'RFC Adapter / Process Call',
       'localejbs/CallSapAdapter': 'RFC Adapter / Process Call',
       'localejbs/AF_Modules/PayloadSwapBean': 'Content Modifier / Groovy Script',
     };
@@ -741,7 +730,9 @@ class PIPOClientImproved {
     const credentials = [];
     try {
       // Check authentication section
-      const auth = artifactDetail?.Authentication || artifactDetail?.SenderAuthentication ||
+      const auth =
+        artifactDetail?.Authentication ||
+        artifactDetail?.SenderAuthentication ||
         artifactDetail?.ReceiverAuthentication;
 
       if (auth) {
@@ -750,7 +741,7 @@ class PIPOClientImproved {
             credentialAlias: auth.User || auth.UserName,
             credentialType: 'Password',
             authType: 'Basic',
-            source: artifactType
+            source: artifactType,
           });
         }
 
@@ -759,7 +750,7 @@ class PIPOClientImproved {
             credentialAlias: auth.Certificate || auth.CertificateAlias,
             credentialType: 'Certificate',
             authType: 'Certificate',
-            source: artifactType
+            source: artifactType,
           });
         }
 
@@ -768,29 +759,30 @@ class PIPOClientImproved {
             credentialAlias: auth.OAuth2ClientId || auth.OAuthCredential,
             credentialType: 'OAuth',
             authType: 'OAuth2ClientCredentials',
-            source: artifactType
+            source: artifactType,
           });
         }
       }
 
       // Check for secure parameters in adapter config
-      const adapterConfig = artifactDetail?.AdapterSpecificAttribute ||
-        artifactDetail?.AdapterSpecificTableAttribute;
+      const adapterConfig = artifactDetail?.AdapterSpecificAttribute || artifactDetail?.AdapterSpecificTableAttribute;
       if (adapterConfig) {
         const configArray = Array.isArray(adapterConfig) ? adapterConfig : [adapterConfig];
         configArray.forEach(cfg => {
           // Look for password/secret field indicators
           const name = cfg.Name || cfg.name || '';
-          if (name.toLowerCase().includes('password') ||
+          if (
+            name.toLowerCase().includes('password') ||
             name.toLowerCase().includes('secret') ||
             name.toLowerCase().includes('credential') ||
-            name.toLowerCase().includes('apikey')) {
+            name.toLowerCase().includes('apikey')
+          ) {
             credentials.push({
               credentialAlias: `${artifactType}_${name}`,
               credentialType: 'Password',
               authType: 'SecureParameter',
               source: artifactType,
-              parameterName: name
+              parameterName: name,
             });
           }
         });
@@ -814,11 +806,7 @@ class PIPOClientImproved {
     </urn:PartyQueryRequest>`;
 
     try {
-      const result = await this._soapRequest(
-        ID_ENDPOINTS.PartyInService,
-        'PartyQuery',
-        body
-      );
+      const result = await this._soapRequest(ID_ENDPOINTS.PartyInService, 'PartyQuery', body);
       return this._extractParties(result);
     } catch (error) {
       LOG.warn('Party query failed', { error: error.message });
@@ -836,11 +824,7 @@ class PIPOClientImproved {
     </urn:PartyReadRequest>`;
 
     try {
-      const result = await this._soapRequest(
-        ID_ENDPOINTS.PartyInService,
-        'PartyRead',
-        body
-      );
+      const result = await this._soapRequest(ID_ENDPOINTS.PartyInService, 'PartyRead', body);
       return this._extractPartyDetail(result);
     } catch (error) {
       LOG.warn('Party read failed', { error: error.message });
@@ -882,7 +866,7 @@ class PIPOClientImproved {
     return {
       ...channelDetail,
       moduleConfigurations: this.extractModuleConfigurations(channelDetail),
-      credentialReferences: this.extractCredentialReferences(channelDetail, 'channel')
+      credentialReferences: this.extractCredentialReferences(channelDetail, 'channel'),
     };
   }
 
@@ -893,8 +877,8 @@ class PIPOClientImproved {
     const {
       includeModules = true,
       includeCredentials = true,
-      includeParties = false,  // Only for B2B
-      progressCallback = null
+      includeParties = false, // Only for B2B
+      progressCallback = null,
     } = options;
 
     // Run base discovery
@@ -903,17 +887,14 @@ class PIPOClientImproved {
     // Enhance with module configurations
     if (includeModules && results.channels.length > 0) {
       results.moduleConfigurations = [];
-      for (const channel of results.channels.slice(0, 50)) { // Limit for performance
+      for (const channel of results.channels.slice(0, 50)) {
+        // Limit for performance
         try {
-          const detail = await this.getChannelWithModules(
-            channel.party,
-            channel.component,
-            channel.name
-          );
+          const detail = await this.getChannelWithModules(channel.party, channel.component, channel.name);
           if (detail.moduleConfigurations?.length > 0) {
             results.moduleConfigurations.push({
               channelId: `${channel.component}:${channel.name}`,
-              modules: detail.moduleConfigurations
+              modules: detail.moduleConfigurations,
             });
           }
         } catch (e) {
@@ -938,7 +919,7 @@ class PIPOClientImproved {
               credentialMap.set(key, {
                 ...cred,
                 usedByChannels: [],
-                usedByAgreements: []
+                usedByAgreements: [],
               });
             }
             credentialMap.get(key).usedByChannels.push(`${channel.component}:${channel.name}`);
@@ -958,7 +939,6 @@ class PIPOClientImproved {
 
     return results;
   }
-
 }
 
 // Export
@@ -967,5 +947,5 @@ module.exports = {
   ESR_ENDPOINTS,
   ID_ENDPOINTS,
   SLD_ENDPOINTS,
-  ARTIFACT_TYPES
+  ARTIFACT_TYPES,
 };

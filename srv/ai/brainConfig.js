@@ -32,7 +32,7 @@ function verifyKey(key) {
 function readState() {
   try {
     if (fs.existsSync(STATE_FILE)) return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-  } catch { }
+  } catch {}
   return { enabled: false, enabledAt: null };
 }
 

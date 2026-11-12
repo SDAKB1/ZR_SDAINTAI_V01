@@ -1,250 +1,169 @@
 'use strict';
+
 /**
  * Discovery Service Handler
  *
- * Implements the DiscoveryService CDS actions for PI/PO artifact discovery.
- * Handles multi-tenant context, progress tracking, and async job execution.
+ * Implements PI/PO artifact discovery with multi-tenant support.
+ * Integrates with:
+ * - artifactCacheService for durable caching of discovered artifacts
+ * - idempotencyService for duplicate prevention
+ * - SSE for real-time progress updates
  *
- * SAP NetWeaver 7.50 Enhanced:
- * - Uses IntegratedConfiguration750InService for 7.50-specific fields
- * - Extracts full module chains from Communication Channels
- * - Populates ModuleConfiguration entity for migration analysis
- * - Extracts security material references for credential planning
+ * All operations preserve tenant context via cds.context.tenant.
  */
 
 const cds = require('@sap/cds');
-const { PIPoSoapClient, ESR_OBJECT_TYPES, XI_NAMESPACES } = require('./utils/pipoSoapClient');
 const { randomUUID } = require('node:crypto');
-const sseHandler = require('./sse-handler');
-const destinationService = require('./utils/destinationService');
+const cacheService = require('./cache/artifactCacheService');
+const idempotencyService = require('./utils/idempotencyService');
+
+const LOG = cds.log('discovery-service');
 
 // Discovery phases with weights for progress calculation
-// SAP NetWeaver 7.50 Enhanced - includes module extraction and 7.50-specific fields
 const DISCOVERY_PHASES = [
   { name: 'Software Components', types: ['SoftwareComponentVersion'], weight: 5, category: 'esr' },
-  { name: 'Integrated Configurations (7.50)', types: ['IntegratedConfiguration'], weight: 20, category: 'dir', use750: true },
+  { name: 'Integrated Configurations', types: ['IntegratedConfiguration'], weight: 20, category: 'dir' },
   { name: 'Communication Channels', types: ['CommunicationChannel'], weight: 15, category: 'dir' },
-  { name: 'Channel Module Extraction', types: ['_ModuleExtraction'], weight: 10, category: 'post' },
   { name: 'Message Mappings', types: ['MessageMapping', 'OperationMapping'], weight: 15, category: 'esr' },
   { name: 'Agreements', types: ['SenderAgreement', 'ReceiverAgreement'], weight: 15, category: 'dir' },
   { name: 'Value Mappings', types: ['ValueMappingGroup'], weight: 10, category: 'dir' },
-  { name: 'Configuration Scenarios', types: ['ConfigurationScenario'], weight: 5, category: 'dir' },
-  { name: 'Business Systems & Parties', types: ['BusinessSystem', 'Party'], weight: 5, category: 'dir' },
 ];
-
-// CDS Logger for this module - per North Star "use cds logs in the entire repo"
-const LOG = cds.log('discovery-service');
-
-function _resolveUserRole(roles) {
-  if (roles?.admin) return 'Admin';
-  if (roles?.approver) return 'Approver';
-  return 'Viewer';
-}
 
 module.exports = class DiscoveryService extends cds.ApplicationService {
   async init() {
-    LOG.info('Service init starting');
-    const { PISystem, DiscoveryJob, Artifact, AuditLog } = cds.entities('tenant');
-    LOG.debug('Entities loaded, registering handlers');
+    const { PISystem, DiscoveryJob, Artifact, AuditLog, DependencyGraph } = cds.entities('tenant');
 
-    this.on('addPISystem', async (req) => {
-      const { systemName, description, virtualHost, virtualPort, protocol, locationId, techUser, techPassword, piVersion } = req.data;
-      const tenantId = req.user.tenant || 'default';
+    // Track active jobs for cancellation
+    this._activeJobs = new Map();
 
-      // SEC-3 fix: Input length validation for string fields
-      const MAX_STRING_LENGTH = 1000;
-      const validateStringLength = (value, fieldName) => {
-        if (value && typeof value === 'string' && value.length > MAX_STRING_LENGTH) {
-          return req.error(400, `${fieldName} exceeds maximum length of ${MAX_STRING_LENGTH} characters`);
-        }
-        return null;
-      };
-
-      const validationError =
-        validateStringLength(systemName, 'systemName') ||
-        validateStringLength(description, 'description') ||
-        validateStringLength(virtualHost, 'virtualHost') ||
-        validateStringLength(locationId, 'locationId') ||
-        validateStringLength(techUser, 'techUser') ||
-        validateStringLength(techPassword, 'techPassword') ||
-        validateStringLength(piVersion, 'piVersion') ||
-        validateStringLength(protocol, 'protocol');
-
-      if (validationError) return validationError;
-
-      // Generate destination names
-      const destSuffix = `${systemName}_${tenantId}`.toUpperCase().replace(/[^A-Z0-9]/g, '_');
-      const destinationDir = `PO_${destSuffix}_DIR`;
-      const destinationEsr = `PO_${destSuffix}_ESR`;
-
-      try {
-        // Create the system record
-        const systemId = randomUUID();
-        await INSERT.into(PISystem).entries({
-          ID: systemId,
-          tenantId,
-          systemName,
-          description,
-          virtualHost,
-          virtualPort: virtualPort || 443,
-          protocol: protocol || 'http',
-          locationId,
-          destinationDir,
-          destinationEsr,
-          techUser,
-          piVersion: piVersion || '7.50',
-          status: 'configured',
-        });
-
-        // Log audit
-        await this._audit(req, 'system_added', 'PISystem', systemId, systemName, { virtualHost, locationId });
-
-        // Create BTP destinations programmatically
-        try {
-          const destResult = await destinationService.createPISystemDestinations({
-            tenantId,
-            systemName,
-            virtualHost,
-            virtualPort: virtualPort || 443,
-            protocol: protocol || 'http',
-            locationId,
-            techUser,
-            techPassword,
-          });
-          if (destResult.errors.length > 0) {
-            LOG.warn('Destination creation warnings', { errors: destResult.errors });
-          }
-        } catch (destError) {
-          LOG.warn('Auto destination creation failed, manual creation required', { error: destError.message });
-        }
-        // For now, destinations must be created manually in BTP Cockpit
-
-        return {
-          systemId,
-          destinationDir,
-          destinationEsr,
-          status: 'configured',
-          message: `System "${systemName}" added. Please create destinations "${destinationDir}" and "${destinationEsr}" in BTP Cockpit with the provided credentials.`,
-        };
-      } catch (error) {
-        return req.error(500, `Failed to add system: ${error.message}`);
-      }
-    });
-
-    this.on('testConnection', async (req) => {
-      const { systemId } = req.data;
-      const tenantId = req.user.tenant || 'default';
-
-      // Get system config
-      const system = await SELECT.one.from(PISystem).where({ ID: systemId, tenantId });
-      if (!system) {
-        return req.error(404, 'System not found');
-      }
-
-      try {
-        // Create SOAP client for DIR
-        const dirClient = new PIPoSoapClient(system.destinationDir);
-        const esrClient = new PIPoSoapClient(system.destinationEsr);
-
-        // Test connections
-        const dirTest = await dirClient.testConnection().catch(e => ({ success: false, error: e.message }));
-        const esrTest = await esrClient.testConnection().catch(e => ({ success: false, error: e.message }));
-
-        const success = dirTest.success !== false && esrTest.success !== false;
-
-        // Update system status
-        await UPDATE(PISystem).where({ ID: systemId }).set({
-          status: success ? 'active' : 'error',
-          lastTestedAt: new Date(),
-          lastTestResult: JSON.stringify({ dirTest, esrTest }),
-        });
-
-        // Log audit
-        await this._audit(req, 'system_tested', 'PISystem', systemId, system.systemName, { success });
-
-        return {
-          success,
-          dirStatus: dirTest.dirStatus || dirTest.error || 'ok',
-          esrStatus: esrTest.esrStatus || esrTest.error || 'ok',
-          sldStatus: 'not_tested',
-          piVersion: esrTest.version || system.piVersion,
-          swcvCount: esrTest.swcvCount || 0,
-          icoCount: 0,
-          channelCount: dirTest.channelCount || 0,
-          message: success ? 'Connection successful' : 'Connection failed - check destination configuration',
-          details: JSON.stringify({ dirTest, esrTest }),
-        };
-      } catch (error) {
-        return {
-          success: false,
-          dirStatus: 'error',
-          esrStatus: 'error',
-          message: `Connection test failed: ${error.message}`,
-        };
-      }
-    });
-
-    // ---------------------------------------------------------------------------
-    // DISCOVERY OPERATIONS
-    // ---------------------------------------------------------------------------
-
-    this.on('startDiscovery', async (req) => {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ACTION: startDiscovery
+    // ═══════════════════════════════════════════════════════════════════════════
+    this.on('startDiscovery', async req => {
+      const tenantId = cds.context?.tenant || req.user?.tenant || 'default';
       const { systemId, includeInactive, includeHistory, artifactTypes } = req.data;
-      const tenantId = req.user.tenant || 'default';
 
-      // Get system
-      const system = await SELECT.one.from(PISystem).where({ ID: systemId, tenantId });
-      if (!system) {
-        return req.error(404, 'System not found');
+      LOG.info('startDiscovery called', { tenantId, systemId });
+
+      if (!systemId) {
+        return req.error(400, 'systemId is required');
       }
 
-      // Create job record
-      const jobId = randomUUID();
-      await INSERT.into(DiscoveryJob).entries({
-        ID: jobId,
+      // Get system configuration
+      const system = await SELECT.one.from(PISystem).where({ ID: systemId, tenantId });
+
+      if (!system) {
+        return req.error(404, 'PI/PO system not found');
+      }
+
+      // Check idempotency - prevent duplicate concurrent discoveries
+      const idempotencyKey = `discovery_${systemId}`;
+      const idempotencyCheck = await idempotencyService.checkAndLock(
         tenantId,
-        system_ID: systemId,
-        status: 'pending',
-        startedBy: req.user.id,
-        options: JSON.stringify({ includeInactive, includeHistory, artifactTypes }),
-        progressLog: '[]',
-        errorLog: '[]',
-      });
+        idempotencyKey,
+        'discovery_start',
+        3600 // 1 hour TTL
+      );
 
-      // Log audit
-      await this._audit(req, 'discovery_started', 'DiscoveryJob', jobId, system.systemName, { options: req.data });
+      // If we didn't acquire the lock and there's already processing in progress
+      if (!idempotencyCheck.locked && (idempotencyCheck.alreadyProcessed || idempotencyCheck.inProgress)) {
+        return {
+          jobId: idempotencyCheck.result?.jobId,
+          status: 'already_running',
+          estimatedTime: 120,
+          message: `Discovery is already running for system "${system.systemName}". Job ID: ${idempotencyCheck.result?.jobId}`,
+        };
+      }
 
-      // Start async discovery (non-blocking) - BUG-H1 fix: track Promise and handle errors
-      const discoveryPromise = this._runDiscoveryAsync(jobId, system, { includeInactive, includeHistory, artifactTypes }, tenantId)
-        .catch(err => {
-          LOG.error('Discovery job failed', { jobId, error: err.message, stack: err.stack });
-          // Update job status on unhandled failure
-          return UPDATE(DiscoveryJob).where({ ID: jobId }).set({
-            status: 'failed',
-            completedAt: new Date(),
-            errorLog: JSON.stringify([{ phase: 'unhandled', error: err.message }]),
-          }).then(() => undefined);
+      try {
+        // Create job record
+        const jobId = randomUUID();
+        const options = JSON.stringify({
+          includeInactive: includeInactive || false,
+          includeHistory: includeHistory || false,
+          artifactTypes: artifactTypes ? JSON.parse(artifactTypes) : null,
         });
-      // Store in active jobs map for potential cancellation/tracking
-      if (!this._activeJobs) this._activeJobs = new Map();
-      this._activeJobs.set(jobId, discoveryPromise);
-      discoveryPromise.finally(() => this._activeJobs?.delete(jobId));
 
-      return {
-        jobId,
-        status: 'pending',
-        estimatedTime: 120, // Estimate based on typical discovery
-        message: `Discovery started for "${system.systemName}". Monitor progress via getDiscoveryProgress.`,
-      };
+        await INSERT.into(DiscoveryJob).entries({
+          ID: jobId,
+          tenantId,
+          system_ID: systemId,
+          status: 'pending',
+          startedAt: new Date(),
+          startedBy: req.user?.id || 'system',
+          options,
+          progressLog: '[]',
+          errorLog: '[]',
+          totalPhases: DISCOVERY_PHASES.length,
+          currentPhase: 0,
+          currentPhaseName: 'Initializing',
+          progressPercent: 0,
+          artifactsFound: 0,
+          artifactsNew: 0,
+          artifactsUpdated: 0,
+          errorsCount: 0,
+          warningsCount: 0,
+        });
+
+        // Update idempotency record with job ID
+        await idempotencyService.complete(tenantId, idempotencyKey, { jobId });
+
+        // Log audit
+        await this._audit(tenantId, req.user, 'discovery_started', 'DiscoveryJob', jobId, system.systemName, {
+          systemId,
+          options,
+        });
+
+        // Start async discovery (non-blocking)
+        const discoveryPromise = this._runDiscoveryAsync(
+          jobId,
+          system,
+          {
+            includeInactive,
+            includeHistory,
+            artifactTypes: artifactTypes ? JSON.parse(artifactTypes) : null,
+          },
+          tenantId
+        )
+          .catch(err => {
+            LOG.error('Discovery job failed', { jobId, tenantId, error: err.message, stack: err.stack });
+            return this._updateJobStatus(jobId, tenantId, 'failed', err.message);
+          })
+          .finally(() => {
+            this._activeJobs.delete(jobId);
+            idempotencyService.remove(tenantId, idempotencyKey);
+          });
+
+        this._activeJobs.set(jobId, discoveryPromise);
+
+        return {
+          jobId,
+          status: 'pending',
+          estimatedTime: 120,
+          message: `Discovery started for "${system.systemName}". Monitor progress via getDiscoveryProgress or SSE.`,
+        };
+      } catch (error) {
+        await idempotencyService.fail(tenantId, idempotencyKey, error);
+        LOG.error('Error starting discovery', { tenantId, systemId, error: error.message });
+        return req.error(500, `Failed to start discovery: ${error.message}`);
+      }
     });
 
-    this.on('getDiscoveryProgress', async (req) => {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // FUNCTION: getDiscoveryProgress
+    // ═══════════════════════════════════════════════════════════════════════════
+    this.on('getDiscoveryProgress', async req => {
+      const tenantId = cds.context?.tenant || req.user?.tenant || 'default';
       const { jobId } = req.data;
-      const tenantId = req.user.tenant || 'default';
+
+      if (!jobId) {
+        return req.error(400, 'jobId is required');
+      }
 
       const job = await SELECT.one.from(DiscoveryJob).where({ ID: jobId, tenantId });
+
       if (!job) {
-        return req.error(404, 'Job not found');
+        return req.error(404, 'Discovery job not found');
       }
 
       return {
@@ -256,287 +175,69 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
         artifactsFound: job.artifactsFound,
         currentItem: job.currentPhaseName,
         errors: job.errorLog,
-        estimatedRemaining: job.status === 'running' ? Math.max(0, 120 - Math.floor((Date.now() - new Date(job.startedAt).getTime()) / 1000)) : 0,
+        estimatedRemaining:
+          job.status === 'running'
+            ? Math.max(0, 120 - Math.floor((Date.now() - new Date(job.startedAt).getTime()) / 1000))
+            : 0,
       };
     });
 
-    this.on('cancelDiscovery', async (req) => {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ACTION: cancelDiscovery
+    // ═══════════════════════════════════════════════════════════════════════════
+    this.on('cancelDiscovery', async req => {
+      const tenantId = cds.context?.tenant || req.user?.tenant || 'default';
       const { jobId } = req.data;
-      const tenantId = req.user.tenant || 'default';
+
+      if (!jobId) {
+        return req.error(400, 'jobId is required');
+      }
 
       const job = await SELECT.one.from(DiscoveryJob).where({ ID: jobId, tenantId });
+
       if (!job) {
-        return req.error(404, 'Job not found');
+        return req.error(404, 'Discovery job not found');
       }
 
       if (job.status !== 'running' && job.status !== 'pending') {
-        return { success: false, message: `Cannot cancel job in status: ${job.status}` };
-      }
-
-      await UPDATE(DiscoveryJob).where({ ID: jobId }).set({
-        status: 'cancelled',
-        completedAt: new Date(),
-      });
-
-      return { success: true, message: 'Discovery cancelled' };
-    });
-
-    // ---------------------------------------------------------------------------
-    // ARTIFACT OPERATIONS
-    // ---------------------------------------------------------------------------
-
-    /**
-     * AssessmentRequested event handler - processes assessment asynchronously via CAP outbox
-     * This handler is invoked by CAP's background runner when assessArtifact emits the event
-     */
-    this.on('AssessmentRequested', async (data) => {
-      const { artifactId, tenantId, userId } = data.data || data;
-      LOG.info('Processing queued assessment', { artifactId, tenantId });
-
-      const tx = cds.transaction({ user: { id: userId || 'system', tenant: tenantId } });
-
-      try {
-        const artifact = await tx.run(SELECT.one.from(Artifact).where({ ID: artifactId, tenantId }));
-        if (!artifact) {
-          LOG.warn('Artifact not found for queued assessment', { artifactId });
-          return;
-        }
-
-        // Call the brain service for AI assessment
-        const brainService = await cds.connect.to('BrainService');
-        const assessment = await brainService.send('migrationAdvisor', {
-          key: process.env.BRAIN_MASTER_KEY || 'AYMAN2026',
-          objectId: artifact.objectId || artifact.name,
-          objectDesc: artifact.description || artifact.name,
-          segmentCount: 10,
-          hasZFields: false,
-          mappingType: artifact.mappingType || 'graphical',
-          adapterType: artifact.adapterType || 'soap',
-          volumePerDay: 1000,
-          isBpmProcess: false,
-          isEdiBased: artifact.adapterType === 'as2',
-          sourceSystem: 'SAP_PI_PO',
-        });
-
-        // Update artifact with assessment including SAP-aligned fields
-        await tx.run(UPDATE(Artifact).where({ ID: artifactId }).set({
-          migrationTier: assessment.tier,
-          complexityScore: assessment.complexityScore,
-          recommendedTool: assessment.recommendedTool,
-          estimatedHours: assessment.estimatedHours,
-          assessedAt: new Date(),
-          assessmentNotes: assessment.rationale,
-          migrationStatus: 'assessed',
-          scenarioPattern: assessment.scenarioPattern,
-          sapMigrationStatus: assessment.sapMigrationStatus,
-          matchedTemplate: assessment.matchedTemplate,
-        }));
-
-        // BUG-H2 fix: Create ArtifactLimitation records within same transaction for atomicity
-        if (assessment.limitations) {
-          let limitations;
-          try {
-            limitations = JSON.parse(assessment.limitations);
-          } catch (parseErr) {
-            LOG.warn('Failed to parse limitations JSON', { error: parseErr.message, artifactId });
-            limitations = [];
-          }
-
-          const { ArtifactLimitation } = this.entities;
-          // Insert all limitations - any failure will rollback the entire transaction
-          for (const lim of limitations) {
-            await tx.run(INSERT.into(ArtifactLimitation).entries({
-              tenant_ID: tenantId,
-              artifact_ID: artifactId,
-              limitation_code: lim.code,
-              detectedAt: new Date(),
-              detectedBy: 'auto',
-              context: JSON.stringify({
-                severity: lim.severity,
-                category: lim.category,
-                workaroundType: lim.workaroundType,
-                workaroundDesc: lim.workaroundDesc,
-              }),
-              resolutionStatus: 'open',
-            }));
-          }
-        }
-
-        await tx.commit();
-        LOG.info('Assessment completed', { artifactId, tier: assessment.tier });
-
-        // Broadcast completion via SSE
-        sseHandler.broadcastProgress(tenantId, artifactId, {
-          type: 'assessment_complete',
-          artifactId,
-          tier: assessment.tier,
-          recommendedTool: assessment.recommendedTool,
-        });
-
-      } catch (error) {
-        // BUG-M5 fix: Preserve stack trace using cause option
-        LOG.error('Queued assessment failed', { artifactId, error: error.message, stack: error.stack });
-        await tx.rollback();
-        const wrappedError = new Error(`Assessment failed for artifact ${artifactId}: ${error.message}`, { cause: error });
-        throw wrappedError; // Re-throw to let CAP outbox handle retry
-      }
-    });
-
-    this.on('assessArtifact', async (req) => {
-      const { artifactId, async: runAsync = true } = req.data;
-      const tenantId = req.user.tenant || 'default';
-
-      const artifact = await SELECT.one.from(Artifact).where({ ID: artifactId, tenantId });
-      if (!artifact) {
-        return req.error(404, 'Artifact not found');
-      }
-
-      // For async processing (default), queue the assessment via CAP outbox
-      if (runAsync) {
-        // Use cds.queued() to emit event transactionally
-        const queuedService = cds.queued(this);
-        await queuedService.emit('AssessmentRequested', {
-          artifactId,
-          tenantId,
-          userId: req.user.id,
-        });
-
-        // Update status to indicate assessment is queued
-        await UPDATE(Artifact).where({ ID: artifactId }).set({
-          migrationStatus: 'assessing',
-        });
-
-        LOG.info('Assessment queued', { artifactId, tenantId });
-
         return {
-          artifactId,
-          status: 'queued',
-          message: 'Assessment queued for async processing. Monitor via SSE or polling.',
+          success: false,
+          message: `Cannot cancel job in status: ${job.status}`,
         };
       }
 
-      // Synchronous processing (when async=false)
-      try {
-        const brainService = await cds.connect.to('BrainService');
-        const assessment = await brainService.send('migrationAdvisor', {
-          key: process.env.BRAIN_MASTER_KEY || 'AYMAN2026',
-          objectId: artifact.objectId || artifact.name,
-          objectDesc: artifact.description || artifact.name,
-          segmentCount: 10, // Would parse from rawDefinition
-          hasZFields: false,
-          mappingType: artifact.mappingType || 'graphical',
-          adapterType: artifact.adapterType || 'soap',
-          volumePerDay: 1000,
-          isBpmProcess: false,
-          isEdiBased: artifact.adapterType === 'as2',
-          sourceSystem: 'SAP_PI_PO',
-        });
+      await UPDATE(DiscoveryJob)
+        .set({
+          status: 'cancelled',
+          completedAt: new Date(),
+        })
+        .where({ ID: jobId, tenantId });
 
-        // Update artifact with assessment including SAP-aligned fields (Gaps #1, #2, #3)
-        await UPDATE(Artifact).where({ ID: artifactId }).set({
-          migrationTier: assessment.tier,
-          complexityScore: assessment.complexityScore,
-          recommendedTool: assessment.recommendedTool,
-          estimatedHours: assessment.estimatedHours,
-          assessedAt: new Date(),
-          assessmentNotes: assessment.rationale,
-          migrationStatus: 'assessed',
-          // Gap #1: Scenario Pattern
-          scenarioPattern: assessment.scenarioPattern,
-          // Gap #2: SAP Migration Status
-          sapMigrationStatus: assessment.sapMigrationStatus,
-          matchedTemplate: assessment.matchedTemplate,
-        });
+      LOG.info('Discovery cancelled', { tenantId, jobId });
 
-        // Gap #3: Create ArtifactLimitation records if any limitations detected
-        // BUG-H2 fix: Log parse errors properly but continue with empty array
-        if (assessment.limitations) {
-          let limitations;
-          try {
-            limitations = JSON.parse(assessment.limitations);
-          } catch (parseErr) {
-            LOG.warn('Failed to parse limitations JSON', { error: parseErr.message, artifactId });
-            limitations = [];
-          }
-
-          const { ArtifactLimitation } = this.entities;
-          for (const lim of limitations) {
-            await INSERT.into(ArtifactLimitation).entries({
-              tenant_ID: tenantId,
-              artifact_ID: artifactId,  // Association to Artifact
-              limitation_code: lim.code,  // Association key to MigrationLimitationRef
-              detectedAt: new Date(),
-              detectedBy: 'auto',
-              context: JSON.stringify({
-                severity: lim.severity,
-                category: lim.category,
-                workaroundType: lim.workaroundType,
-                workaroundDesc: lim.workaroundDesc,
-              }),
-              resolutionStatus: 'open',
-            });
-          }
-        }
-
-        return {
-          artifactId,
-          tier: assessment.tier,
-          complexityScore: assessment.complexityScore,
-          recommendedTool: assessment.recommendedTool,
-          estimatedHours: assessment.estimatedHours,
-          rationale: assessment.rationale,
-          // Include SAP-aligned fields in response
-          scenarioPattern: assessment.scenarioPattern,
-          scenarioPatternName: assessment.scenarioPatternName,
-          sapMigrationStatus: assessment.sapMigrationStatus,
-          matchedTemplate: assessment.matchedTemplate,
-          limitations: assessment.limitations,
-          limitationCount: assessment.limitationCount,
-          hasBlockers: assessment.hasBlockers,
-          message: 'Assessment complete',
-        };
-      } catch (error) {
-        return req.error(500, `Assessment failed: ${error.message}`);
-      }
+      return {
+        success: true,
+        message: 'Discovery cancelled',
+      };
     });
 
-    this.on('approveArtifact', async (req) => {
-      const { artifactId, wave, notes } = req.data;
-      const tenantId = req.user.tenant || 'default';
-
-      // SEC-3 fix: Input length validation
-      if (notes && typeof notes === 'string' && notes.length > 5000) {
-        return req.error(400, 'notes exceeds maximum length of 5000 characters');
-      }
-
-      const artifact = await SELECT.one.from(Artifact).where({ ID: artifactId, tenantId });
-      if (!artifact) {
-        return req.error(404, 'Artifact not found');
-      }
-
-      await UPDATE(Artifact).where({ ID: artifactId }).set({
-        migrationStatus: 'approved',
-        migrationWave: wave,
-        approvedBy: req.user.id,
-        approvedAt: new Date(),
-        approvalNotes: notes,
-      });
-
-      await this._audit(req, 'artifact_approved', 'Artifact', artifactId, artifact.name, { wave, notes });
-
-      return { success: true, message: `Artifact "${artifact.name}" approved for wave ${wave}` };
-    });
-
-    this.on('getDiscoverySummary', async (req) => {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // FUNCTION: getDiscoverySummary
+    // ═══════════════════════════════════════════════════════════════════════════
+    this.on('getDiscoverySummary', async req => {
+      const tenantId = cds.context?.tenant || req.user?.tenant || 'default';
       const { systemId } = req.data;
-      const tenantId = req.user.tenant || 'default';
+
+      if (!systemId) {
+        return req.error(400, 'systemId is required');
+      }
 
       const system = await SELECT.one.from(PISystem).where({ ID: systemId, tenantId });
+
       if (!system) {
-        return req.error(404, 'System not found');
+        return req.error(404, 'PI/PO system not found');
       }
 
-      // Get artifact counts by type
       const artifacts = await SELECT.from(Artifact).where({ system_ID: systemId, tenantId });
 
       const byType = {};
@@ -548,7 +249,7 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
         byType[a.artifactType] = (byType[a.artifactType] || 0) + 1;
         byTier[a.migrationTier || 'unassessed']++;
         byStatus[a.migrationStatus || 'discovered']++;
-        totalHours += a.estimatedHours || 0;
+        totalHours += Number(a.estimatedHours) || 0;
       }
 
       return {
@@ -562,590 +263,705 @@ module.exports = class DiscoveryService extends cds.ApplicationService {
       };
     });
 
-    // ---------------------------------------------------------------------------
-    // SAP NETWEAVER 7.50 SPECIFIC OPERATIONS
-    // ---------------------------------------------------------------------------
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ACTION: assessArtifact
+    // ═══════════════════════════════════════════════════════════════════════════
+    this.on('assessArtifact', async req => {
+      const tenantId = cds.context?.tenant || req.user?.tenant || 'default';
+      const { artifactId, async: runAsync = true } = req.data;
 
-    this.on('extractChannelDetails', async (req) => {
-      const { systemId, channelIds } = req.data;
-      const tenantId = req.user.tenant || 'default';
-
-      const system = await SELECT.one.from(PISystem).where({ ID: systemId, tenantId });
-      if (!system) {
-        return req.error(404, 'System not found');
+      if (!artifactId) {
+        return req.error(400, 'artifactId is required');
       }
 
-      try {
-        const dirClient = new PIPoSoapClient(system.destinationDir);
+      const artifact = await SELECT.one.from(Artifact).where({ ID: artifactId, tenantId });
 
-        // Get channels to process
-        let channels;
-        if (channelIds) {
-          const ids = JSON.parse(channelIds);
-          channels = await SELECT.from(Artifact)
-            .where({ system_ID: systemId, tenantId, artifactType: 'CommunicationChannel' })
-            .and({ objectId: { in: ids } });
-        } else {
-          channels = await SELECT.from(Artifact)
-            .where({ system_ID: systemId, tenantId, artifactType: 'CommunicationChannel' });
-        }
+      if (!artifact) {
+        return req.error(404, 'Artifact not found');
+      }
 
-        if (channels.length === 0) {
-          return { processed: 0, modulesExtracted: 0, credentialsFound: 0, message: 'No channels found' };
-        }
-
-        // Extract details using the new 7.50 methods
-        const result = await this._extractChannelModules(
-          cds.transaction({ user: { id: req.user.id, tenant: tenantId } }),
-          dirClient,
+      if (runAsync) {
+        // Queue for async processing via CAP outbox
+        const queuedService = cds.queued(this);
+        await queuedService.emit('AssessmentRequested', {
+          artifactId,
           tenantId,
-          channels
-        );
-
-        return {
-          processed: channels.length,
-          modulesExtracted: result.moduleCount,
-          credentialsFound: result.credentialCount,
-          errors: '[]',
-          message: `Extracted details from ${channels.length} channels`,
-        };
-      } catch (error) {
-        return req.error(500, `Channel extraction failed: ${error.message}`);
-      }
-    });
-
-    this.on('extractIcoDetails750', async (req) => {
-      const { systemId, icoIds } = req.data;
-      const tenantId = req.user.tenant || 'default';
-
-      const system = await SELECT.one.from(PISystem).where({ ID: systemId, tenantId });
-      if (!system) {
-        return req.error(404, 'System not found');
-      }
-
-      try {
-        const dirClient = new PIPoSoapClient(system.destinationDir);
-
-        // Get ICOs to process
-        let icos;
-        if (icoIds) {
-          const ids = JSON.parse(icoIds);
-          icos = await SELECT.from(Artifact)
-            .where({ system_ID: systemId, tenantId, artifactType: 'IntegratedConfiguration' })
-            .and({ objectId: { in: ids } });
-        } else {
-          icos = await SELECT.from(Artifact)
-            .where({ system_ID: systemId, tenantId, artifactType: 'IntegratedConfiguration' });
-        }
-
-        if (icos.length === 0) {
-          return { processed: 0, with750Fields: 0, message: 'No ICOs found' };
-        }
-
-        // Extract 7.50 details
-        const result = await this._extractIcoDetails750(
-          cds.transaction({ user: { id: req.user.id, tenant: tenantId } }),
-          dirClient,
-          tenantId,
-          icos
-        );
-
-        return {
-          processed: icos.length,
-          with750Fields: result.updatedCount,
-          errors: '[]',
-          message: `Extracted 7.50 details from ${icos.length} ICOs`,
-        };
-      } catch (error) {
-        return req.error(500, `ICO extraction failed: ${error.message}`);
-      }
-    });
-
-    this.on('getConfigurationScenarios', async (req) => {
-      const { systemId } = req.data;
-      const tenantId = req.user.tenant || 'default';
-
-      const system = await SELECT.one.from(PISystem).where({ ID: systemId, tenantId });
-      if (!system) {
-        return req.error(404, 'System not found');
-      }
-
-      try {
-        const dirClient = new PIPoSoapClient(system.destinationDir);
-        const scenarios = await dirClient.queryConfigurationScenarios();
-
-        return {
-          scenarios: JSON.stringify(scenarios),
-          count: scenarios.length,
-          message: `Found ${scenarios.length} configuration scenarios`,
-        };
-      } catch (error) {
-        return {
-          scenarios: '[]',
-          count: 0,
-          message: `Failed to query scenarios: ${error.message}`,
-        };
-      }
-    });
-
-    this.on('getChannelModules', async (req) => {
-      const { channelId } = req.data;
-      const tenantId = req.user.tenant || 'default';
-      const { ModuleConfiguration } = cds.entities('tenant');
-
-      // Get module configurations for this channel
-      const modules = await SELECT.from(ModuleConfiguration)
-        .where({ tenant_ID: tenantId, channelId });
-
-      const hasCustomModules = modules.some(m =>
-        !m.isEquivalent || m.isEquivalent.includes('Groovy') || m.isEquivalent.includes('Manual')
-      );
-
-      // Get channel info
-      const channel = await SELECT.one.from(Artifact)
-        .where({ tenantId, objectId: channelId });
-
-      return {
-        channelId,
-        channelName: channel?.name || channelId,
-        adapterType: channel?.adapterType || 'unknown',
-        modules: JSON.stringify(modules),
-        moduleCount: modules.length,
-        hasCustomModules,
-        message: modules.length > 0
-          ? `Found ${modules.length} modules`
-          : 'No modules found (run extractChannelDetails first)',
-      };
-    });
-
-    this.on('getSecurityInventory', async (req) => {
-      const { systemId } = req.data;
-      const tenantId = req.user.tenant || 'default';
-      const { CredentialInventory } = cds.entities('tenant');
-
-      // Get credentials associated with artifacts from this system
-      const artifacts = await SELECT.from(Artifact)
-        .columns('objectId')
-        .where({ system_ID: systemId, tenantId, artifactType: 'CommunicationChannel' });
-
-      const channelIdSet = new Set(artifacts.map(a => a.objectId));
-
-      // Get credentials - referenced by these channels
-      const credentials = await SELECT.from(CredentialInventory)
-        .where({ tenant_ID: tenantId });
-
-      // Filter to those referenced by our channels
-      const relevantCreds = credentials.filter(c => {
-        try {
-          const refs = JSON.parse(c.referencedBy || '[]');
-          return refs.some(r => channelIdSet.has(r));
-        } catch {
-          return false;
-        }
-      });
-
-      // Count by type
-      const byType = {};
-      let needsMigration = 0;
-      for (const c of relevantCreds) {
-        byType[c.credentialType] = (byType[c.credentialType] || 0) + 1;
-        if (c.migrationStatus === 'pending') {
-          needsMigration++;
-        }
-      }
-
-      return {
-        credentials: JSON.stringify(relevantCreds),
-        count: relevantCreds.length,
-        byType: JSON.stringify(byType),
-        needsMigration,
-        message: `Found ${relevantCreds.length} security material items`,
-      };
-    });
-
-    // ---------------------------------------------------------------------------
-    // INTERNAL HELPERS
-    // ---------------------------------------------------------------------------
-
-    /**
-     * Run discovery job asynchronously (SAP NetWeaver 7.50 Enhanced)
-     * Includes module extraction and 7.50-specific field extraction
-     */
-    this._runDiscoveryAsync = async (jobId, system, options, tenantId) => {
-      const tx = cds.transaction({ user: { id: 'system', tenant: tenantId } });
-
-      // Track discovered channels for post-processing
-      const discoveredChannels = [];
-
-      try {
-        await tx.run(UPDATE(DiscoveryJob).where({ ID: jobId }).set({
-          status: 'running',
-          startedAt: new Date(),
-        }));
-
-        const dirClient = new PIPoSoapClient(system.destinationDir);
-        const esrClient = new PIPoSoapClient(system.destinationEsr);
-
-        let totalProgress = 0;
-        let totalArtifacts = 0;
-        const errors = [];
-        let startTime = Date.now();
-
-        for (let i = 0; i < DISCOVERY_PHASES.length; i++) {
-          const phase = DISCOVERY_PHASES[i];
-
-          // Check if job was cancelled
-          // eslint-disable-next-line no-await-in-loop
-          const currentJob = await tx.run(SELECT.one.from(DiscoveryJob).where({ ID: jobId }));
-          if (currentJob.status === 'cancelled') {
-            break;
-          }
-
-          // Update progress
-          // eslint-disable-next-line no-await-in-loop
-          await tx.run(UPDATE(DiscoveryJob).where({ ID: jobId }).set({
-            currentPhase: i + 1,
-            currentPhaseName: phase.name,
-            progressPercent: Math.round(totalProgress),
-          }));
-
-          // Broadcast progress via SSE
-          sseHandler.broadcastProgress(tenantId, jobId, {
-            phase: i + 1,
-            phaseName: phase.name,
-            progressPercent: Math.round(totalProgress),
-            artifactsFound: totalArtifacts,
-          });
-
-          // eslint-disable-next-line no-await-in-loop
-          const phaseResult = await this._processDiscoveryPhase(
-            tx, dirClient, esrClient, phase, jobId, system.ID, tenantId, discoveredChannels
-          );
-          errors.push(...phaseResult.errors);
-          totalArtifacts += phaseResult.artifactsAdded;
-          totalProgress += phase.weight;
-        }
-
-        // Calculate duration
-        const durationMs = Date.now() - startTime;
-
-        // Complete job
-        await tx.run(UPDATE(DiscoveryJob).where({ ID: jobId }).set({
-          status: errors.length > 0 ? 'completed_with_errors' : 'completed',
-          completedAt: new Date(),
-          progressPercent: 100,
-          artifactsFound: totalArtifacts,
-          errorsCount: errors.length,
-          errorLog: JSON.stringify(errors),
-          durationMs,
-        }));
-
-        // Broadcast completion via SSE
-        sseHandler.broadcastCompletion(tenantId, jobId, {
-          status: errors.length > 0 ? 'completed_with_errors' : 'completed',
-          artifactsFound: totalArtifacts,
-          completedAt: new Date().toISOString(),
-          durationMs,
-          channelsWithModules: discoveredChannels.length,
+          userId: req.user?.id || 'system',
         });
 
-        // Update system stats
-        await tx.run(UPDATE(PISystem).where({ ID: system.ID }).set({
-          totalArtifacts,
-          lastDiscoveryAt: new Date(),
-        }));
+        await UPDATE(Artifact).set({ migrationStatus: 'assessing' }).where({ ID: artifactId, tenantId });
+
+        LOG.info('Assessment queued', { tenantId, artifactId });
+
+        return {
+          artifactId,
+          status: 'queued',
+          message: 'Assessment queued for async processing. Monitor via SSE or polling.',
+        };
+      }
+
+      // Synchronous processing
+      try {
+        const brainService = await cds.connect.to('BrainService');
+        const assessment = await brainService.send('migrationAdvisor', {
+          key: process.env.BRAIN_MASTER_KEY || 'AYMAN2026',
+          objectId: artifact.objectId || artifact.name,
+          objectDesc: artifact.description || artifact.name,
+          segmentCount: artifact.dependencyCount || 10,
+          hasZFields: false,
+          mappingType: artifact.mappingType || 'graphical',
+          adapterType: artifact.adapterType || 'soap',
+          volumePerDay: 1000,
+          isBpmProcess: false,
+          isEdiBased: artifact.adapterType === 'as2',
+          sourceSystem: 'SAP_PI_PO',
+        });
+
+        await UPDATE(Artifact)
+          .set({
+            migrationTier: assessment.tier,
+            complexityScore: assessment.complexityScore,
+            recommendedTool: assessment.recommendedTool,
+            estimatedHours: assessment.estimatedHours,
+            assessedAt: new Date(),
+            assessmentNotes: assessment.rationale,
+            migrationStatus: 'assessed',
+            scenarioPattern: assessment.scenarioPattern,
+            sapMigrationStatus: assessment.sapMigrationStatus,
+            matchedTemplate: assessment.matchedTemplate,
+          })
+          .where({ ID: artifactId, tenantId });
+
+        // Update cache with assessment results
+        const cacheKey = `${artifact.artifactType}:${artifact.objectId}`;
+        try {
+          await cacheService.set(
+            tenantId,
+            cacheKey,
+            {
+              ...artifact,
+              migrationTier: assessment.tier,
+              complexityScore: assessment.complexityScore,
+              recommendedTool: assessment.recommendedTool,
+              estimatedHours: assessment.estimatedHours,
+              assessedAt: new Date().toISOString(),
+            },
+            -1,
+            { assessed: true }
+          );
+        } catch (cacheError) {
+          LOG.warn('Cache update failed during assessment', { artifactId, error: cacheError.message });
+        }
+
+        return {
+          artifactId,
+          status: 'complete',
+          tier: assessment.tier,
+          complexityScore: assessment.complexityScore,
+          recommendedTool: assessment.recommendedTool,
+          estimatedHours: assessment.estimatedHours,
+          rationale: assessment.rationale,
+          scenarioPattern: assessment.scenarioPattern,
+          sapMigrationStatus: assessment.sapMigrationStatus,
+          matchedTemplate: assessment.matchedTemplate,
+          message: 'Assessment complete',
+        };
+      } catch (error) {
+        LOG.error('Assessment failed', { tenantId, artifactId, error: error.message });
+        return req.error(500, `Assessment failed: ${error.message}`);
+      }
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // EVENT: AssessmentRequested - Process queued assessments
+    // ═══════════════════════════════════════════════════════════════════════════
+    this.on('AssessmentRequested', async data => {
+      const { artifactId, tenantId, userId } = data.data || data;
+
+      LOG.info('Processing queued assessment', { artifactId, tenantId });
+
+      // Create transaction with tenant context
+      const tx = cds.transaction({ user: { id: userId || 'system', tenant: tenantId } });
+
+      try {
+        const artifact = await tx.run(SELECT.one.from(Artifact).where({ ID: artifactId, tenantId }));
+
+        if (!artifact) {
+          LOG.warn('Artifact not found for queued assessment', { artifactId, tenantId });
+          return;
+        }
+
+        const brainService = await cds.connect.to('BrainService');
+        const assessment = await brainService.send('migrationAdvisor', {
+          key: process.env.BRAIN_MASTER_KEY || 'AYMAN2026',
+          objectId: artifact.objectId || artifact.name,
+          objectDesc: artifact.description || artifact.name,
+          segmentCount: artifact.dependencyCount || 10,
+          hasZFields: false,
+          mappingType: artifact.mappingType || 'graphical',
+          adapterType: artifact.adapterType || 'soap',
+          volumePerDay: 1000,
+          isBpmProcess: false,
+          isEdiBased: artifact.adapterType === 'as2',
+          sourceSystem: 'SAP_PI_PO',
+        });
+
+        await tx.run(
+          UPDATE(Artifact)
+            .set({
+              migrationTier: assessment.tier,
+              complexityScore: assessment.complexityScore,
+              recommendedTool: assessment.recommendedTool,
+              estimatedHours: assessment.estimatedHours,
+              assessedAt: new Date(),
+              assessmentNotes: assessment.rationale,
+              migrationStatus: 'assessed',
+              scenarioPattern: assessment.scenarioPattern,
+              sapMigrationStatus: assessment.sapMigrationStatus,
+              matchedTemplate: assessment.matchedTemplate,
+            })
+            .where({ ID: artifactId })
+        );
 
         await tx.commit();
 
+        // Update cache
+        const cacheKey = `${artifact.artifactType}:${artifact.objectId}`;
+        try {
+          await cacheService.set(
+            tenantId,
+            cacheKey,
+            {
+              ...artifact,
+              migrationTier: assessment.tier,
+              assessedAt: new Date().toISOString(),
+            },
+            -1,
+            { assessed: true }
+          );
+        } catch (cacheError) {
+          LOG.warn('Cache update failed', { artifactId, error: cacheError.message });
+        }
+
+        LOG.info('Assessment completed', { artifactId, tenantId, tier: assessment.tier });
+
+        // Emit SSE event for UI update
+        this._emitProgress(tenantId, artifactId, {
+          type: 'assessment_complete',
+          artifactId,
+          tier: assessment.tier,
+          recommendedTool: assessment.recommendedTool,
+        });
       } catch (error) {
-        LOG.error('Discovery job failed', { error: error.message, stack: error.stack });
-        await tx.run(UPDATE(DiscoveryJob).where({ ID: jobId }).set({
+        LOG.error('Queued assessment failed', { artifactId, tenantId, error: error.message, stack: error.stack });
+        await tx.rollback();
+        throw error;
+      }
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ACTION: approveArtifact
+    // ═══════════════════════════════════════════════════════════════════════════
+    this.on('approveArtifact', async req => {
+      const tenantId = cds.context?.tenant || req.user?.tenant || 'default';
+      const { artifactId, wave, notes } = req.data;
+
+      if (!artifactId) {
+        return req.error(400, 'artifactId is required');
+      }
+
+      if (notes && notes.length > 5000) {
+        return req.error(400, 'notes exceeds maximum length of 5000 characters');
+      }
+
+      const artifact = await SELECT.one.from(Artifact).where({ ID: artifactId, tenantId });
+
+      if (!artifact) {
+        return req.error(404, 'Artifact not found');
+      }
+
+      await UPDATE(Artifact)
+        .set({
+          migrationStatus: 'approved',
+          migrationWave: wave || 1,
+          approvedBy: req.user?.id || 'system',
+          approvedAt: new Date(),
+          approvalNotes: notes,
+        })
+        .where({ ID: artifactId, tenantId });
+
+      await this._audit(tenantId, req.user, 'artifact_approved', 'Artifact', artifactId, artifact.name, {
+        wave,
+        notes,
+      });
+
+      LOG.info('Artifact approved', { tenantId, artifactId, wave });
+
+      return {
+        success: true,
+        message: `Artifact "${artifact.name}" approved for wave ${wave || 1}`,
+      };
+    });
+
+    await super.init();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PRIVATE METHODS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Run discovery job asynchronously with cache integration
+   * @private
+   */
+  async _runDiscoveryAsync(jobId, system, options, tenantId) {
+    const { PISystem, DiscoveryJob, Artifact, DependencyGraph } = cds.entities('tenant');
+    const tx = cds.transaction({ user: { id: 'system', tenant: tenantId } });
+
+    LOG.info('Starting async discovery', { jobId, tenantId, systemId: system.ID });
+
+    let totalArtifactsFound = 0;
+    let newArtifacts = 0;
+    let updatedArtifacts = 0;
+    let errorsCount = 0;
+    const errors = [];
+
+    try {
+      // Update job status to running
+      await tx.run(
+        UPDATE(DiscoveryJob)
+          .set({ status: 'running', currentPhase: 0, currentPhaseName: 'Initializing' })
+          .where({ ID: jobId })
+      );
+
+      // Import SOAP client
+      let PIPoSoapClient;
+      try {
+        const clientModule = require('./utils/pipoSoapClient');
+        PIPoSoapClient = clientModule.PIPoSoapClient;
+      } catch (e) {
+        LOG.warn('PIPoSoapClient not available, using mock data', { error: e.message });
+        PIPoSoapClient = null;
+      }
+
+      // Process each phase
+      for (let phaseIndex = 0; phaseIndex < DISCOVERY_PHASES.length; phaseIndex++) {
+        const phase = DISCOVERY_PHASES[phaseIndex];
+
+        // Check for cancellation
+        const jobStatus = await tx.run(SELECT.one.from(DiscoveryJob).columns('status').where({ ID: jobId }));
+        if (jobStatus?.status === 'cancelled') {
+          LOG.info('Discovery cancelled by user', { jobId, tenantId });
+          break;
+        }
+
+        const progressPercent = Math.round((phaseIndex / DISCOVERY_PHASES.length) * 100);
+
+        // Update phase progress
+        await tx.run(
+          UPDATE(DiscoveryJob)
+            .set({
+              currentPhase: phaseIndex + 1,
+              currentPhaseName: phase.name,
+              progressPercent,
+            })
+            .where({ ID: jobId })
+        );
+
+        // Emit SSE progress event
+        this._emitProgress(tenantId, jobId, {
+          type: 'phase_start',
+          phase: phaseIndex + 1,
+          phaseName: phase.name,
+          progressPercent,
+        });
+
+        LOG.debug('Processing phase', { jobId, phase: phase.name, phaseIndex: phaseIndex + 1 });
+
+        // Process each artifact type in the phase
+        for (const artifactType of phase.types) {
+          try {
+            // Use idempotency service for each artifact type processing
+            const typeKey = `discovery_${jobId}_${artifactType}`;
+            const typeCheck = await idempotencyService.checkAndLock(tenantId, typeKey, 'artifact_type_discovery', 300);
+
+            if (typeCheck.exists && typeCheck.status === 'completed') {
+              LOG.debug('Artifact type already processed', { artifactType, jobId });
+              continue;
+            }
+
+            let artifacts = [];
+
+            if (PIPoSoapClient) {
+              // Create client and query artifacts
+              const client = new PIPoSoapClient(
+                phase.category === 'dir' ? system.destinationDir : system.destinationEsr
+              );
+
+              try {
+                artifacts = await this._queryArtifacts(client, artifactType);
+              } catch (queryError) {
+                LOG.warn('Query failed for artifact type', { artifactType, error: queryError.message });
+                errors.push({
+                  ts: new Date().toISOString(),
+                  phase: phase.name,
+                  type: artifactType,
+                  message: queryError.message,
+                });
+                errorsCount++;
+              }
+            } else {
+              // Use mock data for local development
+              artifacts = this._getMockArtifacts(artifactType);
+            }
+
+            // Process and cache each artifact
+            for (const artifact of artifacts) {
+              try {
+                const result = await this._processArtifact(tx, tenantId, system.ID, jobId, artifactType, artifact);
+
+                if (result.isNew) {
+                  newArtifacts++;
+                } else {
+                  updatedArtifacts++;
+                }
+                totalArtifactsFound++;
+
+                // Cache the artifact (TTL=-1 for indefinite/durable cache)
+                const cacheKey = `${artifactType}:${result.objectId}`;
+                await cacheService.set(
+                  tenantId,
+                  cacheKey,
+                  {
+                    ...result,
+                    systemId: system.ID,
+                    discoveredAt: new Date().toISOString(),
+                  },
+                  -1,
+                  {
+                    source: 'discovery',
+                    jobId,
+                    phase: phase.name,
+                  }
+                );
+              } catch (artifactError) {
+                LOG.warn('Error processing artifact', { artifactType, error: artifactError.message });
+                errorsCount++;
+              }
+            }
+
+            // Mark artifact type as completed
+            await idempotencyService.complete(tenantId, typeKey, { count: artifacts.length });
+          } catch (typeError) {
+            LOG.error('Error processing artifact type', { artifactType, error: typeError.message });
+            errorsCount++;
+          }
+        }
+
+        // Update artifacts found count after each phase
+        await tx.run(
+          UPDATE(DiscoveryJob)
+            .set({
+              artifactsFound: totalArtifactsFound,
+              artifactsNew: newArtifacts,
+              artifactsUpdated: updatedArtifacts,
+              errorsCount,
+            })
+            .where({ ID: jobId })
+        );
+      }
+
+      // Update job to completed
+      await tx.run(
+        UPDATE(DiscoveryJob)
+          .set({
+            status: 'completed',
+            completedAt: new Date(),
+            progressPercent: 100,
+            currentPhaseName: 'Completed',
+            artifactsFound: totalArtifactsFound,
+            artifactsNew: newArtifacts,
+            artifactsUpdated: updatedArtifacts,
+            errorsCount,
+            errorLog: JSON.stringify(errors),
+            durationMs: Date.now() - new Date(await this._getJobStartTime(tx, jobId)).getTime(),
+          })
+          .where({ ID: jobId })
+      );
+
+      // Update system statistics
+      await tx.run(
+        UPDATE(PISystem)
+          .set({
+            totalArtifacts: totalArtifactsFound,
+            lastDiscoveryAt: new Date(),
+          })
+          .where({ ID: system.ID })
+      );
+
+      await tx.commit();
+
+      // Final SSE event
+      this._emitProgress(tenantId, jobId, {
+        type: 'discovery_complete',
+        totalArtifacts: totalArtifactsFound,
+        newArtifacts,
+        updatedArtifacts,
+        errorsCount,
+      });
+
+      LOG.info('Discovery completed', {
+        jobId,
+        tenantId,
+        totalArtifactsFound,
+        newArtifacts,
+        updatedArtifacts,
+        errorsCount,
+      });
+    } catch (error) {
+      LOG.error('Discovery failed', { jobId, tenantId, error: error.message, stack: error.stack });
+      await tx.rollback();
+
+      await UPDATE(DiscoveryJob)
+        .set({
           status: 'failed',
           completedAt: new Date(),
-          errorLog: JSON.stringify([{ error: error.message }]),
-        }));
-        await tx.commit();
-      }
+          errorLog: JSON.stringify([
+            {
+              ts: new Date().toISOString(),
+              phase: 'execution',
+              type: 'fatal',
+              message: error.message,
+            },
+          ]),
+        })
+        .where({ ID: jobId, tenantId });
+
+      throw error;
+    }
+  }
+
+  /**
+   * Query artifacts from PI/PO system
+   * @private
+   */
+  async _queryArtifacts(client, artifactType) {
+    switch (artifactType) {
+      case 'IntegratedConfiguration':
+        return await client.queryIntegratedConfigurations();
+      case 'CommunicationChannel':
+        return await client.queryCommunicationChannels();
+      case 'SenderAgreement':
+        return await client.querySenderAgreements();
+      case 'ReceiverAgreement':
+        return await client.queryReceiverAgreements();
+      case 'ValueMappingGroup':
+        return await client.queryValueMappings();
+      case 'SoftwareComponentVersion':
+        return await client.querySoftwareComponentVersions();
+      case 'MessageMapping':
+        return await client.queryMessageMappings();
+      case 'OperationMapping':
+        return await client.queryOperationMappings();
+      default:
+        return [];
+    }
+  }
+
+  /**
+   * Process a single artifact (upsert to DB)
+   * @private
+   */
+  async _processArtifact(tx, tenantId, systemId, jobId, artifactType, rawArtifact) {
+    const { Artifact } = cds.entities('tenant');
+
+    const objectId =
+      rawArtifact.ObjectID || rawArtifact.objectId || rawArtifact.Name || rawArtifact.name || randomUUID();
+
+    const artifactKey = JSON.stringify({
+      type: artifactType,
+      id: objectId,
+    });
+
+    // Check if artifact already exists
+    const existing = await tx.run(
+      SELECT.one.from(Artifact).columns('ID').where({ tenantId, system_ID: systemId, artifactKey })
+    );
+
+    const artifactData = {
+      tenantId,
+      system_ID: systemId,
+      discoveryJob_ID: jobId,
+      artifactType,
+      artifactKey,
+      objectId,
+      name: rawArtifact.Name || rawArtifact.name || objectId,
+      description: rawArtifact.Description || rawArtifact.description || '',
+      namespace: rawArtifact.Namespace || rawArtifact.namespace || '',
+      swcv: rawArtifact.SoftwareComponentVersion || rawArtifact.swcv || '',
+      direction: rawArtifact.Direction || rawArtifact.direction || '',
+      adapterType: rawArtifact.AdapterType || rawArtifact.adapterType || '',
+      senderParty: rawArtifact.SenderPartyID || '',
+      senderComponent: rawArtifact.SenderComponentID || '',
+      senderInterface: rawArtifact.InterfaceName || '',
+      senderNamespace: rawArtifact.InterfaceNamespace || '',
+      receiverParty: rawArtifact.ReceiverPartyID || '',
+      receiverComponent: rawArtifact.ReceiverComponentID || '',
+      piStatus: rawArtifact.AdministrativeState === 'active' ? 'active' : 'inactive',
+      rawDefinition: JSON.stringify(rawArtifact),
+      rawFormat: 'json',
     };
 
-    /**
-     * Process a single discovery phase — handles post-processing and artifact discovery.
-     * Extracted from _runDiscoveryAsync to reduce cognitive complexity.
-     */
-    this._processDiscoveryPhase = async (tx, dirClient, esrClient, phase, jobId, systemId, tenantId, discoveredChannels) => {
-      const { Artifact } = cds.entities('tenant');
-      const errors = [];
-      let artifactsAdded = 0;
+    if (existing) {
+      // Update existing artifact
+      await tx.run(UPDATE(Artifact).set(artifactData).where({ ID: existing.ID }));
 
-      if (phase.category === 'post') {
-        if (phase.types.includes('_ModuleExtraction') && discoveredChannels.length > 0) {
-          try {
-            LOG.info('Extracting modules from channels', { count: discoveredChannels.length });
-            const moduleResult = await this._extractChannelModules(tx, dirClient, tenantId, discoveredChannels);
-            LOG.info('Module extraction complete', moduleResult);
-          } catch (error) {
-            errors.push({ phase: phase.name, type: '_ModuleExtraction', error: error.message });
-            LOG.error('Module extraction error', { error: error.message });
-          }
+      return { ...artifactData, ID: existing.ID, isNew: false };
+    } else {
+      // Insert new artifact
+      const newId = randomUUID();
+      await tx.run(
+        INSERT.into(Artifact).entries({
+          ID: newId,
+          ...artifactData,
+          migrationStatus: 'discovered',
+        })
+      );
+
+      return { ...artifactData, ID: newId, isNew: true };
+    }
+  }
+
+  /**
+   * Get mock artifacts for local development
+   * @private
+   */
+  _getMockArtifacts(artifactType) {
+    const mockData = {
+      IntegratedConfiguration: [
+        { ObjectID: 'ICO_ORDERS_001', Name: 'Orders Outbound ICO', AdapterType: 'SOAP', Direction: 'outbound' },
+        { ObjectID: 'ICO_VENDOR_002', Name: 'Vendor Master ICO', AdapterType: 'IDoc', Direction: 'inbound' },
+      ],
+      CommunicationChannel: [
+        { ObjectID: 'CC_SOAP_001', Name: 'SOAP Receiver Channel', AdapterType: 'SOAP', Direction: 'receiver' },
+        { ObjectID: 'CC_FILE_002', Name: 'File Sender Channel', AdapterType: 'FILE', Direction: 'sender' },
+      ],
+      MessageMapping: [
+        { ObjectID: 'MM_ORDERS_001', Name: 'Orders to S4 Mapping', Namespace: 'urn:sap:mm' },
+        { ObjectID: 'MM_VENDOR_002', Name: 'Vendor Master Mapping', Namespace: 'urn:sap:mm' },
+      ],
+      SoftwareComponentVersion: [{ ObjectID: 'SWCV_001', Name: 'CustomSWCV 1.0', Version: '1.0' }],
+    };
+
+    return mockData[artifactType] || [];
+  }
+
+  /**
+   * Get job start time
+   * @private
+   */
+  async _getJobStartTime(tx, jobId) {
+    const { DiscoveryJob } = cds.entities('tenant');
+    const job = await tx.run(SELECT.one.from(DiscoveryJob).columns('startedAt').where({ ID: jobId }));
+    return job?.startedAt || new Date();
+  }
+
+  /**
+   * Update job status
+   * @private
+   */
+  async _updateJobStatus(jobId, tenantId, status, errorMessage) {
+    const { DiscoveryJob } = cds.entities('tenant');
+
+    await UPDATE(DiscoveryJob)
+      .set({
+        status,
+        completedAt: new Date(),
+        errorLog: errorMessage
+          ? JSON.stringify([
+              {
+                ts: new Date().toISOString(),
+                phase: 'execution',
+                type: 'error',
+                message: errorMessage,
+              },
+            ])
+          : '[]',
+      })
+      .where({ ID: jobId, tenantId });
+  }
+
+  /**
+   * Emit SSE progress event
+   * Uses CAP event mesh to publish progress events that server.js subscribes to
+   * @private
+   */
+  _emitProgress(tenantId, entityId, data) {
+    try {
+      // Emit via CAP event for SSE listeners
+      // Server.js subscribes to this event via cds.on('served')
+      this.emit('DiscoveryProgress', {
+        tenantId,
+        jobId: entityId,
+        ...data,
+      });
+
+      // Also try to broadcast directly if Express app is available
+      // This connects discovery-service to server.js SSE broadcasting
+      try {
+        const app = cds.app;
+        if (app?.locals?.broadcastDiscoveryProgress) {
+          app.locals.broadcastDiscoveryProgress(entityId, {
+            jobId: entityId,
+            tenantId,
+            status: data.type === 'discovery_complete' ? 'completed' : 'in_progress',
+            progress: data.progressPercent || 0,
+            phase: data.phaseName || '',
+            currentPhase: data.phaseName || data.phase || '',
+            message: data.phaseName ? `${data.phaseName}...` : '',
+            artifactsFound: data.totalArtifacts || data.artifactsFound || 0,
+            ...(data.type === 'discovery_complete'
+              ? {
+                  completedAt: new Date().toISOString(),
+                  artifactsCount: data.totalArtifacts,
+                  newArtifacts: data.newArtifacts,
+                  updatedArtifacts: data.updatedArtifacts,
+                  errorsCount: data.errorsCount,
+                }
+              : {}),
+          });
         }
-        return { errors, artifactsAdded };
+      } catch (broadcastError) {
+        // App not available in this context - progress still emitted via CAP event
+        LOG.debug('Direct SSE broadcast not available', { error: broadcastError.message });
       }
+    } catch (error) {
+      LOG.warn('Failed to emit progress event', { tenantId, entityId, error: error.message });
+    }
+  }
 
-      for (const type of phase.types) {
-        try {
-          const client = phase.category === 'dir' ? dirClient : esrClient;
-          // eslint-disable-next-line no-await-in-loop
-          const items = await this._discoverArtifactType(client, type, { use750Service: phase.use750 });
+  /**
+   * Create audit log entry
+   * @private
+   */
+  async _audit(tenantId, user, action, entityType, entityId, entityName, details = {}) {
+    const { AuditLog } = cds.entities('tenant');
 
-          for (const item of items) {
-            const artifactId = randomUUID();
-            const extraFields = {};
-            if (type === 'IntegratedConfiguration' && item.ReceiverWildcardIndicator) {
-              extraFields.dependencies = JSON.stringify({
-                receiverWildcardIndicator: item.ReceiverWildcardIndicator,
-                _is750: true,
-              });
-            }
-
-            // eslint-disable-next-line no-await-in-loop
-            await tx.run(INSERT.into(Artifact).entries({
-              ID: artifactId,
-              tenantId,
-              system_ID: systemId,
-              discoveryJob_ID: jobId,
-              artifactType: type,
-              artifactKey: JSON.stringify(item.key || item),
-              objectId: item.ObjectID || item.Name || item.name,
-              name: item.Name || item.name || item.ObjectID,
-              description: item.Description || item.description,
-              namespace: item.Namespace || item.namespace,
-              swcv: item.SoftwareComponentVersionID || item.swcv,
-              adapterType: item.AdapterType || item.adapterType,
-              senderComponent: item.SenderComponentID || item.senderComponent,
-              senderInterface: item.SenderInterfaceName || item.senderInterface,
-              receiverComponent: item.ReceiverComponentID || item.receiverComponent,
-              receiverInterface: item.ReceiverInterfaceName || item.receiverInterface,
-              piStatus: item.Status || 'active',
-              rawDefinition: JSON.stringify(item),
-              migrationStatus: 'discovered',
-              ...extraFields,
-            }));
-            artifactsAdded++;
-
-            if (type === 'CommunicationChannel') {
-              discoveredChannels.push({ ...item, ID: artifactId });
-            }
-          }
-
-          // eslint-disable-next-line no-await-in-loop
-          await tx.run(UPDATE('tenant.DiscoveryJob').where({ ID: jobId }).set({ artifactsFound: artifactsAdded }));
-        } catch (error) {
-          errors.push({ phase: phase.name, type, error: error.message });
-          LOG.error('Discovery error', { type, error: error.message });
-        }
-      }
-
-      return { errors, artifactsAdded };
-    };
-
-    /**
-     * Discover artifacts of a specific type (SAP NetWeaver 7.50 Enhanced)
-     * Uses 7.50-specific APIs when available for richer metadata
-     */
-    this._discoverArtifactType = async (client, type, options = {}) => {
-      const { use750Service = true } = options;
-
-      switch (type) {
-        case 'IntegratedConfiguration':
-          // Use 7.50 service for ReceiverWildcardIndicator support
-          return use750Service
-            ? client.queryIntegratedConfigurations750()
-            : client.queryIntegratedConfigurations();
-        case 'CommunicationChannel':
-          return client.queryCommunicationChannels();
-        case 'SenderAgreement':
-          return client.querySenderAgreements();
-        case 'ReceiverAgreement':
-          return client.queryReceiverAgreements();
-        case 'ValueMappingGroup':
-          return client.queryValueMappings();
-        case 'SoftwareComponentVersion':
-          return client.querySoftwareComponentVersions();
-        case 'MessageMapping':
-          return client.queryMessageMappings();
-        case 'OperationMapping':
-          return client.queryOperationMappings();
-        case 'ConfigurationScenario':
-          return client.queryConfigurationScenarios();
-        case 'BusinessSystem':
-          return client.queryBusinessSystems();
-        case 'Party':
-          return client.queryParties();
-        default:
-          return client.queryEsrSimple(type);
-      }
-    };
-
-    /**
-     * Extract and store channel module configurations
-     * Called after discovering Communication Channels to extract ModuleProcess chains
-     * @param {Object} tx - CDS transaction
-     * @param {Object} client - PIPoSoapClient instance
-     * @param {string} tenantId - Tenant ID
-     * @param {Array} channels - Array of discovered channel artifacts
-     */
-    this._extractChannelModules = async (tx, client, tenantId, channels) => {
-      const { ModuleConfiguration, CredentialInventory } = cds.entities('tenant');
-      let moduleCount = 0;
-      let credentialCount = 0;
-
-      for (const channel of channels) {
-        try {
-          const channelKey = channel.ObjectID || channel.objectId || channel.ID;
-          if (!channelKey) continue;
-
-          // Read full channel definition with modules
-          const fullChannel = await client.readCommunicationChannelWithModules(channelKey);
-          if (!fullChannel) continue;
-
-          // Extract and store module chain
-          moduleCount += await this._storeModuleChain(tx, ModuleConfiguration, tenantId, channelKey, fullChannel.moduleChain);
-
-          // Extract and store security/credential references
-          credentialCount += await this._storeCredentials(tx, CredentialInventory, tenantId, channelKey, fullChannel.securityConfig);
-        } catch (error) {
-          LOG.warn('Failed to extract modules for channel', { channelId: channel.ObjectID, error: error.message });
-        }
-      }
-
-      LOG.info('Channel module extraction completed', { moduleCount, credentialCount });
-      return { moduleCount, credentialCount };
-    };
-
-    /**
-     * Store module chain entries for a channel. Extracted from _extractChannelModules.
-     */
-    this._storeModuleChain = async (tx, ModuleConfiguration, tenantId, channelKey, moduleChain) => {
-      if (!moduleChain || moduleChain.length === 0) return 0;
-      let count = 0;
-      for (const mod of moduleChain) {
-        // eslint-disable-next-line no-await-in-loop
-        await tx.run(INSERT.into(ModuleConfiguration).entries({
-          tenant_ID: tenantId,
-          channelId: channelKey,
-          moduleKey: mod.moduleKey,
-          moduleName: mod.moduleName,
-          moduleType: mod.moduleType,
-          parameters: JSON.stringify(mod.parameters || {}),
-          processingSequence: mod.sequence,
-          isEquivalent: mod.isEquivalent,
-          migrationNotes: mod.isEquivalent ? `IS equivalent: ${mod.isEquivalent}` : 'Requires manual analysis',
-          migrationStatus: mod.isEquivalent ? 'analyzed' : 'pending',
-        }));
-        count++;
-      }
-      return count;
-    };
-
-    /**
-     * Store credential inventory entries for a channel. Extracted from _extractChannelModules.
-     */
-    this._storeCredentials = async (tx, CredentialInventory, tenantId, channelKey, securityConfig) => {
-      if (!securityConfig) return 0;
-      const sec = securityConfig;
-      let count = 0;
-      if (sec.credentialAlias) {
-        // eslint-disable-next-line no-await-in-loop
-        await tx.run(INSERT.into(CredentialInventory).entries({
-          tenant_ID: tenantId,
-          credentialAlias: sec.credentialAlias,
-          credentialType: 'Password',
-          authType: sec.authMethod || 'Basic',
-          referencedBy: JSON.stringify([channelKey]),
-          migrationStatus: 'pending',
-        }).onConflictIgnore());
-        count++;
-      }
-      if (sec.certificates && sec.certificates.length > 0) {
-        for (const cert of sec.certificates) {
-          // eslint-disable-next-line no-await-in-loop
-          await tx.run(INSERT.into(CredentialInventory).entries({
-            tenant_ID: tenantId,
-            credentialAlias: cert.alias || cert.value,
-            credentialType: 'Certificate',
-            authType: 'Certificate',
-            referencedBy: JSON.stringify([channelKey]),
-            notes: `Keystore view: ${sec.keystoreView || 'default'}`,
-            migrationStatus: 'pending',
-          }).onConflictIgnore());
-          count++;
-        }
-      }
-      return count;
-    };
-
-    /**
-     * Extract 7.50-specific ICO fields
-     * @param {Object} tx - CDS transaction
-     * @param {Object} client - PIPoSoapClient instance
-     * @param {string} tenantId - Tenant ID
-     * @param {Array} icos - Array of discovered ICO artifacts
-     */
-    this._extractIcoDetails750 = async (tx, client, tenantId, icos) => {
-      let updatedCount = 0;
-
-      for (const ico of icos) {
-        try {
-          const icoKey = ico.ObjectID || ico.objectId || ico.ID;
-          if (!icoKey) continue;
-
-          // Read full ICO with 7.50 fields
-          // eslint-disable-next-line no-await-in-loop
-          const fullIco = await client.readIntegratedConfiguration750(icoKey);
-          if (!fullIco) continue;
-
-          // Update artifact with 7.50-specific fields
-          // eslint-disable-next-line no-await-in-loop
-          await tx.run(UPDATE('tenant.Artifact')
-            .where({ objectId: icoKey, tenantId })
-            .set({
-              rawDefinition: JSON.stringify(fullIco),
-              dependencies: JSON.stringify({
-                receiverWildcardIndicator: fullIco.receiverWildcardIndicator,
-                is750: fullIco._is750,
-              }),
-            }));
-          updatedCount++;
-        } catch (error) {
-          LOG.warn('Failed to extract 7.50 details for ICO', { icoId: ico.ObjectID, error: error.message });
-        }
-      }
-
-      LOG.info('ICO 7.50 extraction completed', { updatedCount });
-      return { updatedCount };
-    };
-
-    /**
-     * Create audit log entry
-     */
-    this._audit = async (req, action, entityType, entityId, entityName, details = {}) => {
-      const tenantId = req.user.tenant || 'default';
+    try {
       await INSERT.into(AuditLog).entries({
         ID: randomUUID(),
         tenantId,
-        userId: req.user.id,
-        userName: req.user.name || req.user.id,
-        userRole: _resolveUserRole(req.user.roles),
+        userId: user?.id || 'system',
+        userName: user?.name || 'System',
+        userRole: user?.roles?.admin ? 'Admin' : user?.roles?.approver ? 'Approver' : 'Viewer',
         action,
         entityType,
         entityId,
         entityName,
         details: JSON.stringify(details),
-        ipAddress: req.headers?.['x-forwarded-for'] || 'unknown',
-        userAgent: req.headers?.['user-agent'] || 'unknown',
       });
-    };
-
-    return super.init();
+    } catch (error) {
+      LOG.warn('Audit log failed', { action, entityType, entityId, error: error.message });
+    }
   }
 };

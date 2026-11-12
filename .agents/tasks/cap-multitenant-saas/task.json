@@ -1,0 +1,7 @@
+{
+  "task_id": "task-cap-multitenant-saas",
+  "task_description": "Implement production-grade CAP multitenant SaaS architecture for PI/PO migration with MTXS tenant lifecycle, durable artifact caching with configurable TTL, LangGraph durable checkpoints, idempotency/transaction safety, and UI wiring for auto-discovery and chat functionality.",
+  "status": "pending",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003", "FEAT-004"],
+  "blocked_reason": null
+}

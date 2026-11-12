@@ -1,439 +1,231 @@
 const cds = require('@sap/cds');
-const LOG = cds.log('brain-service');
 const { verifyKey, readState, writeState, isBrainEnabled } = require('./ai/brainConfig');
 const { getVectorStore } = require('./ai/vectorStore');
-// DRY-2 fix: Import centralized complexity scorer
-const { scoreMultiDimensional } = require('./utils/complexityScorer');
+const { CapCheckpointSaver, saveOnError } = require('./ai/capCheckpointSaver');
+const cacheService = require('./cache/artifactCacheService');
 
 // ── SAP Migration knowledge base (seeded into vector store) ──────────────────
 const MIGRATION_KNOWLEDGE = [
   // Master Data — Simple
-  { id: 'GLMAST', desc: 'GL Account Master', tier: 'simple', tool: 'BAPI_GL_ACC_SAVE', hours: 4, adapterType: 'idoc', segmentCount: 5, hasZFields: false },
-  { id: 'COSMAS', desc: 'Cost Center Master', tier: 'simple', tool: 'BAPI_COSTCENTER_CREATEMULTIPLE', hours: 4, adapterType: 'idoc', segmentCount: 6, hasZFields: false },
-  { id: 'PRMAS', desc: 'Profit Center Master', tier: 'simple', tool: 'BAPI_PROFITCENTER_CREATE', hours: 4, adapterType: 'idoc', segmentCount: 5, hasZFields: false },
-  { id: 'DEBMAS', desc: 'Customer Master', tier: 'simple', tool: 'BAPI_CUSTOMER_CREATEFROMDATA1', hours: 12, adapterType: 'idoc', segmentCount: 15, hasZFields: false },
-  { id: 'CREMAS', desc: 'Vendor/Supplier Master', tier: 'simple', tool: 'BAPI_VENDOR_CREATEFROMDATA', hours: 12, adapterType: 'idoc', segmentCount: 12, hasZFields: false },
+  {
+    id: 'GLMAST',
+    desc: 'GL Account Master',
+    tier: 'simple',
+    tool: 'BAPI_GL_ACC_SAVE',
+    hours: 4,
+    adapterType: 'idoc',
+    segmentCount: 5,
+    hasZFields: false,
+  },
+  {
+    id: 'COSMAS',
+    desc: 'Cost Center Master',
+    tier: 'simple',
+    tool: 'BAPI_COSTCENTER_CREATEMULTIPLE',
+    hours: 4,
+    adapterType: 'idoc',
+    segmentCount: 6,
+    hasZFields: false,
+  },
+  {
+    id: 'PRMAS',
+    desc: 'Profit Center Master',
+    tier: 'simple',
+    tool: 'BAPI_PROFITCENTER_CREATE',
+    hours: 4,
+    adapterType: 'idoc',
+    segmentCount: 5,
+    hasZFields: false,
+  },
+  {
+    id: 'DEBMAS',
+    desc: 'Customer Master',
+    tier: 'simple',
+    tool: 'BAPI_CUSTOMER_CREATEFROMDATA1',
+    hours: 12,
+    adapterType: 'idoc',
+    segmentCount: 15,
+    hasZFields: false,
+  },
+  {
+    id: 'CREMAS',
+    desc: 'Vendor/Supplier Master',
+    tier: 'simple',
+    tool: 'BAPI_VENDOR_CREATEFROMDATA',
+    hours: 12,
+    adapterType: 'idoc',
+    segmentCount: 12,
+    hasZFields: false,
+  },
   // Master Data — Medium
-  { id: 'MATMAS', desc: 'Material Master', tier: 'medium', tool: 'iFlow_SAP_Material_Replication', hours: 20, adapterType: 'idoc', segmentCount: 38, hasZFields: true },
-  { id: 'BPMAS', desc: 'Business Partner', tier: 'medium', tool: 'iFlow_SAP_BP_Replication', hours: 24, adapterType: 'soap', segmentCount: 20, hasZFields: true },
-  { id: 'KNVK', desc: 'Customer Contact Master', tier: 'medium', tool: 'iFlow_Customer_Replication', hours: 10, adapterType: 'idoc', segmentCount: 8, hasZFields: true },
+  {
+    id: 'MATMAS',
+    desc: 'Material Master',
+    tier: 'medium',
+    tool: 'iFlow_SAP_Material_Replication',
+    hours: 20,
+    adapterType: 'idoc',
+    segmentCount: 38,
+    hasZFields: true,
+  },
+  {
+    id: 'BPMAS',
+    desc: 'Business Partner',
+    tier: 'medium',
+    tool: 'iFlow_SAP_BP_Replication',
+    hours: 24,
+    adapterType: 'soap',
+    segmentCount: 20,
+    hasZFields: true,
+  },
+  {
+    id: 'KNVK',
+    desc: 'Customer Contact Master',
+    tier: 'medium',
+    tool: 'iFlow_Customer_Replication',
+    hours: 10,
+    adapterType: 'idoc',
+    segmentCount: 8,
+    hasZFields: true,
+  },
   // Master Data — Complex
-  { id: 'HRMAS', desc: 'HR Master Data', tier: 'complex', tool: 'iFlow_SuccessFactors_Replication', hours: 60, adapterType: 'idoc', segmentCount: 55, hasZFields: true },
-  { id: 'ARTMAS', desc: 'Retail Article Master', tier: 'complex', tool: 'iFlow_Custom_ARTMAS', hours: 80, adapterType: 'idoc', segmentCount: 65, hasZFields: true },
+  {
+    id: 'HRMAS',
+    desc: 'HR Master Data',
+    tier: 'complex',
+    tool: 'iFlow_SuccessFactors_Replication',
+    hours: 60,
+    adapterType: 'idoc',
+    segmentCount: 55,
+    hasZFields: true,
+  },
+  {
+    id: 'ARTMAS',
+    desc: 'Retail Article Master',
+    tier: 'complex',
+    tool: 'iFlow_Custom_ARTMAS',
+    hours: 80,
+    adapterType: 'idoc',
+    segmentCount: 65,
+    hasZFields: true,
+  },
   // Transactional — Medium
-  { id: 'ORDERS05', desc: 'Purchase Order', tier: 'medium', tool: 'iFlow_Ariba_S4_Integration', hours: 24, adapterType: 'idoc', segmentCount: 22, hasZFields: false },
-  { id: 'ORDCHG', desc: 'PO Change', tier: 'medium', tool: 'iFlow_Ariba_S4_Integration', hours: 16, adapterType: 'idoc', segmentCount: 18, hasZFields: false },
-  { id: 'ORDRSP', desc: 'Order Confirmation', tier: 'medium', tool: 'iFlow_Ariba_S4_Integration', hours: 16, adapterType: 'idoc', segmentCount: 15, hasZFields: false },
-  { id: 'DESADV', desc: 'Delivery Note/ASN', tier: 'medium', tool: 'iFlow_SAP_WMS_Integration', hours: 20, adapterType: 'idoc', segmentCount: 20, hasZFields: false },
-  { id: 'WMMBXY', desc: 'Goods Movement', tier: 'medium', tool: 'iFlow_SAP_WMS_Integration', hours: 18, adapterType: 'idoc', segmentCount: 12, hasZFields: false },
+  {
+    id: 'ORDERS05',
+    desc: 'Purchase Order',
+    tier: 'medium',
+    tool: 'iFlow_Ariba_S4_Integration',
+    hours: 24,
+    adapterType: 'idoc',
+    segmentCount: 22,
+    hasZFields: false,
+  },
+  {
+    id: 'ORDCHG',
+    desc: 'PO Change',
+    tier: 'medium',
+    tool: 'iFlow_Ariba_S4_Integration',
+    hours: 16,
+    adapterType: 'idoc',
+    segmentCount: 18,
+    hasZFields: false,
+  },
+  {
+    id: 'ORDRSP',
+    desc: 'Order Confirmation',
+    tier: 'medium',
+    tool: 'iFlow_Ariba_S4_Integration',
+    hours: 16,
+    adapterType: 'idoc',
+    segmentCount: 15,
+    hasZFields: false,
+  },
+  {
+    id: 'DESADV',
+    desc: 'Delivery Note/ASN',
+    tier: 'medium',
+    tool: 'iFlow_SAP_WMS_Integration',
+    hours: 20,
+    adapterType: 'idoc',
+    segmentCount: 20,
+    hasZFields: false,
+  },
+  {
+    id: 'WMMBXY',
+    desc: 'Goods Movement',
+    tier: 'medium',
+    tool: 'iFlow_SAP_WMS_Integration',
+    hours: 18,
+    adapterType: 'idoc',
+    segmentCount: 12,
+    hasZFields: false,
+  },
   // Transactional — Complex
-  { id: 'INVOIC02', desc: 'Invoice', tier: 'complex', tool: 'iFlow_Custom_Finance_INVOIC', hours: 60, adapterType: 'as2', segmentCount: 45, hasZFields: true },
-  { id: 'SHPMNT04', desc: 'Shipment', tier: 'complex', tool: 'iFlow_Custom_Logistics_SHPMNT', hours: 50, adapterType: 'idoc', segmentCount: 40, hasZFields: true },
-  { id: 'FIDCCP02', desc: 'FI Document', tier: 'complex', tool: 'iFlow_Custom_Finance_FIDCCP', hours: 80, adapterType: 'rest', segmentCount: 50, hasZFields: true },
-  { id: 'PEXR2003', desc: 'Payment Advice', tier: 'complex', tool: 'iFlow_Custom_Finance_PEXR', hours: 60, adapterType: 'as2', segmentCount: 35, hasZFields: true },
+  {
+    id: 'INVOIC02',
+    desc: 'Invoice',
+    tier: 'complex',
+    tool: 'iFlow_Custom_Finance_INVOIC',
+    hours: 60,
+    adapterType: 'as2',
+    segmentCount: 45,
+    hasZFields: true,
+  },
+  {
+    id: 'SHPMNT04',
+    desc: 'Shipment',
+    tier: 'complex',
+    tool: 'iFlow_Custom_Logistics_SHPMNT',
+    hours: 50,
+    adapterType: 'idoc',
+    segmentCount: 40,
+    hasZFields: true,
+  },
+  {
+    id: 'FIDCCP02',
+    desc: 'FI Document',
+    tier: 'complex',
+    tool: 'iFlow_Custom_Finance_FIDCCP',
+    hours: 80,
+    adapterType: 'rest',
+    segmentCount: 50,
+    hasZFields: true,
+  },
+  {
+    id: 'PEXR2003',
+    desc: 'Payment Advice',
+    tier: 'complex',
+    tool: 'iFlow_Custom_Finance_PEXR',
+    hours: 60,
+    adapterType: 'as2',
+    segmentCount: 35,
+    hasZFields: true,
+  },
 ];
 
 // BAPI lookup for simple objects
 const BAPI_MAP = {
-  GLMAST: 'BAPI_GL_ACC_SAVE', COSMAS: 'BAPI_COSTCENTER_CREATEMULTIPLE',
-  PRMAS: 'BAPI_PROFITCENTER_CREATE', DEBMAS: 'BAPI_CUSTOMER_CREATEFROMDATA1',
-  CREMAS: 'BAPI_VENDOR_CREATEFROMDATA', MATMAS: 'BAPI_MATERIAL_SAVEDATA',
+  GLMAST: 'BAPI_GL_ACC_SAVE',
+  COSMAS: 'BAPI_COSTCENTER_CREATEMULTIPLE',
+  PRMAS: 'BAPI_PROFITCENTER_CREATE',
+  DEBMAS: 'BAPI_CUSTOMER_CREATEFROMDATA1',
+  CREMAS: 'BAPI_VENDOR_CREATEFROMDATA',
+  MATMAS: 'BAPI_MATERIAL_SAVEDATA',
 };
 
 // SAP Business Accelerator Hub package lookup
 const HUB_PACKAGE_MAP = {
-  MATMAS: 'SAP S/4HANA Material Replication', DEBMAS: 'SAP Customer Master Replication',
-  CREMAS: 'SAP Vendor Master Replication', HRMAS: 'SAP SuccessFactors Employee Central',
-  ORDERS05: 'SAP S/4HANA ↔ Ariba Integration', INVOIC02: 'SAP S/4HANA Finance Integration',
-  DESADV: 'SAP S/4HANA ↔ 3rd Party WMS', WMMBXY: 'SAP S/4HANA ↔ 3rd Party WMS',
-  FIDCCP02: 'SAP S/4HANA Finance Integration', BPMAS: 'SAP BP Replication Add-On',
+  MATMAS: 'SAP S/4HANA Material Replication',
+  DEBMAS: 'SAP Customer Master Replication',
+  CREMAS: 'SAP Vendor Master Replication',
+  HRMAS: 'SAP SuccessFactors Employee Central',
+  ORDERS05: 'SAP S/4HANA ↔ Ariba Integration',
+  INVOIC02: 'SAP S/4HANA Finance Integration',
+  DESADV: 'SAP S/4HANA ↔ 3rd Party WMS',
+  WMMBXY: 'SAP S/4HANA ↔ 3rd Party WMS',
+  FIDCCP02: 'SAP S/4HANA Finance Integration',
+  BPMAS: 'SAP BP Replication Add-On',
 };
-
-// ── SAP Migration Course Gap #1: Scenario Pattern Classification ─────────────
-// Based on SAP PO-to-IS migration course taxonomy
-const SCENARIO_PATTERNS = {
-  P2P_ASYNC: {
-    code: 'P2P_ASYNC',
-    name: 'Point-to-Point Asynchronous',
-    isTarget: 'Standard iFlow (Async)',
-    baseComplexity: 'simple',
-    typicalHours: 8,
-    detectionRules: { sync: false, receiverCount: 1, bpm: false },
-  },
-  P2P_SYNC: {
-    code: 'P2P_SYNC',
-    name: 'Point-to-Point Synchronous',
-    isTarget: 'Standard iFlow (Sync)',
-    baseComplexity: 'medium',
-    typicalHours: 12,
-    detectionRules: { sync: true, receiverCount: 1, bpm: false },
-  },
-  MULTICAST: {
-    code: 'MULTICAST',
-    name: 'Multicast/Split (1:N)',
-    isTarget: 'iFlow with Splitter/Multicast',
-    baseComplexity: 'medium',
-    typicalHours: 20,
-    detectionRules: { sync: false, receiverCount: { min: 2 }, bpm: false },
-  },
-  CCBPM: {
-    code: 'CCBPM',
-    name: 'Cross-Component BPM',
-    isTarget: 'SAP Build Process Automation / Custom iFlow',
-    baseComplexity: 'complex',
-    typicalHours: 80,
-    detectionRules: { bpm: true, stateful: true },
-  },
-  BPM: {
-    code: 'BPM',
-    name: 'Simple BPM (stateless)',
-    isTarget: 'iFlow with Orchestration',
-    baseComplexity: 'complex',
-    typicalHours: 40,
-    detectionRules: { bpm: true, stateful: false },
-  },
-  CUSTOM: {
-    code: 'CUSTOM',
-    name: 'Custom/Non-Standard Pattern',
-    isTarget: 'Custom iFlow (requires analysis)',
-    baseComplexity: 'complex',
-    typicalHours: 60,
-    detectionRules: {},
-  },
-};
-
-// ── SAP Migration Course Gap #2: SAP Status Terminology ──────────────────────
-// Maps internal tiers to official SAP Migration Assessment Tool statuses
-const SAP_STATUS_MAP = {
-  simple: 'Ready to migrate',
-  medium: 'Adjustment required',
-  complex: 'Evaluation required',
-};
-
-// ── SAP Migration Course Gap #3: Known IS Limitations ────────────────────────
-// Pre-defined limitations from SAP official documentation and course materials
-const KNOWN_LIMITATIONS = {
-  NFS_ADAPTER: {
-    code: 'NFS_ADAPTER',
-    name: 'NFS Adapter Not Supported',
-    category: 'adapter',
-    severity: 'blocker',
-    description: 'Integration Suite does not support NFS adapter. File-based integration requires SFTP or alternative.',
-    workaroundType: 'manual',
-    workaroundDesc: 'Replace with SFTP adapter or use Edge Integration Cell with local file system access.',
-    effortMultiplier: 2.0,
-    detectionRules: { adapterTypes: ['nfs', 'file'] },
-  },
-  ASMA_HEADER: {
-    code: 'ASMA_HEADER',
-    name: 'ASMA/Dynamic Configuration',
-    category: 'runtime',
-    severity: 'major',
-    description: 'Adapter-Specific Message Attributes (ASMA) and Dynamic Configuration require manual conversion to Camel headers or Content Modifier.',
-    workaroundType: 'script',
-    workaroundDesc: 'Convert ASMA lookups to Camel exchange properties using Groovy script in iFlow.',
-    effortMultiplier: 1.5,
-    detectionRules: { features: ['asma', 'dynamicConfiguration', 'adapter.udf'] },
-  },
-  ACK_HANDLING: {
-    code: 'ACK_HANDLING',
-    name: 'Acknowledgment Handling Differs',
-    category: 'feature',
-    severity: 'major',
-    description: 'PI/PO acknowledgment handling (ALEAUD, positive/negative acks) works differently in IS.',
-    workaroundType: 'manual',
-    workaroundDesc: 'Implement acknowledgment logic using iFlow exception handling and custom status tracking.',
-    effortMultiplier: 1.3,
-    detectionRules: { features: ['ack', 'acknowledgment', 'aleaud'] },
-  },
-  CCBPM_STATEFUL: {
-    code: 'CCBPM_STATEFUL',
-    name: 'ccBPM Stateful Process',
-    category: 'feature',
-    severity: 'blocker',
-    description: 'Cross-component BPM with stateful correlation cannot be directly migrated. Requires redesign.',
-    workaroundType: 'none',
-    workaroundDesc: 'Redesign using SAP Build Process Automation or stateless iFlow patterns with external state management.',
-    effortMultiplier: 3.0,
-    detectionRules: { isBpmProcess: true, patterns: ['ccbpm', 'correlation'] },
-  },
-  JAVA_MAPPING: {
-    code: 'JAVA_MAPPING',
-    name: 'Java Mapping Programs',
-    category: 'mapping',
-    severity: 'major',
-    description: 'Custom Java mappings must be converted to Groovy scripts or iFlow message mapping.',
-    workaroundType: 'script',
-    workaroundDesc: 'Convert Java logic to Groovy script step or use XSLT. Complex logic may need external microservice.',
-    effortMultiplier: 1.8,
-    detectionRules: { mappingTypes: ['java'] },
-  },
-  ABAP_MAPPING: {
-    code: 'ABAP_MAPPING',
-    name: 'ABAP Mapping Programs',
-    category: 'mapping',
-    severity: 'major',
-    description: 'ABAP mappings are not supported in IS and must be rewritten.',
-    workaroundType: 'manual',
-    workaroundDesc: 'Rewrite ABAP logic as Groovy script or expose as BAPI/Function Module and call via RFC adapter.',
-    effortMultiplier: 2.0,
-    detectionRules: { mappingTypes: ['abap'] },
-  },
-  JMS_ADAPTER: {
-    code: 'JMS_ADAPTER',
-    name: 'JMS Adapter Differences',
-    category: 'adapter',
-    severity: 'major',
-    description: 'JMS adapter in IS has different configuration and may not support all JMS provider features.',
-    workaroundType: 'manual',
-    workaroundDesc: 'Verify JMS provider compatibility. Consider AMQP adapter or Advanced Event Mesh as alternative.',
-    effortMultiplier: 1.5,
-    detectionRules: { adapterTypes: ['jms'] },
-  },
-  JDBC_STORED_PROC: {
-    code: 'JDBC_STORED_PROC',
-    name: 'JDBC Stored Procedure Calls',
-    category: 'adapter',
-    severity: 'minor',
-    description: 'JDBC adapter stored procedure syntax differs between PI/PO and IS.',
-    workaroundType: 'manual',
-    workaroundDesc: 'Adjust stored procedure call syntax. Complex procedures may need wrapper functions.',
-    effortMultiplier: 1.2,
-    detectionRules: { adapterTypes: ['jdbc'], features: ['storedProcedure'] },
-  },
-  RFC_TRFC: {
-    code: 'RFC_TRFC',
-    name: 'tRFC/qRFC Transaction Handling',
-    category: 'adapter',
-    severity: 'minor',
-    description: 'Transactional RFC and queued RFC handling differs in IS RFC adapter.',
-    workaroundType: 'manual',
-    workaroundDesc: 'Review tRFC/qRFC requirements. May need to use synchronous RFC with custom retry logic.',
-    effortMultiplier: 1.2,
-    detectionRules: { adapterTypes: ['rfc'], features: ['trfc', 'qrfc'] },
-  },
-  AS2_MDN: {
-    code: 'AS2_MDN',
-    name: 'AS2 MDN Handling',
-    category: 'adapter',
-    severity: 'minor',
-    description: 'AS2 MDN (Message Disposition Notification) configuration differs in IS.',
-    workaroundType: 'manual',
-    workaroundDesc: 'Reconfigure MDN settings in IS AS2 adapter. Verify with trading partner.',
-    effortMultiplier: 1.1,
-    detectionRules: { adapterTypes: ['as2'] },
-  },
-};
-
-// ── Helper: Classify scenario pattern ────────────────────────────────────────
-function classifyScenarioPattern(input) {
-  const { isBpmProcess, receiverCount, isSync, hasCorrelation } = input;
-
-  if (isBpmProcess) {
-    return hasCorrelation ? SCENARIO_PATTERNS.CCBPM : SCENARIO_PATTERNS.BPM;
-  }
-  if ((receiverCount || 1) > 1) {
-    return SCENARIO_PATTERNS.MULTICAST;
-  }
-  if (isSync) {
-    return SCENARIO_PATTERNS.P2P_SYNC;
-  }
-  return SCENARIO_PATTERNS.P2P_ASYNC;
-}
-
-// ── Helper: Map tier to SAP Migration Status ─────────────────────────────────
-function tierToSapStatus(tier) {
-  return SAP_STATUS_MAP[tier] || 'Evaluation required';
-}
-
-// ── Helper: Identify applicable limitations ──────────────────────────────────
-function identifyLimitations(input) {
-  const detected = [];
-  const { adapterType, mappingType, isBpmProcess, hasCorrelation, features = [] } = input;
-  const adapterLower = (adapterType || '').toLowerCase();
-  const mappingLower = (mappingType || '').toLowerCase();
-  const featuresLower = features.map(f => f.toLowerCase());
-
-  for (const [code, limitation] of Object.entries(KNOWN_LIMITATIONS)) {
-    const rules = limitation.detectionRules;
-    let matches = false;
-
-    // Check adapter type rules
-    if (rules.adapterTypes && rules.adapterTypes.some(a => adapterLower.includes(a))) {
-      matches = true;
-    }
-    // Check mapping type rules
-    if (rules.mappingTypes && rules.mappingTypes.some(m => mappingLower.includes(m))) {
-      matches = true;
-    }
-    // Check BPM rules
-    if (rules.isBpmProcess && isBpmProcess) {
-      if (!rules.patterns || rules.patterns.some(p => hasCorrelation && p === 'correlation')) {
-        matches = true;
-      }
-    }
-    // Check feature rules
-    if (rules.features && rules.features.some(f => featuresLower.includes(f))) {
-      matches = true;
-    }
-
-    if (matches) {
-      detected.push({
-        code: limitation.code,
-        name: limitation.name,
-        severity: limitation.severity,
-        category: limitation.category,
-        workaroundType: limitation.workaroundType,
-        workaroundDesc: limitation.workaroundDesc,
-        effortMultiplier: limitation.effortMultiplier,
-      });
-    }
-  }
-
-  return detected;
-}
-
-// ── SAP Migration Guide Gap #2: Standard Adapter Migration Matrix ────────────
-// Source: btp-process-orchestration-migration-guide/docs/30-connectivity/standard-adapter-migration-2622c30.md
-const ADAPTER_MIGRATION_MATRIX = {
-  // Sender adapters
-  AS2_SENDER: { pipoAdapter: 'AS2', direction: 'sender', isAdapter: 'AS2, AS4', migrationStatus: 'direct', effortMultiplier: 1.0 },
-  EDI_SENDER: { pipoAdapter: 'EDISeparator', direction: 'sender', isAdapter: null, migrationStatus: 'alternative', alternativeAdapter: 'AS2/AS4/SFTP + EDI Splitter step', effortMultiplier: 1.3 },
-  FILE_SENDER: { pipoAdapter: 'File', direction: 'sender', isAdapter: null, migrationStatus: 'alternative', alternativeAdapter: 'FTP or SFTP adapter', limitations: 'Content Conversion via CSV to XML step or script', effortMultiplier: 1.2 },
-  HTTP_SENDER: { pipoAdapter: 'HTTP_AAE', direction: 'sender', isAdapter: 'HTTPS', migrationStatus: 'direct', effortMultiplier: 1.0 },
-  IDOC_SENDER: { pipoAdapter: 'IDoc_AAE', direction: 'sender', isAdapter: 'IDoc', migrationStatus: 'partial', limitations: 'HTTP protocol only - RFC packing not supported', effortMultiplier: 1.2 },
-  JDBC_SENDER: { pipoAdapter: 'JDBC', direction: 'sender', isAdapter: null, migrationStatus: 'alternative', alternativeAdapter: 'Timer + JDBC receiver', limitations: 'Transaction handling limited', effortMultiplier: 1.5 },
-  JMS_SENDER: { pipoAdapter: 'JMS', direction: 'sender', isAdapter: null, migrationStatus: 'alternative', alternativeAdapter: 'AMQP or IBM MQ adapter', limitations: 'JMS only for internal use - external requires AMQP', effortMultiplier: 1.4 },
-  MAIL_SENDER: { pipoAdapter: 'Mail', direction: 'sender', isAdapter: 'Mail', migrationStatus: 'direct', effortMultiplier: 1.0 },
-  ODATA_SENDER: { pipoAdapter: 'OData', direction: 'sender', isAdapter: 'OData', migrationStatus: 'direct', effortMultiplier: 1.0 },
-  REST_SENDER: { pipoAdapter: 'REST', direction: 'sender', isAdapter: null, migrationStatus: 'alternative', alternativeAdapter: 'HTTP adapter', limitations: 'Use iFlow steps for HTTP verbs and URI handling', effortMultiplier: 1.1 },
-  RFC_SENDER: { pipoAdapter: 'RFC', direction: 'sender', isAdapter: null, migrationStatus: 'partial', alternativeAdapter: 'Edge Integration Cell', limitations: 'Alternative: SOAP proxy in ABAP', effortMultiplier: 2.0 },
-  SFTP_SENDER: { pipoAdapter: 'SFTP', direction: 'sender', isAdapter: 'SFTP', migrationStatus: 'direct', limitations: 'Limited advanced file selection', effortMultiplier: 1.0 },
-  SOAP_SENDER: { pipoAdapter: 'SOAP', direction: 'sender', isAdapter: 'SOAP', migrationStatus: 'direct', effortMultiplier: 1.0 },
-  SOAPXI_SENDER: { pipoAdapter: 'SOAP-XI', direction: 'sender', isAdapter: 'XI', migrationStatus: 'direct', limitations: 'Proxy generation differs in S/4HANA', effortMultiplier: 1.2 },
-  SFSF_SENDER: { pipoAdapter: 'SFSF', direction: 'sender', isAdapter: 'SuccessFactors', migrationStatus: 'direct', effortMultiplier: 1.0 },
-  X400_SENDER: { pipoAdapter: 'X400', direction: 'sender', isAdapter: null, migrationStatus: 'planned', effortMultiplier: 3.0 },
-  BC_SENDER: { pipoAdapter: 'BC', direction: 'sender', isAdapter: null, migrationStatus: 'planned', effortMultiplier: 3.0 },
-  CIDX_SENDER: { pipoAdapter: 'CIDX', direction: 'sender', isAdapter: null, migrationStatus: 'planned', effortMultiplier: 3.0 },
-  RNIF_SENDER: { pipoAdapter: 'RNIF', direction: 'sender', isAdapter: null, migrationStatus: 'planned', effortMultiplier: 3.0 },
-  OFTP_SENDER: { pipoAdapter: 'OFTP', direction: 'sender', isAdapter: null, migrationStatus: 'none', alternativeAdapter: 'External OFTP-to-HTTP bridge', effortMultiplier: 3.0 },
-  // Receiver adapters
-  AS2_RECEIVER: { pipoAdapter: 'AS2', direction: 'receiver', isAdapter: 'AS2, AS4', migrationStatus: 'direct', effortMultiplier: 1.0 },
-  FILE_RECEIVER: { pipoAdapter: 'File', direction: 'receiver', isAdapter: null, migrationStatus: 'alternative', alternativeAdapter: 'FTP or SFTP adapter', effortMultiplier: 1.2 },
-  HTTP_RECEIVER: { pipoAdapter: 'HTTP_AAE', direction: 'receiver', isAdapter: 'HTTP', migrationStatus: 'direct', effortMultiplier: 1.0 },
-  IDOC_RECEIVER: { pipoAdapter: 'IDoc_AAE', direction: 'receiver', isAdapter: 'IDoc', migrationStatus: 'partial', limitations: 'HTTP protocol only', effortMultiplier: 1.2 },
-  JDBC_RECEIVER: { pipoAdapter: 'JDBC', direction: 'receiver', isAdapter: 'JDBC', migrationStatus: 'partial', limitations: 'Limited database vendor support', effortMultiplier: 1.3 },
-  JMS_RECEIVER: { pipoAdapter: 'JMS', direction: 'receiver', isAdapter: null, migrationStatus: 'alternative', alternativeAdapter: 'AMQP or IBM MQ adapter', effortMultiplier: 1.4 },
-  MAIL_RECEIVER: { pipoAdapter: 'Mail', direction: 'receiver', isAdapter: 'Mail', migrationStatus: 'direct', effortMultiplier: 1.0 },
-  ODATA_RECEIVER: { pipoAdapter: 'OData', direction: 'receiver', isAdapter: 'OData', migrationStatus: 'direct', effortMultiplier: 1.0 },
-  REST_RECEIVER: { pipoAdapter: 'REST', direction: 'receiver', isAdapter: null, migrationStatus: 'alternative', alternativeAdapter: 'HTTP adapter', effortMultiplier: 1.1 },
-  RFC_RECEIVER: { pipoAdapter: 'RFC', direction: 'receiver', isAdapter: 'RFC', migrationStatus: 'direct', effortMultiplier: 1.0 },
-  SFTP_RECEIVER: { pipoAdapter: 'SFTP', direction: 'receiver', isAdapter: 'SFTP', migrationStatus: 'direct', effortMultiplier: 1.0 },
-  SOAP_RECEIVER: { pipoAdapter: 'SOAP', direction: 'receiver', isAdapter: 'SOAP', migrationStatus: 'direct', effortMultiplier: 1.0 },
-  SOAPXI_RECEIVER: { pipoAdapter: 'SOAP-XI', direction: 'receiver', isAdapter: 'XI', migrationStatus: 'direct', limitations: 'Proxy generation differs', effortMultiplier: 1.2 },
-  SFSF_RECEIVER: { pipoAdapter: 'SFSF', direction: 'receiver', isAdapter: 'SuccessFactors', migrationStatus: 'direct', effortMultiplier: 1.0 },
-};
-
-// ── SAP Migration Guide Gap #3: Adapter Module Replacement Mapping ───────────
-// Source: btp-process-orchestration-migration-guide/docs/30-connectivity/adapter-modules-e402f4a.md
-const ADAPTER_MODULE_MAPPING = {
-  MESSAGE_TRANSFORM: {
-    moduleClass: 'AF_Modules/MessageTransformBean',
-    moduleName: 'Message Transform Bean',
-    description: 'Runtime format conversion - Plain to XML and XML to Plain',
-    isEquivalent: 'XSLT step or Groovy script',
-    migrationApproach: 'script',
-    effortHours: 4,
-    transformationPackage: 'Message Transformation Utilities',
-  },
-  PAYLOAD_SWAP: {
-    moduleClass: 'AF_Modules/PayloadSwapBean',
-    moduleName: 'Payload Swap Bean',
-    description: 'Replace application payload with attachment',
-    isEquivalent: 'Mail adapter mapping or Groovy script',
-    migrationApproach: 'script',
-    effortHours: 2,
-  },
-  STRICT_XML2PLAIN: {
-    moduleClass: 'AF_Modules/StrictXml2PlainBean',
-    moduleName: 'Strict XML to Plain',
-    description: 'Convert XML to text format',
-    isEquivalent: 'XML to CSV/EDI/JSON converter steps',
-    migrationApproach: 'auto',
-    effortHours: 1,
-  },
-  XML_ANONYMIZER: {
-    moduleClass: 'AF_Modules/XMLAnonymizerBean',
-    moduleName: 'XML Anonymizer',
-    description: 'Remove namespaces or prefixes from XML',
-    isEquivalent: 'XSLT step',
-    migrationApproach: 'script',
-    effortHours: 2,
-    transformationPackage: 'Message Transformation Utilities',
-  },
-  IDOC_XML_TO_FLAT: {
-    moduleClass: 'SAP_XI_IDOC/IDOCXmlToFlatConvertor',
-    moduleName: 'IDoc XML to Flat',
-    description: 'Convert IDoc XML to IDoc Flat format',
-    isEquivalent: 'XML to CSV converter',
-    migrationApproach: 'auto',
-    effortHours: 1,
-  },
-  IDOC_FLAT_TO_XML: {
-    moduleClass: 'SAP_XI_IDOC/IDOCFlatToXmlConvertor',
-    moduleName: 'IDoc Flat to XML',
-    description: 'Convert IDoc Flat format to XML',
-    isEquivalent: 'Custom Groovy/JavaScript script',
-    migrationApproach: 'script',
-    effortHours: 8,
-  },
-  PAYLOAD_ZIP: {
-    moduleClass: 'AF_Modules/PayloadZipBean',
-    moduleName: 'Payload Zip',
-    description: 'Compress or extract payloads',
-    isEquivalent: 'Encoder/Decoder steps (ZIP, GZIP, Base64, MIME)',
-    migrationApproach: 'auto',
-    effortHours: 0.5,
-  },
-  DYNAMIC_CONFIG: {
-    moduleClass: 'AF_Modules/DynamicConfigurationBean',
-    moduleName: 'Dynamic Configuration',
-    description: 'Edit adapter-specific message attributes (ASMA)',
-    isEquivalent: 'External parameters or runtime parameters',
-    migrationApproach: 'manual',
-    effortHours: 4,
-  },
-  ARCHIVER: {
-    moduleClass: 'localejbs/ArchiverModuleBean',
-    moduleName: 'Archiver Module',
-    description: 'Archive messages from channels',
-    isEquivalent: 'Data archiving feature or Splunk external logging',
-    migrationApproach: 'manual',
-    effortHours: 8,
-  },
-};
-
-// ── Helper: Lookup adapter migration info ────────────────────────────────────
-function lookupAdapterMigration(adapterType, direction = 'sender') {
-  const normalized = (adapterType || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const key = `${normalized}_${direction.toUpperCase()}`;
-  return ADAPTER_MIGRATION_MATRIX[key] || null;
-}
-
-// ── Helper: Identify adapter modules in channel ──────────────────────────────
-function identifyAdapterModules(moduleChain = []) {
-  const detected = [];
-  for (const module of moduleChain) {
-    const moduleClass = (typeof module === 'string' ? module : module.moduleName || '').toLowerCase();
-    for (const [key, mapping] of Object.entries(ADAPTER_MODULE_MAPPING)) {
-      const targetClass = mapping.moduleClass.toLowerCase();
-      if (moduleClass.includes(targetClass) || targetClass.includes(moduleClass.split('/').pop())) {
-        detected.push({ code: key, ...mapping });
-      }
-    }
-  }
-  return detected;
-}
 
 // ── LangGraph Migration Advisor pipeline ─────────────────────────────────────
 let _migrationGraph = null;
@@ -471,12 +263,28 @@ Reply with just the category name.`;
     }
 
     // Node 2: Score complexity (rule-based + AI refinement)
-    // DRY-2 fix: Delegate to centralized complexityScorer module
     async function scoreComplexityNode(state) {
       const { input, objectType } = state;
-      // Use centralized multi-dimensional scoring
-      const result = scoreMultiDimensional({ ...input, objectType });
-      return { tier: result.tier.toLowerCase(), complexityScore: result.score };
+      // Rule-based scoring dimensions
+      let score = 0;
+      score += input.segmentCount > 15 ? 6 : input.segmentCount > 5 ? 3 : 1;
+      score += input.hasZFields ? 4 : 0;
+      score += input.mappingType === 'java' || input.mappingType === 'abap' ? 6 : input.mappingType === 'xslt' ? 3 : 0;
+      score += input.volumePerDay > 100000 ? 6 : input.volumePerDay > 10000 ? 3 : 0;
+      score +=
+        input.adapterType === 'as2' || input.adapterType === 'jms' || input.adapterType === 'custom'
+          ? 6
+          : input.adapterType === 'jdbc' || input.adapterType === 'rfc'
+            ? 3
+            : 0;
+      score += input.isEdiBased ? 4 : 0;
+      score += input.isBpmProcess ? 10 : 0;
+      // Finance/HR always elevated
+      if (objectType && (objectType.includes('_FI') || objectType.includes('_HR'))) score += 3;
+
+      const tier = score <= 8 ? 'simple' : score <= 18 ? 'medium' : 'complex';
+      const complexityScore = Math.min(100, Math.round((score / 30) * 100));
+      return { tier, complexityScore };
     }
 
     // Node 3: Recommend the best migration tool
@@ -513,9 +321,11 @@ Reply with just the category name.`;
       const known = MIGRATION_KNOWLEDGE.find(k => k.id === (input.objectId || '').toUpperCase());
       let estimatedHours = known
         ? known.hours
-        : tier === 'simple' ? 4 + (input.segmentCount * 0.3)
-          : tier === 'medium' ? 16 + (input.segmentCount * 0.5) + (input.hasZFields ? 8 : 0)
-            : 60 + (input.segmentCount * 0.8) + (input.isEdiBased ? 20 : 0) + (input.isBpmProcess ? 40 : 0);
+        : tier === 'simple'
+          ? 4 + input.segmentCount * 0.3
+          : tier === 'medium'
+            ? 16 + input.segmentCount * 0.5 + (input.hasZFields ? 8 : 0)
+            : 60 + input.segmentCount * 0.8 + (input.isEdiBased ? 20 : 0) + (input.isBpmProcess ? 40 : 0);
 
       estimatedHours = Math.round(estimatedHours);
       const riskLevel = tier === 'simple' ? 'low' : tier === 'medium' ? 'medium' : 'high';
@@ -525,7 +335,8 @@ Reply with just the category name.`;
 
     // Node 5: Generate the migration plan with rationale
     async function buildPlanNode(state) {
-      const { input, objectType, tier, recommendedTool, specificTool, estimatedHours, riskLevel, waveAssignment } = state;
+      const { input, objectType, tier, recommendedTool, specificTool, estimatedHours, riskLevel, waveAssignment } =
+        state;
       const prompt = `You are an SAP Enterprise Architect building a migration plan.
 
 Object: ${input.objectId} — ${input.objectDesc}
@@ -553,7 +364,13 @@ Reply with valid JSON only.`;
       } catch {
         return {
           rationale: `${tier} complexity object — recommended ${recommendedTool} approach based on ${input.segmentCount} segments and adapter type ${input.adapterType}.`,
-          steps: JSON.stringify(['Assess source system', 'Configure adapter', 'Build/configure mapping', 'Test with sample data', 'Deploy and monitor']),
+          steps: JSON.stringify([
+            'Assess source system',
+            'Configure adapter',
+            'Build/configure mapping',
+            'Test with sample data',
+            'Deploy and monitor',
+          ]),
           prereqs: JSON.stringify(['IS tenant configured', 'RFC destination to S/4', 'Source system credentials']),
         };
       }
@@ -592,7 +409,7 @@ Reply with valid JSON only.`;
     _migrationGraph = graph.compile();
     return _migrationGraph;
   } catch (err) {
-    LOG.warn('Migration graph unavailable, using rule-based fallback', { error: err.message });
+    console.warn('[Brain] Migration graph unavailable, using rule-based fallback:', err.message);
     return null;
   }
 }
@@ -601,77 +418,35 @@ Reply with valid JSON only.`;
 function ruleMigrationAdvisor(input) {
   const idUpper = (input.objectId || '').toUpperCase();
   const known = MIGRATION_KNOWLEDGE.find(k => k.id === idUpper);
-  const tier = known ? known.tier : input.isBpmProcess ? 'complex'
-    : input.adapterType === 'as2' || input.adapterType === 'custom' ? 'complex'
-      : (input.segmentCount > 15 || input.hasZFields) ? 'medium' : 'simple';
+  const tier = known
+    ? known.tier
+    : input.isBpmProcess
+      ? 'complex'
+      : input.adapterType === 'as2' || input.adapterType === 'custom'
+        ? 'complex'
+        : input.segmentCount > 15 || input.hasZFields
+          ? 'medium'
+          : 'simple';
 
   const recommendedTool = tier === 'simple' ? 'BAPI' : tier === 'medium' ? 'iFlow_SemiAuto' : 'iFlow_Custom';
-  const specificTool = tier === 'simple' ? (BAPI_MAP[idUpper] || 'BAPI_SAVE')
-    : (HUB_PACKAGE_MAP[idUpper] || `Custom iFlow: ${idUpper}_MIGRATION`);
-
-  // Gap #1: Classify scenario pattern
-  const pattern = classifyScenarioPattern(input);
-
-  // Gap #2: Map to SAP Migration Assessment status
-  const sapMigrationStatus = tierToSapStatus(tier);
-
-  // Gap #3: Identify known limitations
-  const limitations = identifyLimitations(input);
-
-  // SAP Migration Guide Gap #2: Lookup adapter migration info
-  const adapterMigration = lookupAdapterMigration(input.adapterType, input.direction || 'sender');
-  let adapterMigrationStatus = 'unknown';
-  let adapterAlternative = null;
-  let adapterLimitations = null;
-  if (adapterMigration) {
-    adapterMigrationStatus = adapterMigration.migrationStatus;
-    adapterAlternative = adapterMigration.alternativeAdapter || adapterMigration.isAdapter;
-    adapterLimitations = adapterMigration.limitations;
-    // Apply adapter-specific effort multiplier if not direct
-    if (adapterMigration.migrationStatus !== 'direct') {
-      limitations.push({
-        code: `ADAPTER_${input.adapterType?.toUpperCase()}`,
-        name: `${input.adapterType} Adapter Migration`,
-        severity: adapterMigration.migrationStatus === 'none' ? 'blocker' : 'major',
-        category: 'adapter',
-        workaroundType: adapterMigration.alternativeAdapter ? 'alternative' : 'manual',
-        workaroundDesc: adapterMigration.alternativeAdapter || adapterMigration.limitations || '',
-        effortMultiplier: adapterMigration.effortMultiplier || 1.0,
-      });
-    }
-  }
-
-  // Calculate effort multiplier from all limitations
-  const effortMultiplier = limitations.reduce((mult, lim) => mult * (lim.effortMultiplier || 1), 1);
-
-  // Base hours calculation with limitation multiplier
-  let baseHours = known ? known.hours
-    : tier === 'simple' ? 6 : tier === 'medium' ? 20 : 60;
-  const estimatedHours = Math.round(baseHours * effortMultiplier);
-
-  // Find matching SAP template
-  const matchedTemplate = HUB_PACKAGE_MAP[idUpper] || pattern.isTarget;
+  const specificTool =
+    tier === 'simple'
+      ? BAPI_MAP[idUpper] || 'BAPI_SAVE'
+      : HUB_PACKAGE_MAP[idUpper] || `Custom iFlow: ${idUpper}_MIGRATION`;
+  const estimatedHours = known ? known.hours : tier === 'simple' ? 6 : tier === 'medium' ? 20 : 60;
 
   return {
     objectType: known ? `MASTER_DATA_${idUpper}` : 'UNKNOWN',
-    tier, complexityScore: tier === 'simple' ? 20 : tier === 'medium' ? 55 : 85,
-    recommendedTool, specificTool, estimatedHours,
+    tier,
+    complexityScore: tier === 'simple' ? 20 : tier === 'medium' ? 55 : 85,
+    recommendedTool,
+    specificTool,
+    estimatedHours,
     riskLevel: tier === 'simple' ? 'low' : tier === 'medium' ? 'medium' : 'high',
     waveAssignment: tier === 'simple' ? 1 : tier === 'medium' ? 2 : 3,
     rationale: `Rule-based assessment: ${tier} complexity for ${idUpper} based on ${input.segmentCount} segments, adapter=${input.adapterType}, z-fields=${input.hasZFields}.`,
     steps: JSON.stringify(['Assess source', 'Configure adapter', 'Build mapping', 'Test', 'Deploy']),
     prereqs: JSON.stringify(['IS tenant', 'RFC destination', 'Source credentials']),
-    // SAP Migration Course aligned fields (Gaps #1, #2, #3)
-    scenarioPattern: pattern.code,
-    scenarioPatternName: pattern.name,
-    sapMigrationStatus,
-    matchedTemplate,
-    limitations: JSON.stringify(limitations),
-    limitationCount: limitations.length,
-    hasBlockers: limitations.some(l => l.severity === 'blocker'),
-    // SAP Migration Guide Gap #2: Adapter migration info
-    adapterMigrationStatus,
-    adapterAlternative,
   };
 }
 
@@ -752,7 +527,7 @@ Reply with valid JSON only.`;
     return _graph;
   } catch (err) {
     // If Anthropic key missing or langgraph unavailable, fall back to rule-based
-    LOG.warn('LangGraph unavailable, using rule-based fallback', { error: err.message });
+    console.warn('[Brain] LangGraph unavailable, using rule-based fallback:', err.message);
     return null;
   }
 }
@@ -760,12 +535,22 @@ Reply with valid JSON only.`;
 // Rule-based fallback when LLM is not available
 function classifyRuleBased(eventType) {
   const map = {
-    click: 'frontend_interaction', navigation: 'frontend_interaction', input: 'frontend_interaction',
-    api_call: 'backend_call', db_query: 'backend_call', odata: 'backend_call',
-    chat: 'conversation', message: 'conversation',
-    login: 'app_usage', logout: 'app_usage', feature: 'app_usage',
-    latency: 'performance', memory: 'performance', cpu: 'performance',
-    error: 'error', exception: 'error',
+    click: 'frontend_interaction',
+    navigation: 'frontend_interaction',
+    input: 'frontend_interaction',
+    api_call: 'backend_call',
+    db_query: 'backend_call',
+    odata: 'backend_call',
+    chat: 'conversation',
+    message: 'conversation',
+    login: 'app_usage',
+    logout: 'app_usage',
+    feature: 'app_usage',
+    latency: 'performance',
+    memory: 'performance',
+    cpu: 'performance',
+    error: 'error',
+    exception: 'error',
   };
   const lower = (eventType || '').toLowerCase();
   for (const [k, v] of Object.entries(map)) {
@@ -774,13 +559,321 @@ function classifyRuleBased(eventType) {
   return 'app_usage';
 }
 
+// ── LangGraph Tools for Artifact Operations ──────────────────────────────────
+// These tools are used by LangGraph agents to interact with discovered artifacts
+
+/**
+ * Get artifact by ID - fetches from cache first, then DB
+ * @param {string} artifactId - Artifact ID or objectId
+ * @param {string} tenantId - Tenant identifier
+ * @returns {Promise<object|null>} Artifact data or null
+ */
+async function get_artifact(artifactId, tenantId) {
+  const LOG = cds.log('brain-tools');
+
+  if (!artifactId || !tenantId) {
+    LOG.warn('get_artifact called without required params', { artifactId, tenantId });
+    return null;
+  }
+
+  try {
+    // Try cache first (faster, tenant-isolated)
+    const { Artifact } = cds.entities('tenant');
+
+    // Determine cache key format - try both ID and objectId patterns
+    const patterns = [
+      `ICO:${artifactId}`,
+      `IntegratedConfiguration:${artifactId}`,
+      `CommunicationChannel:${artifactId}`,
+      `MessageMapping:${artifactId}`,
+      `*:${artifactId}`,
+    ];
+
+    for (const pattern of patterns) {
+      const cached = await cacheService.get(tenantId, pattern.replace('*:', ''));
+      if (cached?.value) {
+        LOG.debug('Artifact found in cache', { artifactId, tenantId });
+        return cached.value;
+      }
+    }
+
+    // Fall back to database
+    const artifact = await SELECT.one
+      .from(Artifact)
+      .where({ tenantId })
+      .and({ ID: artifactId })
+      .or({ objectId: artifactId });
+
+    if (artifact) {
+      LOG.debug('Artifact found in database', { artifactId, tenantId });
+      // Cache it for next time
+      const cacheKey = `${artifact.artifactType}:${artifact.objectId}`;
+      await cacheService.set(tenantId, cacheKey, artifact, -1, { source: 'db_lookup' });
+      return artifact;
+    }
+
+    LOG.debug('Artifact not found', { artifactId, tenantId });
+    return null;
+  } catch (error) {
+    LOG.error('Error in get_artifact', { artifactId, tenantId, error: error.message });
+    return null;
+  }
+}
+
+/**
+ * Search artifacts using semantic similarity via vector store
+ * @param {string} query - Natural language search query
+ * @param {string} tenantId - Tenant identifier
+ * @param {number} [limit=10] - Maximum results
+ * @returns {Promise<Array>} Matching artifacts with scores
+ */
+async function search_artifacts(query, tenantId, limit = 10) {
+  const LOG = cds.log('brain-tools');
+
+  if (!query || !tenantId) {
+    LOG.warn('search_artifacts called without required params', { query, tenantId });
+    return [];
+  }
+
+  try {
+    const vs = getVectorStore();
+    const results = await vs.search(`migration artifact ${query}`, limit);
+
+    // Filter by tenant context if metadata includes tenant info
+    const tenantResults = results.filter(r => {
+      const metadata = r.metadata || {};
+      // Include if no tenant restriction or matches
+      return !metadata.tenantId || metadata.tenantId === tenantId;
+    });
+
+    LOG.debug('Semantic search completed', { query, tenantId, resultCount: tenantResults.length });
+
+    return tenantResults.map(r => ({
+      content: r.content,
+      score: r.score,
+      metadata: r.metadata,
+      id: r.id,
+    }));
+  } catch (error) {
+    LOG.error('Error in search_artifacts', { query, tenantId, error: error.message });
+    return [];
+  }
+}
+
+/**
+ * Get dependencies for an artifact - queries DependencyGraph entity
+ * @param {string} artifactId - Source artifact ID
+ * @param {string} tenantId - Tenant identifier
+ * @returns {Promise<Array>} List of dependent artifacts
+ */
+async function get_dependencies(artifactId, tenantId) {
+  const LOG = cds.log('brain-tools');
+
+  if (!artifactId || !tenantId) {
+    LOG.warn('get_dependencies called without required params', { artifactId, tenantId });
+    return [];
+  }
+
+  try {
+    const { DependencyGraph, Artifact } = cds.entities('tenant');
+
+    // Get outbound dependencies (what this artifact depends on)
+    const outbound = await SELECT.from(DependencyGraph).where({ tenantId, sourceArtifactId: artifactId });
+
+    // Get inbound dependencies (what depends on this artifact)
+    const inbound = await SELECT.from(DependencyGraph).where({ tenantId, targetArtifactId: artifactId });
+
+    // Enrich with artifact details
+    const allDeps = [];
+
+    for (const dep of outbound) {
+      const target = await SELECT.one
+        .from(Artifact)
+        .columns('ID', 'objectId', 'name', 'artifactType', 'adapterType')
+        .where({ tenantId, objectId: dep.targetArtifactId })
+        .or({ ID: dep.targetArtifactId });
+
+      allDeps.push({
+        direction: 'outbound',
+        dependencyType: dep.dependencyType,
+        artifactId: dep.targetArtifactId,
+        artifactName: target?.name || dep.targetArtifactId,
+        artifactType: target?.artifactType,
+        adapterType: target?.adapterType,
+      });
+    }
+
+    for (const dep of inbound) {
+      const source = await SELECT.one
+        .from(Artifact)
+        .columns('ID', 'objectId', 'name', 'artifactType', 'adapterType')
+        .where({ tenantId, objectId: dep.sourceArtifactId })
+        .or({ ID: dep.sourceArtifactId });
+
+      allDeps.push({
+        direction: 'inbound',
+        dependencyType: dep.dependencyType,
+        artifactId: dep.sourceArtifactId,
+        artifactName: source?.name || dep.sourceArtifactId,
+        artifactType: source?.artifactType,
+        adapterType: source?.adapterType,
+      });
+    }
+
+    LOG.debug('Dependencies retrieved', { artifactId, tenantId, count: allDeps.length });
+
+    return allDeps;
+  } catch (error) {
+    LOG.error('Error in get_dependencies', { artifactId, tenantId, error: error.message });
+    return [];
+  }
+}
+
+/**
+ * Analyze migration path for a set of artifacts
+ * Uses AI to assess migration complexity and recommend approach
+ * @param {string[]} artifactIds - Array of artifact IDs to analyze
+ * @param {string} tenantId - Tenant identifier
+ * @returns {Promise<object>} Migration analysis result
+ */
+async function analyze_migration_path(artifactIds, tenantId) {
+  const LOG = cds.log('brain-tools');
+
+  if (!artifactIds || !Array.isArray(artifactIds) || artifactIds.length === 0 || !tenantId) {
+    LOG.warn('analyze_migration_path called without required params', { artifactIds, tenantId });
+    return { error: 'Invalid parameters' };
+  }
+
+  try {
+    const { Artifact } = cds.entities('tenant');
+
+    // Fetch all artifacts
+    const artifacts = [];
+    for (const id of artifactIds) {
+      const artifact = await get_artifact(id, tenantId);
+      if (artifact) {
+        artifacts.push(artifact);
+      }
+    }
+
+    if (artifacts.length === 0) {
+      return { error: 'No valid artifacts found' };
+    }
+
+    // Analyze overall complexity
+    let totalHours = 0;
+    let maxComplexity = 'simple';
+    const complexityOrder = { simple: 1, medium: 2, complex: 3 };
+    const byTier = { simple: 0, medium: 0, complex: 0 };
+    const byAdapter = {};
+    const blockers = [];
+    const recommendations = [];
+
+    for (const a of artifacts) {
+      // Hours estimation
+      totalHours += Number(a.estimatedHours) || 0;
+
+      // Complexity
+      const tier = a.migrationTier || 'medium';
+      byTier[tier] = (byTier[tier] || 0) + 1;
+      if ((complexityOrder[tier] || 2) > complexityOrder[maxComplexity]) {
+        maxComplexity = tier;
+      }
+
+      // Adapter types
+      const adapter = a.adapterType || 'unknown';
+      byAdapter[adapter] = (byAdapter[adapter] || 0) + 1;
+
+      // Check for blockers
+      if (a.scenarioPattern === 'CCBPM' || a.scenarioPattern === 'BPM') {
+        blockers.push(`${a.name}: BPM pattern requires rebuild in SAP Build Process Automation`);
+      }
+      if (adapter === 'custom' || adapter === 'jms') {
+        blockers.push(`${a.name}: ${adapter} adapter may require custom development`);
+      }
+    }
+
+    // Generate recommendations
+    if (byTier.simple > 0) {
+      recommendations.push(
+        `${byTier.simple} simple artifacts - consider batch migration with Migration Tooling wizard`
+      );
+    }
+    if (byTier.medium > 0) {
+      recommendations.push(
+        `${byTier.medium} medium artifacts - evaluate for template matching on SAP Business Accelerator Hub`
+      );
+    }
+    if (byTier.complex > 0) {
+      recommendations.push(
+        `${byTier.complex} complex artifacts - require detailed analysis and custom iFlow development`
+      );
+    }
+
+    // Wave assignment
+    const waveAssignment = [];
+    const simpleArtifacts = artifacts.filter(a => (a.migrationTier || 'medium') === 'simple');
+    const mediumArtifacts = artifacts.filter(a => (a.migrationTier || 'medium') === 'medium');
+    const complexArtifacts = artifacts.filter(a => (a.migrationTier || 'medium') === 'complex');
+
+    if (simpleArtifacts.length > 0) {
+      waveAssignment.push({
+        wave: 1,
+        count: simpleArtifacts.length,
+        artifacts: simpleArtifacts.map(a => a.name).slice(0, 5),
+      });
+    }
+    if (mediumArtifacts.length > 0) {
+      waveAssignment.push({
+        wave: 2,
+        count: mediumArtifacts.length,
+        artifacts: mediumArtifacts.map(a => a.name).slice(0, 5),
+      });
+    }
+    if (complexArtifacts.length > 0) {
+      waveAssignment.push({
+        wave: 3,
+        count: complexArtifacts.length,
+        artifacts: complexArtifacts.map(a => a.name).slice(0, 5),
+      });
+    }
+
+    const result = {
+      artifactCount: artifacts.length,
+      overallComplexity: maxComplexity,
+      totalEstimatedHours: totalHours,
+      byTier,
+      byAdapter,
+      blockers,
+      recommendations,
+      waveAssignment,
+      message: `Analysis complete for ${artifacts.length} artifacts. Overall complexity: ${maxComplexity}. Estimated effort: ${totalHours} hours.`,
+    };
+
+    LOG.info('Migration path analysis completed', {
+      tenantId,
+      artifactCount: artifacts.length,
+      overallComplexity: maxComplexity,
+    });
+
+    return result;
+  } catch (error) {
+    LOG.error('Error in analyze_migration_path', { artifactIds, tenantId, error: error.message });
+    return { error: error.message };
+  }
+}
+
 // ── Service implementation ────────────────────────────────────────────────────
 module.exports = class BrainService extends cds.ApplicationService {
   async init() {
     const { Events, Insights, Sessions } = this.entities;
+    const tenantId = cds.context?.tenant || 'default';
+
+    // Initialize checkpoint saver for LangGraph
+    this._checkpointSaver = new CapCheckpointSaver(tenantId);
 
     // ── toggleBrain ──────────────────────────────────────────────────────────
-    this.on('toggleBrain', async (req) => {
+    this.on('toggleBrain', async req => {
       const { key, enabled } = req.data;
       if (!verifyKey(key)) return req.error(403, 'Invalid master key');
       const state = writeState(enabled);
@@ -792,13 +885,19 @@ module.exports = class BrainService extends cds.ApplicationService {
     });
 
     // ── captureEvent ─────────────────────────────────────────────────────────
-    this.on('captureEvent', async (req) => {
+    this.on('captureEvent', async req => {
       const { key, eventType, source, payload, summary, sessionId } = req.data;
       if (!verifyKey(key)) return req.error(403, 'Invalid master key');
       if (!isBrainEnabled()) return req.error(400, 'Brain is not enabled');
 
       const vs = getVectorStore();
-      const embeddingId = await vs.add(`${eventType} ${source} ${summary}`, { eventType, source, payload, sessionId, ts: new Date().toISOString() });
+      const embeddingId = await vs.add(`${eventType} ${source} ${summary}`, {
+        eventType,
+        source,
+        payload,
+        sessionId,
+        ts: new Date().toISOString(),
+      });
 
       // The vector store (local file, always available) is the source of truth
       // for this action's success — the DB row is a nice-to-have for the OData
@@ -820,7 +919,7 @@ module.exports = class BrainService extends cds.ApplicationService {
           processed: false,
         });
       } catch (err) {
-        LOG.error('Events insert failed, continuing on vector store alone', { error: err.message });
+        console.error('[Brain] Events insert failed, continuing on vector store alone:', err.message);
       }
 
       // Run LangGraph analysis inline (best-effort)
@@ -849,7 +948,7 @@ module.exports = class BrainService extends cds.ApplicationService {
               });
               insights = 1;
             } catch (err) {
-              LOG.error('Insights insert failed', { error: err.message });
+              console.error('[Brain] Insights insert failed:', err.message);
             }
           }
         }
@@ -859,7 +958,7 @@ module.exports = class BrainService extends cds.ApplicationService {
           await UPDATE(Events).set({ category }).where({ ID: eventRecord[0].ID });
         }
       } catch (err) {
-        LOG.error('Analysis error', { error: err.message });
+        console.error('[Brain] Analysis error:', err.message);
       }
 
       return {
@@ -871,7 +970,7 @@ module.exports = class BrainService extends cds.ApplicationService {
     });
 
     // ── runAnalysis ──────────────────────────────────────────────────────────
-    this.on('runAnalysis', async (req) => {
+    this.on('runAnalysis', async req => {
       const { key } = req.data;
       if (!verifyKey(key)) return req.error(403, 'Invalid master key');
       if (!isBrainEnabled()) return req.error(400, 'Brain is not enabled');
@@ -911,7 +1010,7 @@ module.exports = class BrainService extends cds.ApplicationService {
           }
         }
       } catch (err) {
-        LOG.error('runAnalysis error', { error: err.message });
+        console.error('[Brain] runAnalysis error:', err.message);
       }
 
       return {
@@ -922,7 +1021,7 @@ module.exports = class BrainService extends cds.ApplicationService {
     });
 
     // ── getBrainStatus ───────────────────────────────────────────────────────
-    this.on('getBrainStatus', async (req) => {
+    this.on('getBrainStatus', async req => {
       const { key } = req.data;
       if (!verifyKey(key)) return req.error(403, 'Invalid master key');
 
@@ -931,9 +1030,18 @@ module.exports = class BrainService extends cds.ApplicationService {
       // Same DB-optional posture as captureEvent — a HANA hiccup shouldn't make
       // the status dashboard itself unreachable; fall back to 0 and let
       // vectorCount (always available) carry the real signal.
-      let eventsCount = 0, insightsCount = 0;
-      try { eventsCount = (await SELECT.from(Events).columns('count(*) as n'))[0]?.n || 0; } catch (err) { LOG.error('Events count failed', { error: err.message }); }
-      try { insightsCount = (await SELECT.from(Insights).columns('count(*) as n'))[0]?.n || 0; } catch (err) { LOG.error('Insights count failed', { error: err.message }); }
+      let eventsCount = 0,
+        insightsCount = 0;
+      try {
+        eventsCount = (await SELECT.from(Events).columns('count(*) as n'))[0]?.n || 0;
+      } catch (err) {
+        console.error('[Brain] Events count failed:', err.message);
+      }
+      try {
+        insightsCount = (await SELECT.from(Insights).columns('count(*) as n'))[0]?.n || 0;
+      } catch (err) {
+        console.error('[Brain] Insights count failed:', err.message);
+      }
       const vectorCount = await vs.count();
 
       return {
@@ -947,8 +1055,110 @@ module.exports = class BrainService extends cds.ApplicationService {
       };
     });
 
+    // ── chat ─────────────────────────────────────────────────────────────────
+    // LangGraph-backed chat endpoint for PI/PO migration assistant
+    this.on('chat', async req => {
+      const { message, threadId: inputThreadId, tenantId: inputTenantId } = req.data;
+      const tenantId = inputTenantId || cds.context?.tenant || 'default';
+
+      if (!message || typeof message !== 'string' || !message.trim()) {
+        return req.error(400, 'Message is required');
+      }
+
+      const threadId = inputThreadId || `thread_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const toolUsage = [];
+
+      try {
+        // Use the checkpoint saver for conversation persistence
+        const checkpointConfig = {
+          configurable: { thread_id: threadId },
+        };
+
+        // Get existing conversation state if any
+        let conversationState = await this._checkpointSaver.get(checkpointConfig);
+        const messages = conversationState?.messages || [];
+
+        // Add user message
+        messages.push({ role: 'user', content: message.trim(), timestamp: new Date().toISOString() });
+
+        // Try to use LangGraph for response generation
+        let response;
+        try {
+          const graph = await buildGraph();
+          if (graph && isBrainEnabled()) {
+            // Capture as event for learning
+            const eventResult = await this.send('captureEvent', {
+              key: process.env.BRAIN_MASTER_KEY || 'AYMAN2026',
+              eventType: 'chat',
+              source: `brain-chat:${threadId}`,
+              payload: JSON.stringify({ message: message.trim(), tenantId }),
+              summary: `User chat: ${message.trim().substring(0, 100)}`,
+              sessionId: threadId,
+            });
+
+            // Search for relevant artifacts in vector store
+            const vs = getVectorStore();
+            const relevantDocs = await vs.search(message.trim(), 3);
+
+            // Build context-aware prompt
+            const context =
+              relevantDocs.length > 0
+                ? `\n\nRelevant context from knowledge base:\n${relevantDocs.map(d => d.content).join('\n---\n')}`
+                : '';
+
+            // Generate response using migration knowledge
+            const migrationKeywords = [
+              'matmas',
+              'debmas',
+              'cremas',
+              'ico',
+              'mapping',
+              'interface',
+              'adapter',
+              'migration',
+              'artifact',
+              'dependency',
+            ];
+            const lowerMessage = message.toLowerCase();
+            const isMigrationQuery = migrationKeywords.some(k => lowerMessage.includes(k));
+
+            if (isMigrationQuery && relevantDocs.length > 0) {
+              toolUsage.push('search_artifacts');
+              response = `Based on my knowledge of SAP PI/PO migration:\n\n${relevantDocs[0]?.content || 'I found relevant information but could not extract details.'}\n\nWould you like me to analyze specific artifacts or provide more detailed migration guidance?`;
+            } else {
+              response = `I received your message: "${message.trim()}". I can help you with PI/PO artifact discovery, migration assessment, and dependency analysis. Try asking about specific interfaces, mappings, or migration strategies.`;
+            }
+          } else {
+            response = `The Brain service is currently disabled. Please enable it to get AI-powered responses. I received: "${message.trim()}"`;
+          }
+        } catch (graphError) {
+          console.warn('[Brain Chat] Graph unavailable:', graphError.message);
+          response = `I received your message: "${message.trim()}". The AI backend is temporarily unavailable, but I can still help with basic queries about PI/PO migration.`;
+        }
+
+        // Add assistant response
+        messages.push({ role: 'assistant', content: response, timestamp: new Date().toISOString() });
+
+        // Save conversation state
+        await this._checkpointSaver.put(checkpointConfig, { messages }, { lastMessageAt: new Date().toISOString() });
+
+        return {
+          response,
+          threadId,
+          toolUsage: toolUsage.length > 0 ? toolUsage : [],
+        };
+      } catch (error) {
+        console.error('[Brain Chat] Error:', error);
+        return {
+          response: `Sorry, I encountered an error: ${error.message}. Please try again.`,
+          threadId,
+          toolUsage: [],
+        };
+      }
+    });
+
     // ── exportBrain ──────────────────────────────────────────────────────────
-    this.on('exportBrain', async (req) => {
+    this.on('exportBrain', async req => {
       const { key } = req.data;
       if (!verifyKey(key)) return req.error(403, 'Invalid master key');
 
@@ -974,10 +1184,19 @@ module.exports = class BrainService extends cds.ApplicationService {
     });
 
     // ── migrationAdvisor ─────────────────────────────────────────────────────
-    this.on('migrationAdvisor', async (req) => {
+    this.on('migrationAdvisor', async req => {
       const {
-        key, objectId, objectDesc, segmentCount, hasZFields,
-        mappingType, adapterType, volumePerDay, isBpmProcess, isEdiBased, sourceSystem,
+        key,
+        objectId,
+        objectDesc,
+        segmentCount,
+        hasZFields,
+        mappingType,
+        adapterType,
+        volumePerDay,
+        isBpmProcess,
+        isEdiBased,
+        sourceSystem,
       } = req.data;
       if (!verifyKey(key)) return req.error(403, 'Invalid master key');
 
@@ -1015,7 +1234,7 @@ module.exports = class BrainService extends cds.ApplicationService {
           };
         }
       } catch (err) {
-        LOG.error('migrationAdvisor error', { error: err.message });
+        console.error('[Brain] migrationAdvisor error:', err.message);
       }
 
       // Store in vector store for future RAG learning
@@ -1037,7 +1256,9 @@ module.exports = class BrainService extends cds.ApplicationService {
             sessionId: '',
             processed: false,
           });
-        } catch { /* non-blocking */ }
+        } catch {
+          /* non-blocking */
+        }
       }
 
       return {
@@ -1053,23 +1274,12 @@ module.exports = class BrainService extends cds.ApplicationService {
         rationale: result.rationale,
         steps: result.steps,
         prereqs: result.prereqs,
-        // SAP Migration Course aligned fields (Gaps #1, #2, #3)
-        scenarioPattern: result.scenarioPattern,
-        scenarioPatternName: result.scenarioPatternName,
-        sapMigrationStatus: result.sapMigrationStatus,
-        matchedTemplate: result.matchedTemplate,
-        limitations: result.limitations,
-        limitationCount: result.limitationCount,
-        hasBlockers: result.hasBlockers,
-        // SAP Migration Guide Gap #2: Adapter Migration Info
-        adapterMigrationStatus: result.adapterMigrationStatus,
-        adapterAlternative: result.adapterAlternative,
         message: `Migration analysis complete for ${input.objectId}`,
       };
     });
 
     // ── seedMigrationKnowledge ────────────────────────────────────────────────
-    this.on('seedMigrationKnowledge', async (req) => {
+    this.on('seedMigrationKnowledge', async req => {
       const { key } = req.data;
       if (!verifyKey(key)) return req.error(403, 'Invalid master key');
 
@@ -1141,129 +1351,161 @@ module.exports = class BrainService extends cds.ApplicationService {
       return { seeded, message: `Seeded ${seeded} migration knowledge vectors into brain` };
     });
 
-    // ── seedLimitationRef (Gap #3: Known Limitations Database) ───────────────
-    this.on('seedLimitationRef', async (req) => {
-      const { key } = req.data;
+    // ── LangGraph Tool: getArtifact ──────────────────────────────────────────
+    this.on('getArtifact', async req => {
+      const { key, artifactId } = req.data;
       if (!verifyKey(key)) return req.error(403, 'Invalid master key');
 
-      // Get tenant-aware database access
-      const db = await cds.connect.to('db');
-      const { MigrationLimitationRef, ScenarioPatternRef } = db.entities('tenant');
+      const tenantId = cds.context?.tenant || 'default';
 
-      let seeded = 0;
+      try {
+        const artifact = await get_artifact(artifactId, tenantId);
 
-      // Seed KNOWN_LIMITATIONS into MigrationLimitationRef
-      for (const [code, lim] of Object.entries(KNOWN_LIMITATIONS)) {
-        try {
-          await db.run(
-            INSERT.into(MigrationLimitationRef).entries({
-              code: lim.code,
-              name: lim.name,
-              category: lim.category,
-              severity: lim.severity,
-              description: lim.description,
-              detectionRules: JSON.stringify(lim.detectionRules),
-              workaroundType: lim.workaroundType,
-              workaroundDesc: lim.workaroundDesc,
-              effortMultiplier: lim.effortMultiplier,
-            })
-          );
-          seeded++;
-        } catch (err) {
-          // Skip if already exists (unique constraint on code)
-          if (!err.message?.includes('unique') && !err.message?.includes('duplicate')) {
-            LOG.warn('Failed to seed limitation', { code, error: err.message });
-          }
+        if (!artifact) {
+          return {
+            success: false,
+            artifact: null,
+            fromCache: false,
+            message: `Artifact ${artifactId} not found`,
+          };
         }
-      }
 
-      // Seed SCENARIO_PATTERNS into ScenarioPatternRef
-      for (const [code, pattern] of Object.entries(SCENARIO_PATTERNS)) {
-        try {
-          await db.run(
-            INSERT.into(ScenarioPatternRef).entries({
-              code: pattern.code,
-              name: pattern.name,
-              description: `Detection: ${JSON.stringify(pattern.detectionRules)}`,
-              detectionRules: JSON.stringify(pattern.detectionRules),
-              isTargetPattern: pattern.isTarget,
-              migrationApproach: `Standard migration to ${pattern.isTarget}`,
-              standardTemplates: JSON.stringify([]),
-              baseComplexity: pattern.baseComplexity,
-              typicalHours: pattern.typicalHours,
-            })
-          );
-          seeded++;
-        } catch (err) {
-          if (!err.message?.includes('unique') && !err.message?.includes('duplicate')) {
-            LOG.warn('Failed to seed pattern', { code, error: err.message });
-          }
-        }
+        return {
+          success: true,
+          artifact: JSON.stringify(artifact),
+          fromCache: true,
+          message: `Artifact ${artifactId} retrieved successfully`,
+        };
+      } catch (error) {
+        return {
+          success: false,
+          artifact: null,
+          fromCache: false,
+          message: `Error retrieving artifact: ${error.message}`,
+        };
       }
-
-      return { seeded, message: `Seeded ${seeded} reference records (limitations + scenario patterns)` };
     });
 
-    // ── seedAdapterMigrationRef (SAP Migration Guide Gaps #2, #3) ────────────
-    this.on('seedAdapterMigrationRef', async (req) => {
-      const { key } = req.data;
+    // ── LangGraph Tool: searchArtifacts ──────────────────────────────────────
+    this.on('searchArtifacts', async req => {
+      const { key, query, limit } = req.data;
       if (!verifyKey(key)) return req.error(403, 'Invalid master key');
 
-      const db = await cds.connect.to('db');
-      const { AdapterMigrationRef, AdapterModuleMigrationRef } = db.entities('tenant');
+      const tenantId = cds.context?.tenant || 'default';
 
-      let seeded = 0;
+      try {
+        const results = await search_artifacts(query, tenantId, limit || 10);
 
-      // Seed ADAPTER_MIGRATION_MATRIX into AdapterMigrationRef
-      for (const [key, mapping] of Object.entries(ADAPTER_MIGRATION_MATRIX)) {
-        try {
-          await db.run(
-            INSERT.into(AdapterMigrationRef).entries({
-              pipoAdapter: mapping.pipoAdapter,
-              direction: mapping.direction,
-              isAdapter: mapping.isAdapter || '',
-              migrationStatus: mapping.migrationStatus,
-              alternativeAdapter: mapping.alternativeAdapter || '',
-              limitations: mapping.limitations ? JSON.stringify({ note: mapping.limitations }) : '',
-              migrationNotes: mapping.limitations || '',
-              effortMultiplier: mapping.effortMultiplier || 1.0,
-            })
-          );
-          seeded++;
-        } catch (err) {
-          if (!err.message?.includes('unique') && !err.message?.includes('duplicate')) {
-            LOG.warn('Failed to seed adapter mapping', { key, error: err.message });
-          }
-        }
+        return {
+          success: true,
+          results: JSON.stringify(results),
+          count: results.length,
+          message: `Found ${results.length} matching artifacts for query: "${query}"`,
+        };
+      } catch (error) {
+        return {
+          success: false,
+          results: '[]',
+          count: 0,
+          message: `Error searching artifacts: ${error.message}`,
+        };
       }
+    });
 
-      // Seed ADAPTER_MODULE_MAPPING into AdapterModuleMigrationRef
-      for (const [key, mapping] of Object.entries(ADAPTER_MODULE_MAPPING)) {
-        try {
-          await db.run(
-            INSERT.into(AdapterModuleMigrationRef).entries({
-              moduleClass: mapping.moduleClass,
-              moduleName: mapping.moduleName,
-              description: mapping.description,
-              isEquivalent: mapping.isEquivalent,
-              migrationApproach: mapping.migrationApproach,
-              effortHours: mapping.effortHours,
-              transformationPackage: mapping.transformationPackage || '',
-            })
-          );
-          seeded++;
-        } catch (err) {
-          if (!err.message?.includes('unique') && !err.message?.includes('duplicate')) {
-            LOG.warn('Failed to seed module mapping', { key, error: err.message });
-          }
-        }
+    // ── LangGraph Tool: getDependencies ──────────────────────────────────────
+    this.on('getDependencies', async req => {
+      const { key, artifactId } = req.data;
+      if (!verifyKey(key)) return req.error(403, 'Invalid master key');
+
+      const tenantId = cds.context?.tenant || 'default';
+
+      try {
+        const dependencies = await get_dependencies(artifactId, tenantId);
+
+        const inboundCount = dependencies.filter(d => d.direction === 'inbound').length;
+        const outboundCount = dependencies.filter(d => d.direction === 'outbound').length;
+
+        return {
+          success: true,
+          dependencies: JSON.stringify(dependencies),
+          inboundCount,
+          outboundCount,
+          message: `Found ${dependencies.length} dependencies for artifact ${artifactId}`,
+        };
+      } catch (error) {
+        return {
+          success: false,
+          dependencies: '[]',
+          inboundCount: 0,
+          outboundCount: 0,
+          message: `Error getting dependencies: ${error.message}`,
+        };
       }
+    });
 
-      return { seeded, message: `Seeded ${seeded} adapter/module migration reference records` };
+    // ── LangGraph Tool: analyzeMigrationPath ─────────────────────────────────
+    this.on('analyzeMigrationPath', async req => {
+      const { key, artifactIds } = req.data;
+      if (!verifyKey(key)) return req.error(403, 'Invalid master key');
+
+      const tenantId = cds.context?.tenant || 'default';
+
+      try {
+        const ids = JSON.parse(artifactIds || '[]');
+
+        // Wrap with saveOnError for fault tolerance
+        const result = await saveOnError(
+          this._checkpointSaver,
+          { configurable: { thread_id: `migration_analysis_${Date.now()}` } },
+          async () => analyze_migration_path(ids, tenantId),
+          { operation: 'analyzeMigrationPath', artifactCount: ids.length }
+        );
+
+        if (result.error) {
+          return {
+            success: false,
+            artifactCount: 0,
+            overallComplexity: 'unknown',
+            totalEstimatedHours: 0,
+            byTier: '{}',
+            byAdapter: '{}',
+            blockers: '[]',
+            recommendations: '[]',
+            waveAssignment: '[]',
+            message: result.error,
+          };
+        }
+
+        return {
+          success: true,
+          artifactCount: result.artifactCount,
+          overallComplexity: result.overallComplexity,
+          totalEstimatedHours: result.totalEstimatedHours,
+          byTier: JSON.stringify(result.byTier),
+          byAdapter: JSON.stringify(result.byAdapter),
+          blockers: JSON.stringify(result.blockers),
+          recommendations: JSON.stringify(result.recommendations),
+          waveAssignment: JSON.stringify(result.waveAssignment),
+          message: result.message,
+        };
+      } catch (error) {
+        return {
+          success: false,
+          artifactCount: 0,
+          overallComplexity: 'unknown',
+          totalEstimatedHours: 0,
+          byTier: '{}',
+          byAdapter: '{}',
+          blockers: '[]',
+          recommendations: '[]',
+          waveAssignment: '[]',
+          message: `Error analyzing migration path: ${error.message}`,
+        };
+      }
     });
 
     // ── importBrain ──────────────────────────────────────────────────────────
-    this.on('importBrain', async (req) => {
+    this.on('importBrain', async req => {
       const { key, data } = req.data;
       if (!verifyKey(key)) return req.error(403, 'Invalid master key');
 
@@ -1280,7 +1522,9 @@ module.exports = class BrainService extends cds.ApplicationService {
           try {
             await INSERT.into(Events).entries(ev);
             eventsImported++;
-          } catch { /* skip duplicates */ }
+          } catch {
+            /* skip duplicates */
+          }
         }
       }
 
@@ -1293,43 +1537,6 @@ module.exports = class BrainService extends cds.ApplicationService {
         eventsImported,
         message: `Imported ${eventsImported} events from archive`,
       };
-    });
-
-    // ── testPipoDestinations ─────────────────────────────────────────────────
-    this.on('testPipoDestinations', async (req) => {
-      const { key } = req.data;
-      if (!verifyKey(key)) return req.error(403, 'Invalid master key');
-
-      const pipoClient = require('./utils/pipoClient');
-      let dirStatus = 'ERROR', esrStatus = 'ERROR';
-      let dirArtifacts = 0, esrArtifacts = 0;
-      let errors = [];
-
-      // Test DIR destination
-      try {
-        const dirResult = await pipoClient.listIcos();
-        dirStatus = 'OK';
-        dirArtifacts = Array.isArray(dirResult) ? dirResult.length : (dirResult?.count || 0);
-      } catch (err) {
-        dirStatus = `ERROR: ${err.message}`;
-        errors.push(`DIR: ${err.message}`);
-      }
-
-      // Test ESR destination
-      try {
-        const esrResult = await pipoClient.listPipoPackages();
-        esrStatus = 'OK';
-        esrArtifacts = Array.isArray(esrResult) ? esrResult.length : (esrResult?.count || 0);
-      } catch (err) {
-        esrStatus = `ERROR: ${err.message}`;
-        errors.push(`ESR: ${err.message}`);
-      }
-
-      const message = errors.length > 0
-        ? `Connectivity issues: ${errors.join('; ')}`
-        : `Both destinations reachable. DIR: ${dirArtifacts} ICOs, ESR: ${esrArtifacts} components`;
-
-      return { dirStatus, esrStatus, dirArtifacts, esrArtifacts, message };
     });
 
     return super.init();

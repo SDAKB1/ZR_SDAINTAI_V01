@@ -123,7 +123,7 @@ class PIPoSoapClient {
       method,
       url: path,
       headers: {
-        'Accept': 'application/xml, text/xml, */*',
+        Accept: 'application/xml, text/xml, */*',
         ...headers,
       },
       timeout: timeout || this.timeout,
@@ -135,10 +135,7 @@ class PIPoSoapClient {
     }
 
     try {
-      const response = await executeHttpRequest(
-        { destinationName: this.destinationName },
-        config
-      );
+      const response = await executeHttpRequest({ destinationName: this.destinationName }, config);
       return response;
     } catch (error) {
       const statusCode = error.response?.status || error.code || 'UNKNOWN';
@@ -191,7 +188,7 @@ class PIPoSoapClient {
       envelope,
       {
         'Content-Type': 'text/xml; charset=utf-8',
-        'SOAPAction': soapAction,
+        SOAPAction: soapAction,
       },
       timeout
     );
@@ -267,12 +264,7 @@ class PIPoSoapClient {
    */
   async querySenderAgreements() {
     const namespace = 'http://sap.com/xi/BASIS';
-    const body = await this._soapCall(
-      SOAP_SERVICES.SenderAgreement,
-      'SenderAgreementQueryRequest',
-      namespace,
-      ''
-    );
+    const body = await this._soapCall(SOAP_SERVICES.SenderAgreement, 'SenderAgreementQueryRequest', namespace, '');
     return this._extractQueryResponse(body, 'SenderAgreementQueryResponse');
   }
 
@@ -281,12 +273,7 @@ class PIPoSoapClient {
    */
   async queryReceiverAgreements() {
     const namespace = 'http://sap.com/xi/BASIS';
-    const body = await this._soapCall(
-      SOAP_SERVICES.ReceiverAgreement,
-      'ReceiverAgreementQueryRequest',
-      namespace,
-      ''
-    );
+    const body = await this._soapCall(SOAP_SERVICES.ReceiverAgreement, 'ReceiverAgreementQueryRequest', namespace, '');
     return this._extractQueryResponse(body, 'ReceiverAgreementQueryResponse');
   }
 
@@ -295,12 +282,7 @@ class PIPoSoapClient {
    */
   async queryValueMappings() {
     const namespace = 'http://sap.com/xi/BASIS';
-    const body = await this._soapCall(
-      SOAP_SERVICES.ValueMapping,
-      'ValueMappingQueryRequest',
-      namespace,
-      ''
-    );
+    const body = await this._soapCall(SOAP_SERVICES.ValueMapping, 'ValueMappingQueryRequest', namespace, '');
     return this._extractQueryResponse(body, 'ValueMappingQueryResponse');
   }
 
@@ -399,9 +381,15 @@ class PIPoSoapClient {
   async queryEsrSimple(objectType) {
     const path = `${ESR_ENDPOINTS.simpleQuery}?type=${objectType}&swcSelection=all`;
 
-    const response = await this._request(path, 'GET', null, {
-      'Accept': 'text/html, application/xml, */*',
-    }, LONG_TIMEOUT);
+    const response = await this._request(
+      path,
+      'GET',
+      null,
+      {
+        Accept: 'text/html, application/xml, */*',
+      },
+      LONG_TIMEOUT
+    );
 
     // Simple Query returns HTML with embedded data - parse it
     return this._parseSimpleQueryResponse(response.data, objectType);
@@ -415,7 +403,7 @@ class PIPoSoapClient {
 
     try {
       const response = await this._request(path, 'GET', null, {
-        'Accept': 'application/xml',
+        Accept: 'application/xml',
       });
 
       const parsed = await this._parseXml(response.data);
@@ -434,7 +422,7 @@ class PIPoSoapClient {
     const path = `${ESR_ENDPOINTS.readExt}/${objectType}/${keyParam}`;
 
     const response = await this._request(path, 'GET', null, {
-      'Accept': 'application/xml',
+      Accept: 'application/xml',
     });
 
     return this._parseXml(response.data);
@@ -573,7 +561,8 @@ class PIPoSoapClient {
         LONG_TIMEOUT
       );
 
-      const ico = body.IntegratedConfiguration750ReadResponse?.IntegratedConfiguration750 ||
+      const ico =
+        body.IntegratedConfiguration750ReadResponse?.IntegratedConfiguration750 ||
         body.IntegratedConfiguration750ReadResponse?.IntegratedConfiguration;
 
       if (ico) {
@@ -604,11 +593,14 @@ class PIPoSoapClient {
     // Complex key with component/interface/namespace
     let xml = '<IntegratedConfiguration750ID>';
     if (key.SenderPartyID) xml += `<SenderPartyID>${this._escapeXml(key.SenderPartyID)}</SenderPartyID>`;
-    if (key.SenderComponentID) xml += `<SenderComponentID>${this._escapeXml(key.SenderComponentID)}</SenderComponentID>`;
+    if (key.SenderComponentID)
+      xml += `<SenderComponentID>${this._escapeXml(key.SenderComponentID)}</SenderComponentID>`;
     if (key.InterfaceName) xml += `<InterfaceName>${this._escapeXml(key.InterfaceName)}</InterfaceName>`;
-    if (key.InterfaceNamespace) xml += `<InterfaceNamespace>${this._escapeXml(key.InterfaceNamespace)}</InterfaceNamespace>`;
+    if (key.InterfaceNamespace)
+      xml += `<InterfaceNamespace>${this._escapeXml(key.InterfaceNamespace)}</InterfaceNamespace>`;
     if (key.ReceiverPartyID) xml += `<ReceiverPartyID>${this._escapeXml(key.ReceiverPartyID)}</ReceiverPartyID>`;
-    if (key.ReceiverComponentID) xml += `<ReceiverComponentID>${this._escapeXml(key.ReceiverComponentID)}</ReceiverComponentID>`;
+    if (key.ReceiverComponentID)
+      xml += `<ReceiverComponentID>${this._escapeXml(key.ReceiverComponentID)}</ReceiverComponentID>`;
     xml += '</IntegratedConfiguration750ID>';
 
     return xml;
@@ -642,9 +634,8 @@ class PIPoSoapClient {
     const modules = [];
 
     // Navigate to ModuleProcess (can be in different locations)
-    const moduleProcess = channel.ModuleProcess ||
-      channel.AdapterSpecificData?.ModuleProcess ||
-      channel.adapterSpecificData?.ModuleProcess;
+    const moduleProcess =
+      channel.ModuleProcess || channel.AdapterSpecificData?.ModuleProcess || channel.adapterSpecificData?.ModuleProcess;
 
     if (!moduleProcess) {
       return modules;
@@ -670,7 +661,9 @@ class PIPoSoapClient {
         moduleType: step.ModuleType || step.moduleType || 'Local Enterprise Bean',
         parameters: this._extractModuleParameters(step),
         // Identify IS equivalent for migration
-        isEquivalent: this._identifyIsEquivalent(step.ModuleName || step.moduleName || step.ModuleRef || step.moduleRef),
+        isEquivalent: this._identifyIsEquivalent(
+          step.ModuleName || step.moduleName || step.ModuleRef || step.moduleRef
+        ),
       };
       modules.push(moduleConfig);
     }
@@ -766,16 +759,14 @@ class PIPoSoapClient {
     const config = {};
 
     // Extract adapter type
-    config.adapterType = channel.AdapterType || channel.adapterType ||
-      channel.TransportProtocol || channel.transportProtocol;
+    config.adapterType =
+      channel.AdapterType || channel.adapterType || channel.TransportProtocol || channel.transportProtocol;
     config.adapterNamespace = channel.AdapterNamespace || channel.adapterNamespace;
-    config.direction = channel.Direction || channel.direction ||
-      (channel.IsSender === 'true' ? 'sender' : 'receiver');
+    config.direction = channel.Direction || channel.direction || (channel.IsSender === 'true' ? 'sender' : 'receiver');
 
     // Extract adapter-specific attributes
-    const adapterData = channel.AdapterSpecificAttribute ||
-      channel.adapterSpecificAttribute ||
-      channel.AdapterSpecificData?.attribute;
+    const adapterData =
+      channel.AdapterSpecificAttribute || channel.adapterSpecificAttribute || channel.AdapterSpecificData?.attribute;
 
     if (adapterData) {
       const attrs = Array.isArray(adapterData) ? adapterData : [adapterData];
@@ -859,9 +850,10 @@ class PIPoSoapClient {
    */
   async readConfigurationScenario(key) {
     const namespace = XI_NAMESPACES.basis;
-    const keyXml = typeof key === 'string'
-      ? `<ConfigurationScenarioID><ObjectID>${this._escapeXml(key)}</ObjectID></ConfigurationScenarioID>`
-      : this._buildKeyXml(key);
+    const keyXml =
+      typeof key === 'string'
+        ? `<ConfigurationScenarioID><ObjectID>${this._escapeXml(key)}</ObjectID></ConfigurationScenarioID>`
+        : this._buildKeyXml(key);
 
     try {
       const body = await this._soapCall(
@@ -896,9 +888,7 @@ class PIPoSoapClient {
     const refs = [];
 
     // Scenario contains lists of references to each object type
-    const refList = scenario[`${objectType}ID`] ||
-      scenario[objectType] ||
-      scenario[objectType.toLowerCase()];
+    const refList = scenario[`${objectType}ID`] || scenario[objectType] || scenario[objectType.toLowerCase()];
 
     if (!refList) return refs;
 
@@ -921,12 +911,7 @@ class PIPoSoapClient {
     const namespace = XI_NAMESPACES.basis;
     const keyXml = this._buildAgreementKeyXml(key, 'Sender');
 
-    const body = await this._soapCall(
-      SOAP_SERVICES.SenderAgreement,
-      'SenderAgreementReadRequest',
-      namespace,
-      keyXml
-    );
+    const body = await this._soapCall(SOAP_SERVICES.SenderAgreement, 'SenderAgreementReadRequest', namespace, keyXml);
 
     const agreement = body.SenderAgreementReadResponse?.SenderAgreement;
 
@@ -971,9 +956,11 @@ class PIPoSoapClient {
 
     let xml = `<${type}AgreementID>`;
     if (key.SenderPartyID) xml += `<SenderPartyID>${this._escapeXml(key.SenderPartyID)}</SenderPartyID>`;
-    if (key.SenderComponentID) xml += `<SenderComponentID>${this._escapeXml(key.SenderComponentID)}</SenderComponentID>`;
+    if (key.SenderComponentID)
+      xml += `<SenderComponentID>${this._escapeXml(key.SenderComponentID)}</SenderComponentID>`;
     if (key.ReceiverPartyID) xml += `<ReceiverPartyID>${this._escapeXml(key.ReceiverPartyID)}</ReceiverPartyID>`;
-    if (key.ReceiverComponentID) xml += `<ReceiverComponentID>${this._escapeXml(key.ReceiverComponentID)}</ReceiverComponentID>`;
+    if (key.ReceiverComponentID)
+      xml += `<ReceiverComponentID>${this._escapeXml(key.ReceiverComponentID)}</ReceiverComponentID>`;
     xml += `</${type}AgreementID>`;
 
     return xml;
@@ -1014,12 +1001,7 @@ class PIPoSoapClient {
     const namespace = XI_NAMESPACES.basis;
 
     try {
-      const body = await this._soapCall(
-        SOAP_SERVICES.BusinessSystem,
-        'BusinessSystemQueryRequest',
-        namespace,
-        ''
-      );
+      const body = await this._soapCall(SOAP_SERVICES.BusinessSystem, 'BusinessSystemQueryRequest', namespace, '');
       return this._extractQueryResponse(body, 'BusinessSystemQueryResponse');
     } catch (e) {
       LOG.warn('Business System service error', { error: e.message });
@@ -1034,12 +1016,7 @@ class PIPoSoapClient {
     const namespace = XI_NAMESPACES.basis;
 
     try {
-      const body = await this._soapCall(
-        SOAP_SERVICES.Party,
-        'PartyQueryRequest',
-        namespace,
-        ''
-      );
+      const body = await this._soapCall(SOAP_SERVICES.Party, 'PartyQueryRequest', namespace, '');
       return this._extractQueryResponse(body, 'PartyQueryResponse');
     } catch (e) {
       LOG.warn('Party service error', { error: e.message });
@@ -1078,9 +1055,7 @@ class PIPoSoapClient {
     // Filter if needed
     let channels = channelSummaries;
     if (!includeInactive) {
-      channels = channels.filter(c =>
-        (c.Status || c.status || '').toLowerCase() !== 'inactive'
-      );
+      channels = channels.filter(c => (c.Status || c.status || '').toLowerCase() !== 'inactive');
     }
 
     // Limit to maxChannels

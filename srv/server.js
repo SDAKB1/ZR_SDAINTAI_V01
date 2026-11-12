@@ -16,7 +16,7 @@ const cds = require('@sap/cds');
 const LOG = cds.log('server');
 
 // Bootstrap sequence
-cds.on('bootstrap', async (app) => {
+cds.on('bootstrap', async app => {
   LOG.info('Server bootstrap started');
 
   // Health endpoint
@@ -37,7 +37,7 @@ cds.on('served', async () => {
   const queueConfig = cds.env.requires?.queue || {};
   LOG.info('CAP Event Queue active', {
     maxAttempts: queueConfig.maxAttempts || 10,
-    timeout: queueConfig.timeout || '1h'
+    timeout: queueConfig.timeout || '1h',
   });
 });
 

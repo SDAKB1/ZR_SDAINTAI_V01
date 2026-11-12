@@ -1,26 +1,38 @@
 {
-  "name": "AICONX-mtx",
+  "name": "sdaintai-mtx-sidecar",
+  "version": "1.0.0",
+  "description": "MTX Sidecar for SDAINTAI Multi-Tenant SaaS",
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
-    "@cap-js/hana": "^2",
     "@sap/cds": "^9",
     "@sap/cds-mtxs": "^3",
-    "@sap/xssec": "^4"
-  },
-  "devDependencies": {
+    "@cap-js/hana": "^2",
     "@cap-js/sqlite": "^2"
-  },
-  "engines": {
-    "node": ">=20"
   },
   "scripts": {
     "start": "cds-serve"
   },
   "cds": {
-    "profile": "mtx-sidecar",
     "requires": {
-      "html5-repo": true,
-      "portal": true,
-      "audit-log": true
+      "db": {
+        "kind": "sqlite",
+        "credentials": { "url": "/app/db-data/mtx.sqlite" }
+      },
+      "[production]": {
+        "db": "hana"
+      },
+      "cds.xt.SaasProvisioningService": true,
+      "cds.xt.DeploymentService": true,
+      "cds.xt.ModelProviderService": true
+    },
+    "mtx": {
+      "api": {
+        "provisioning": true,
+        "model": true,
+        "diagnose": true
+      }
     }
   }
 }

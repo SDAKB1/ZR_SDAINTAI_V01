@@ -236,9 +236,19 @@ async function getJobStatus(jobId, tenantId) {
   }
 
   const job = await db.run(
-    SELECT.one.from(DiscoveryJob)
-      .columns('ID', 'status', 'currentPhase', 'currentPhaseName', 'progressPercent',
-        'artifactsFound', 'errorsCount', 'startedAt', 'completedAt')
+    SELECT.one
+      .from(DiscoveryJob)
+      .columns(
+        'ID',
+        'status',
+        'currentPhase',
+        'currentPhaseName',
+        'progressPercent',
+        'artifactsFound',
+        'errorsCount',
+        'startedAt',
+        'completedAt'
+      )
       .where({ ID: jobId, tenantId })
   );
 
@@ -272,8 +282,16 @@ async function getActiveJobs(tenantId) {
 
   const jobs = await db.run(
     SELECT.from(DiscoveryJob)
-      .columns('ID', 'status', 'currentPhase', 'currentPhaseName', 'progressPercent',
-        'artifactsFound', 'startedAt', 'system_ID')
+      .columns(
+        'ID',
+        'status',
+        'currentPhase',
+        'currentPhaseName',
+        'progressPercent',
+        'artifactsFound',
+        'startedAt',
+        'system_ID'
+      )
       .where({ tenantId, status: { in: ['pending', 'running'] } })
       .orderBy('startedAt desc')
   );

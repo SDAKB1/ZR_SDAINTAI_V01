@@ -1,0 +1,43 @@
+{
+  "sap.app": {
+    "id": "com.sda.aiconx",
+    "type": "application",
+    "title": "SDAINT-AI Migration Cockpit",
+    "description": "PI/PO to Integration Suite Migration Platform",
+    "applicationVersion": {
+      "version": "1.0.0"
+    },
+    "dataSources": {
+      "discovery": {
+        "uri": "/odata/v4/discovery/",
+        "type": "OData",
+        "settings": {
+          "odataVersion": "4.0"
+        }
+      },
+      "brain": {
+        "uri": "/odata/v4/brain/",
+        "type": "OData",
+        "settings": {
+          "odataVersion": "4.0"
+        }
+      },
+      "aiconx": {
+        "uri": "/odata/v4/aiconx/",
+        "type": "OData",
+        "settings": {
+          "odataVersion": "4.0"
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.120.0"
+    },
+    "contentDensities": {
+      "compact": true,
+      "cozy": true
+    }
+  }
+}

@@ -1,25 +1,28 @@
+# =============================================================================
+# SDAINTAI Multi-Tenant SaaS - Docker Compose (Development Override)
+# Simplified setup for quick local development
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# =============================================================================
+
 services:
-  dev1:
+  sdaintai-srv:
     build:
       context: .
-      dockerfile: Dockerfile.webapp
-    container_name: sdaintai-docker1
-    ports:
-      - "8081:80"
+      dockerfile: Dockerfile
+    volumes:
+      # Mount source for hot-reload during development
+      - ./srv:/app/srv:ro
+      - ./db:/app/db:ro
+      - ./app:/app/app:ro
+      - db-data:/app/db-data
+    environment:
+      NODE_ENV: development
+      CDS_HOT_RELOAD: "true"
+      # Disable multitenancy for simple local testing
+      CDS_REQUIRES_MULTITENANCY: "false"
+    restart: "no"
 
-  dev2:
-    build:
-      context: .
-      dockerfile: Dockerfile.webapp
-    container_name: sdaintai-docker2
-    ports:
-      - "8082:80"
-
-  # Copy this block for each additional developer, bump the name/port:
-  # dev3:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.webapp
-  #   container_name: sdaintai-docker3
-  #   ports:
-  #     - "8083:80"
+  sdaintai-mtx:
+    # MTX sidecar not needed in simple dev mode
+    profiles:
+      - with-mtx

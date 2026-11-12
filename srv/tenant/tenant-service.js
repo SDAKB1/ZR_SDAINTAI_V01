@@ -1,296 +1,445 @@
-﻿'use strict';
-/**
- * Tenant Onboarding Service Implementation
- *
- * Implements the North Star multitenancy flow:
- * 1. Profile submission after subscription
- * 2. CAP native event queues for discovery triggering (cds.queued)
- * 3. Tenant readiness tracking
- *
- * Refactored to use CAP Native Event Queues instead of custom OutboxEvent.
- * Events are persisted in cds.outbox.Messages and processed asynchronously.
- */
-const cds = require('@sap/cds');
-const { v4: uuidv4 } = require('uuid');
+'use strict';
 
-// CDS logger for this module
-const LOG = cds.log('tenant');
+/**
+ * Tenant Service Implementation
+ *
+ * Implements tenant-isolated PI/PO system management and discovery triggering.
+ * All operations use cds.context.tenant for tenant isolation.
+ *
+ * Uses CAP Native Event Queues (cds.queued) for async discovery processing.
+ */
+
+const cds = require('@sap/cds');
+const { randomUUID } = require('node:crypto');
+
+const LOG = cds.log('tenant-service');
+
+// URL validation regex
+const URL_PATTERN = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+
+// Maximum string lengths for input validation
+const MAX_STRING_LENGTHS = {
+  systemName: 50,
+  description: 200,
+  virtualHost: 200,
+  locationId: 50,
+  techUser: 50,
+  techPassword: 100,
+  piVersion: 20,
+  protocol: 10,
+};
 
 module.exports = class TenantService extends cds.ApplicationService {
-
   async init() {
-    const { TenantProfile, DiscoveryRun } = this.entities;
+    const { PISystem, DiscoveryJob } = cds.entities('tenant');
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // EVENT HANDLER: DiscoveryRequested - Process discovery events from queue
+    // ACTION: savePipoSystem
     // ═══════════════════════════════════════════════════════════════════════════
-    this.on('DiscoveryRequested', async (req) => {
-      const { tenantId, runId, sourceMode, destinationName, triggeredBy } = req.data;
-      LOG.info('Processing DiscoveryRequested event from queue', { tenantId, runId, triggeredBy });
+    this.on('savePipoSystem', async req => {
+      const tenantId = cds.context?.tenant || req.user?.tenant || 'default';
+      const { systemConfig } = req.data;
+
+      LOG.info('savePipoSystem called', { tenantId, systemName: systemConfig?.systemName });
+
+      // Input validation
+      const validationError = this._validateSystemConfig(systemConfig, req);
+      if (validationError) return validationError;
+
+      const {
+        systemId,
+        systemName,
+        description,
+        virtualHost,
+        virtualPort = 443,
+        protocol = 'https',
+        locationId,
+        techUser,
+        techPassword,
+        piVersion = '7.50',
+      } = systemConfig;
 
       try {
-        // Import and call the discovery worker
-        const { processDiscoveryEvent } = require('../lib/discovery-worker');
-        await processDiscoveryEvent(req.data, { tenantId });
-        LOG.info('Discovery event processed successfully', { tenantId, runId });
-      } catch (error) {
-        LOG.error('Discovery event processing failed', { tenantId, runId, error: error.message });
-        throw error; // Let CAP event queue handle retry
-      }
-    });
+        // Check for existing system (update case)
+        if (systemId) {
+          const existing = await SELECT.one.from(PISystem).where({ ID: systemId, tenantId });
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // ACTION: submitProfile
-    // ═══════════════════════════════════════════════════════════════════════════
-    this.on('submitProfile', async (req) => {
-      const tenantId = req.tenant || cds.context.tenant;
-      const { organizationName, locale, sourceMode, destinationName } = req.data;
+          if (!existing) {
+            return req.error(404, 'PI/PO system not found');
+          }
 
-      LOG.info('Profile submission started', { tenantId, organizationName, sourceMode });
-
-      // Validate inputs
-      if (!organizationName) {
-        req.error(400, 'Organization name is required', 'organizationName');
-        return;
-      }
-
-      if (sourceMode && !['MOCK', 'LIVE'].includes(sourceMode)) {
-        req.error(400, 'Source mode must be MOCK or LIVE', 'sourceMode');
-        return;
-      }
-
-      if (sourceMode === 'LIVE' && !destinationName) {
-        req.error(400, 'Destination name is required for LIVE mode', 'destinationName');
-        return;
-      }
-
-      const db = await cds.connect.to('db');
-
-      try {
-        // Check for existing profile (idempotent update)
-        let profile = await db.run(
-          SELECT.one.from(TenantProfile).where({ tenantId })
-        );
-
-        const now = new Date().toISOString();
-
-        if (profile) {
-          // Update existing profile with optimistic concurrency
-          const newVersion = profile.profileVersion + 1;
-          await db.run(
-            UPDATE(TenantProfile)
-              .set({
-                organizationName,
-                locale: locale || 'en',
-                sourceMode: sourceMode || 'MOCK',
-                destinationName,
-                status: 'ACTIVE',
-                profileVersion: newVersion,
-                modifiedAt: now
-              })
-              .where({ tenantId, profileVersion: profile.profileVersion })
-          );
-          profile = await db.run(SELECT.one.from(TenantProfile).where({ tenantId }));
-          LOG.info('Profile updated', { tenantId, version: newVersion });
-        } else {
-          // Create new profile
-          profile = {
-            tenantId,
-            organizationName,
-            locale: locale || 'en',
-            sourceMode: sourceMode || 'MOCK',
-            destinationName,
-            status: 'ACTIVE',
-            profileVersion: 1,
-            createdAt: now,
-            modifiedAt: now
+          // Update existing system
+          const updateData = {
+            systemName,
+            description,
+            virtualHost,
+            virtualPort,
+            protocol,
+            locationId,
+            techUser,
+            piVersion,
+            status: 'configured',
           };
-          await db.run(INSERT.into(TenantProfile).entries(profile));
-          LOG.info('Profile created', { tenantId });
+
+          await UPDATE(PISystem).set(updateData).where({ ID: systemId, tenantId });
+
+          LOG.info('PI/PO system updated', { tenantId, systemId, systemName });
+
+          return await SELECT.one.from(PISystem).where({ ID: systemId });
         }
 
-        // Queue discovery event using CAP native event queues
-        // The event is persisted in the same transaction as profile changes
-        const queuedService = cds.queued(this);
-        await queuedService.emit('DiscoveryRequested', {
+        // Create new system
+        const newSystemId = randomUUID();
+
+        // Generate destination names
+        const destSuffix = `${systemName}_${tenantId}`.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+        const destinationDir = `PO_${destSuffix}_DIR`;
+        const destinationEsr = `PO_${destSuffix}_ESR`;
+
+        await INSERT.into(PISystem).entries({
+          ID: newSystemId,
           tenantId,
-          sourceMode: sourceMode || 'MOCK',
-          destinationName,
-          triggeredBy: 'profile_submission',
-          timestamp: now
+          systemName,
+          description,
+          virtualHost,
+          virtualPort,
+          protocol,
+          locationId,
+          destinationDir,
+          destinationEsr,
+          techUser,
+          piVersion,
+          status: 'configured',
+          totalArtifacts: 0,
         });
-        LOG.info('Discovery event queued via CAP native queue', { tenantId });
 
-        // Emit domain event for audit
-        await this._emitAuditEvent(tenantId, 'profile_submitted', {
-          organizationName,
-          sourceMode: sourceMode || 'MOCK'
-        });
+        LOG.info('PI/PO system created', { tenantId, systemId: newSystemId, systemName });
 
-        return profile;
+        // Create BTP destinations (best-effort, non-blocking)
+        // Store a reference to update system status after completion
+        this._createDestinationsAsync(tenantId, newSystemId, systemConfig, destinationDir, destinationEsr);
 
+        // Return with destination_pending status to indicate async creation is in progress
+        const result = await SELECT.one.from(PISystem).where({ ID: newSystemId });
+        return {
+          ...result,
+          destinationStatus: 'pending',
+          destinationMessage: 'BTP destinations are being created asynchronously. Test connection to verify.',
+        };
       } catch (error) {
-        LOG.error('Profile submission failed', { tenantId, error: error.message });
-        req.error(500, 'Failed to submit profile: ' + error.message);
+        LOG.error('Error saving PI/PO system', { tenantId, error: error.message, stack: error.stack });
+        return req.error(500, `Failed to save PI/PO system: ${error.message}`);
       }
     });
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // FUNCTION: getTenantReadiness
+    // ACTION: testConnection
     // ═══════════════════════════════════════════════════════════════════════════
-    this.on('getTenantReadiness', async (req) => {
-      const tenantId = req.tenant || cds.context.tenant;
-      LOG.debug('Checking tenant readiness', { tenantId });
+    this.on('testConnection', async req => {
+      const tenantId = cds.context?.tenant || req.user?.tenant || 'default';
+      const { systemId } = req.data;
 
-      const db = await cds.connect.to('db');
+      LOG.info('testConnection called', { tenantId, systemId });
 
-      const profile = await db.run(
-        SELECT.one.from(TenantProfile).where({ tenantId })
-      );
+      if (!systemId) {
+        return req.error(400, 'systemId is required');
+      }
 
-      const lastRun = await db.run(
-        SELECT.one.from(DiscoveryRun)
-          .where({ tenantId })
-          .orderBy({ completedAt: 'desc' })
-      );
+      const system = await SELECT.one.from(PISystem).where({ ID: systemId, tenantId });
 
-      const subscriptionStatus = profile ? 'SUBSCRIBED' : 'NOT_SUBSCRIBED';
-      const profileStatus = profile?.status || 'PROFILE_PENDING';
-      const discoveryStatus = lastRun?.status || 'NONE';
+      if (!system) {
+        return req.error(404, 'PI/PO system not found');
+      }
 
-      const isReady = profileStatus === 'ACTIVE' &&
-        ['COMPLETED', 'PARTIAL'].includes(discoveryStatus);
+      try {
+        // Import SOAP client
+        const { PIPoSoapClient } = require('../utils/pipoSoapClient');
 
-      return {
-        tenantId,
-        subscriptionStatus,
-        profileStatus,
-        discoveryStatus,
-        isReady,
-        lastDiscoveryRun: lastRun
-      };
+        // Create clients for DIR and ESR
+        const dirClient = new PIPoSoapClient(system.destinationDir);
+        const esrClient = new PIPoSoapClient(system.destinationEsr);
+
+        // Test connections
+        const dirTest = await dirClient.testConnection().catch(e => ({
+          success: false,
+          error: e.message,
+        }));
+        const esrTest = await esrClient.testConnection().catch(e => ({
+          success: false,
+          error: e.message,
+        }));
+
+        const success = dirTest.success !== false && esrTest.success !== false;
+
+        // Update system status
+        await UPDATE(PISystem)
+          .set({
+            status: success ? 'active' : 'error',
+            lastTestedAt: new Date(),
+            lastTestResult: JSON.stringify({ dirTest, esrTest }),
+          })
+          .where({ ID: systemId, tenantId });
+
+        LOG.info('Connection test completed', { tenantId, systemId, success });
+
+        return {
+          success,
+          dirStatus: dirTest.success !== false ? 'ok' : dirTest.error || 'failed',
+          esrStatus: esrTest.success !== false ? 'ok' : esrTest.error || 'failed',
+          message: success ? 'Connection successful' : 'Connection failed - check destination configuration',
+          piVersion: esrTest.version || system.piVersion,
+          swcvCount: esrTest.swcvCount || 0,
+          channelCount: dirTest.channelCount || 0,
+        };
+      } catch (error) {
+        LOG.error('Connection test failed', { tenantId, systemId, error: error.message });
+        return {
+          success: false,
+          dirStatus: 'error',
+          esrStatus: 'error',
+          message: `Connection test failed: ${error.message}`,
+          piVersion: system.piVersion,
+          swcvCount: 0,
+          channelCount: 0,
+        };
+      }
     });
 
     // ═══════════════════════════════════════════════════════════════════════════
     // ACTION: triggerDiscovery
     // ═══════════════════════════════════════════════════════════════════════════
-    this.on('triggerDiscovery', async (req) => {
-      const tenantId = req.tenant || cds.context.tenant;
-      LOG.info('Manual discovery trigger', { tenantId });
+    this.on('triggerDiscovery', async req => {
+      const tenantId = cds.context?.tenant || req.user?.tenant || 'default';
+      const { systemId } = req.data;
 
-      const db = await cds.connect.to('db');
+      LOG.info('triggerDiscovery called', { tenantId, systemId });
 
-      const profile = await db.run(
-        SELECT.one.from(TenantProfile).where({ tenantId })
-      );
-
-      if (!profile) {
-        req.error(404, 'Tenant profile not found. Please submit profile first.');
-        return;
+      if (!systemId) {
+        return req.error(400, 'systemId is required');
       }
 
-      const now = new Date().toISOString();
-      const runId = uuidv4();
-      const correlationId = 'disc-' + runId.substring(0, 8);
+      const system = await SELECT.one.from(PISystem).where({ ID: systemId, tenantId });
 
-      const discoveryRun = {
-        ID: runId,
-        tenantId,
-        status: 'PENDING',
-        sourceMode: profile.sourceMode,
-        correlationId,
-        startedAt: now
-      };
+      if (!system) {
+        return req.error(404, 'PI/PO system not found');
+      }
 
-      await db.run(INSERT.into(DiscoveryRun).entries(discoveryRun));
+      if (system.status === 'error' || system.status === 'disabled') {
+        return req.error(
+          400,
+          `Cannot trigger discovery for system with status: ${system.status}. Please test the connection first.`
+        );
+      }
 
-      // Queue event using CAP native event queues
-      const queuedService = cds.queued(this);
-      await queuedService.emit('DiscoveryRequested', {
-        tenantId,
-        runId,
-        sourceMode: profile.sourceMode,
-        destinationName: profile.destinationName,
-        triggeredBy: 'manual',
-        timestamp: now
-      });
+      try {
+        // Create DiscoveryJob record
+        const jobId = randomUUID();
+        const now = new Date();
+        const options = JSON.stringify({
+          includeInactive: false,
+          includeHistory: false,
+          artifactTypes: null, // All types
+        });
 
-      LOG.info('Discovery run created and event queued', { tenantId, runId, correlationId });
+        await INSERT.into(DiscoveryJob).entries({
+          ID: jobId,
+          tenantId,
+          system_ID: systemId,
+          status: 'pending',
+          startedAt: now,
+          startedBy: req.user?.id || 'system',
+          options,
+          progressLog: '[]',
+          errorLog: '[]',
+          totalPhases: 6,
+          currentPhase: 0,
+          currentPhaseName: 'Initializing',
+          progressPercent: 0,
+          artifactsFound: 0,
+          artifactsNew: 0,
+          artifactsUpdated: 0,
+          errorsCount: 0,
+          warningsCount: 0,
+        });
 
-      return discoveryRun;
+        // Queue discovery event via cds.queued() for async processing
+        const queuedService = cds.queued(this);
+        await queuedService.emit('DiscoveryRequested', {
+          tenantId,
+          systemId,
+          jobId,
+          options,
+          triggeredBy: req.user?.id || 'system',
+          timestamp: now.toISOString(),
+        });
+
+        LOG.info('Discovery triggered', { tenantId, systemId, jobId });
+
+        return await SELECT.one.from(DiscoveryJob).where({ ID: jobId });
+      } catch (error) {
+        LOG.error('Error triggering discovery', { tenantId, systemId, error: error.message, stack: error.stack });
+        return req.error(500, `Failed to trigger discovery: ${error.message}`);
+      }
     });
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // ACTION: switchSourceMode
+    // EVENT: DiscoveryRequested - Forward to DiscoveryService
     // ═══════════════════════════════════════════════════════════════════════════
-    this.on('switchSourceMode', async (req) => {
-      const tenantId = req.tenant || cds.context.tenant;
-      const { mode } = req.data;
+    this.on('DiscoveryRequested', async req => {
+      const { tenantId, systemId, jobId, options, triggeredBy } = req.data;
 
-      if (!['MOCK', 'LIVE'].includes(mode)) {
-        req.error(400, 'Mode must be MOCK or LIVE');
-        return;
-      }
+      LOG.info('Processing DiscoveryRequested event', { tenantId, systemId, jobId, triggeredBy });
 
-      LOG.info('Source mode switch requested', { tenantId, mode });
+      try {
+        // Connect to DiscoveryService and delegate processing
+        const discoveryService = await cds.connect.to('DiscoveryService');
 
-      const db = await cds.connect.to('db');
+        // Start discovery with the system ID
+        await discoveryService.send('startDiscovery', {
+          systemId,
+          ...JSON.parse(options || '{}'),
+        });
 
-      const profile = await db.run(
-        SELECT.one.from(TenantProfile).where({ tenantId })
-      );
+        LOG.info('Discovery event forwarded to DiscoveryService', { tenantId, jobId });
+      } catch (error) {
+        LOG.error('DiscoveryRequested event processing failed', {
+          tenantId,
+          jobId,
+          error: error.message,
+          stack: error.stack,
+        });
 
-      if (!profile) {
-        req.error(404, 'Tenant profile not found');
-        return;
-      }
-
-      if (mode === 'LIVE' && !profile.destinationName) {
-        req.error(400, 'Cannot switch to LIVE mode without a configured destination');
-        return;
-      }
-
-      const now = new Date().toISOString();
-      await db.run(
-        UPDATE(TenantProfile)
+        // Update job status to failed
+        const { DiscoveryJob } = cds.entities('tenant');
+        await UPDATE(DiscoveryJob)
           .set({
-            sourceMode: mode,
-            profileVersion: profile.profileVersion + 1,
-            modifiedAt: now
+            status: 'failed',
+            completedAt: new Date(),
+            errorLog: JSON.stringify([
+              {
+                ts: new Date().toISOString(),
+                phase: 'init',
+                type: 'error',
+                message: error.message,
+              },
+            ]),
           })
-          .where({ tenantId })
-      );
+          .where({ ID: jobId, tenantId });
 
-      await this._emitAuditEvent(tenantId, 'source_mode_switched', {
-        previousMode: profile.sourceMode,
-        newMode: mode
-      });
-
-      LOG.info('Source mode switched', { tenantId, from: profile.sourceMode, to: mode });
-
-      return await db.run(SELECT.one.from(TenantProfile).where({ tenantId }));
+        throw error; // Let CAP event queue handle retry
+      }
     });
 
     await super.init();
   }
 
   /**
-   * Emit audit event for DPP compliance
+   * Validate system configuration input
+   * @private
    */
-  async _emitAuditEvent(tenantId, action, details) {
-    try {
-      const auditLog = await cds.connect.to('audit-log');
-      if (auditLog) {
-        await auditLog.emit('tenant.action', {
-          tenant: tenantId,
-          action,
-          details,
-          timestamp: new Date().toISOString()
-        });
+  _validateSystemConfig(config, req) {
+    if (!config) {
+      return req.error(400, 'systemConfig is required');
+    }
+
+    // Required fields
+    const requiredFields = ['systemName', 'virtualHost', 'locationId', 'techUser'];
+    for (const field of requiredFields) {
+      if (!config[field]) {
+        return req.error(400, `${field} is required`, field);
       }
+    }
+
+    // New system requires password
+    if (!config.systemId && !config.techPassword) {
+      return req.error(400, 'techPassword is required for new systems', 'techPassword');
+    }
+
+    // String length validation
+    for (const [field, maxLength] of Object.entries(MAX_STRING_LENGTHS)) {
+      if (config[field] && typeof config[field] === 'string' && config[field].length > maxLength) {
+        return req.error(400, `${field} exceeds maximum length of ${maxLength} characters`, field);
+      }
+    }
+
+    // URL format validation
+    if (config.virtualHost && !URL_PATTERN.test(config.virtualHost)) {
+      return req.error(400, 'virtualHost must be a valid hostname', 'virtualHost');
+    }
+
+    // Port range validation
+    if (config.virtualPort !== undefined && config.virtualPort !== null) {
+      const port = Number(config.virtualPort);
+      if (isNaN(port) || port < 1 || port > 65535) {
+        return req.error(400, 'virtualPort must be between 1 and 65535', 'virtualPort');
+      }
+    }
+
+    // Protocol validation
+    if (config.protocol && !['http', 'https'].includes(config.protocol.toLowerCase())) {
+      return req.error(400, 'protocol must be http or https', 'protocol');
+    }
+
+    // PI version validation
+    if (config.piVersion && !['7.31', '7.40', '7.50'].includes(config.piVersion)) {
+      return req.error(400, 'piVersion must be 7.31, 7.40, or 7.50', 'piVersion');
+    }
+
+    return null; // No validation errors
+  }
+
+  /**
+   * Create BTP destinations asynchronously (best-effort)
+   * Updates system status on completion/failure
+   * @private
+   */
+  async _createDestinationsAsync(tenantId, systemId, config, destinationDir, destinationEsr) {
+    const { PISystem } = cds.entities('tenant');
+
+    try {
+      const destinationService = require('../utils/destinationService');
+
+      await destinationService.createPISystemDestinations({
+        tenantId,
+        systemName: config.systemName,
+        virtualHost: config.virtualHost,
+        virtualPort: config.virtualPort || 443,
+        protocol: config.protocol || 'https',
+        locationId: config.locationId,
+        techUser: config.techUser,
+        techPassword: config.techPassword,
+      });
+
+      LOG.info('BTP destinations created', { tenantId, systemId, destinationDir, destinationEsr });
+
+      // Update system to indicate destinations are ready
+      await UPDATE(PISystem)
+        .set({
+          status: 'configured',
+          lastTestedAt: null,
+          lastTestResult: JSON.stringify({ destinationsCreated: true }),
+        })
+        .where({ ID: systemId, tenantId });
     } catch (error) {
-      // Non-critical, log and continue
-      LOG.warn('Audit event emission failed', { tenantId, action, error: error.message });
+      LOG.warn('BTP destination creation failed (manual creation required)', {
+        tenantId,
+        systemId,
+        destinationDir,
+        destinationEsr,
+        error: error.message,
+      });
+
+      // Update system status to indicate destination creation failed
+      await UPDATE(PISystem)
+        .set({
+          status: 'destination_pending',
+          lastTestResult: JSON.stringify({
+            destinationsCreated: false,
+            error: error.message,
+            message: 'Manual destination creation required in BTP cockpit',
+          }),
+        })
+        .where({ ID: systemId, tenantId });
     }
   }
 };
