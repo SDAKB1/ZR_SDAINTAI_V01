@@ -92,19 +92,23 @@ function sanitizeOutput(value, env) {
 }
 
 function endpointResult(endpoint, raw, env) {
+  const toolError = record(raw) && raw.isError === true;
   try {
-    const result = decodeResult(raw);
+    // A registered endpoint tool returns its bounded JSON diagnostic even when
+    // isError is true. Project only safe failure metadata; never trust its body
+    // or allow a successful inner payload to override the error envelope.
+    const result = decodeResult(toolError ? { ...raw, isError: false } : raw);
     const allowed = ['ok', 'success', 'successful', 'available', 'reachable', 'metadata-only'];
-    if (!record(result) || !allowed.includes(result.status) || result.isError || result.success === false ||
+    if (toolError || !record(result) || !allowed.includes(result.status) || result.isError || result.success === false ||
         result.ok === false || result.httpStatus >= 400 ||
         (Array.isArray(result.errors) ? result.errors.length :
           record(result.errors) ? Object.keys(result.errors).length : Boolean(result.errors))) {
       const status = ['unavailable', 'unsupported', 'needs_parameters'].includes(result?.status) ? result.status : 'failed';
-      return endpointFailure(endpoint, status, record(result) ? result : {});
+      return endpointFailure(endpoint, status, record(result) ? result : {}, toolError ? 'mcp' : 'source');
     }
     return { ...sanitizeOutput(result, env), tool: endpoint.tool, path: endpoint.path,
       category: endpoint.category, kind: endpoint.kind };
-  } catch { return endpointFailure(endpoint); }
+  } catch { return endpointFailure(endpoint, 'failed', {}, toolError ? 'mcp' : 'source'); }
 }
 
 async function readParametersFile(path) {

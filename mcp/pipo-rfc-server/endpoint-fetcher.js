@@ -474,10 +474,8 @@ function createEndpointFetcher({ executeHttpRequest, buildPipoAuthHeaders }) {
       result.warnings.push('Read requires a structured identifier: a string or flat string object.');
       return result;
     }
-    const statusParams = new URLSearchParams({ action: 'status' });
-    for (const key of ['party', 'service', 'channel']) {
-      if (params[key] !== undefined) statusParams.set(key, params[key]);
-    }
+    const statusParams = new URLSearchParams({ party: params.party ?? '*',
+      service: params.service ?? '*', channel: params.channel ?? '*', action: 'status' });
     const channelUrl = `${descriptor.path}?${statusParams}`;
     const context = readContext(params);
     const repositoryReadUrl = descriptor.kind === 'read' && descriptor.path === '/rep/read/ext' &&
@@ -493,6 +491,7 @@ function createEndpointFetcher({ executeHttpRequest, buildPipoAuthHeaders }) {
       if (result.status === 'failed') result.status = 'unsupported';
       // Allow only fixed paths and the exact parameter URLs computed above.
       const allowed = url === descriptor.path || descriptor.wsdlPaths?.includes(url) ||
+        (descriptor.kind === 'diagnostic' && url === descriptor.probePath) ||
         (descriptor.kind === 'soap' && descriptor.wsdlPaths?.some((path) => path.slice(0, -5) === url)) ||
         (descriptor.path === '/AdapterFramework/ChannelAdminServlet' && url === channelUrl) ||
         (repositoryReadUrl !== null && url === repositoryReadUrl);
@@ -606,7 +605,7 @@ function createEndpointFetcher({ executeHttpRequest, buildPipoAuthHeaders }) {
       }
       const simple = descriptor.kind === 'simple-query' && params.mode === 'query';
       const url = descriptor.path === '/AdapterFramework/ChannelAdminServlet'
-        ? channelUrl : descriptor.path;
+        ? channelUrl : descriptor.probePath || descriptor.path;
       const response = await request(url, simple ? 'post' : 'get', simple ? simpleQueryBody() : undefined,
         simple ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {});
       if (!response) return result;
@@ -622,6 +621,11 @@ function createEndpointFetcher({ executeHttpRequest, buildPipoAuthHeaders }) {
       } else if (params.mode !== 'metadata') {
         result.status = 'needs_parameters';
         result.warnings.push('Protocol response only; no verified query body or extractable records.');
+      }
+      if (descriptor.path === '/CPACache') {
+        result.warnings.push('CPA Cache monitor probe only; Display content POST form fields are unverified, so no content request was sent.');
+      } else if (descriptor.path === '/mdt') {
+        result.warnings.push('Message Display Tool entry-page probe only; no message search or payload request was sent.');
       }
       return result;
     } catch (error) {

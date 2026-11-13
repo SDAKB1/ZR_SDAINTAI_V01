@@ -121,6 +121,57 @@ test('MCP tool errors fail instead of returning an apparent success', async (t) 
   await assert.rejects(fetchPipo({ env }), /Tool get_pi8_status failed/);
 });
 
+test('MCP error envelopes preserve only safe endpoint diagnostics and cannot report success', () => {
+  const endpoint = ENDPOINTS.find(e => e.tool === 'fetch_pi8_message_diagnostics');
+  for (const httpStatus of [401, 403, 503]) {
+    const payload = { status: 'failed', httpStatus, failureLayer: 'source', failureCode: 'SOAP_FAULT',
+      path: 'synthetic-private-path', response: { body: 'synthetic-private-body' },
+      headers: { authorization: 'synthetic-private-header' }, artifacts: [{ definition: 'synthetic-private-definition' }],
+      warnings: ['synthetic-private-warning'] };
+    for (const envelope of [
+      { isError: true, content: [{ type: 'text', text: JSON.stringify(payload) }] },
+      { isError: true, structuredContent: payload }
+    ]) {
+      const output = endpointResult(endpoint, envelope, {});
+      assert.equal(output.status, 'failed');
+      assert.equal(output.httpStatus, httpStatus);
+      assert.equal(output.failureLayer, 'source');
+      assert.equal(output.failureCode, 'SOAP_FAULT');
+      assert.equal(output.path, '/mdt');
+      assert.deepEqual(output.artifacts, []);
+      assert.deepEqual(output.response, { format: 'omitted', body: null });
+      assert.doesNotMatch(JSON.stringify(output), /synthetic-private/);
+    }
+  }
+  const needs = endpointResult(endpoint, { isError: true,
+    structuredContent: { status: 'needs_parameters', httpStatus: 200, failureLayer: 'source' } }, {});
+  assert.equal(needs.status, 'needs_parameters');
+  assert.equal(needs.httpStatus, 200);
+  for (const payload of [{ status: 'ok', httpStatus: 200, artifacts: [{ name: 'synthetic-private-artifact' }] },
+    { status: 'failed', httpStatus: 'synthetic-private-status', failureLayer: 'synthetic-private-layer' }]) {
+    const output = endpointResult(endpoint, { isError: true, structuredContent: payload }, {});
+    assert.equal(output.status, 'failed');
+    assert.equal(output.failureLayer, 'mcp');
+    assert.deepEqual(output.artifacts, []);
+    assert.doesNotMatch(JSON.stringify(output), /synthetic-private/);
+  }
+});
+
+test('discovery reports source 403 from the real MCP error-envelope shape', async t => {
+  const endpoint = ENDPOINTS.find(e => e.tool === 'fetch_pi8_cpa_cache');
+  const { env } = await fixture(t, { toolNames: [endpoint.tool], resultFor: () => ({ isError: true,
+    content: [{ type: 'text', text: JSON.stringify({ status: 'failed', httpStatus: 403, failureLayer: 'source',
+      response: { body: 'synthetic-private-body' }, artifacts: [] }) }] }) });
+  const output = await fetchPipo({ env, tool: endpoint.tool });
+  const result = output.discovery.endpoints[0];
+  assert.equal(result.status, 'failed');
+  assert.equal(result.httpStatus, 403);
+  assert.equal(result.diagnostic.code, 'FORBIDDEN');
+  assert.equal(result.diagnostic.layer, 'source');
+  assert.equal(result.diagnostic.roleAssessment.effectivePermissionsVerified, false);
+  assert.doesNotMatch(JSON.stringify(output), /synthetic-private-body/);
+});
+
 test('REST accepts a base URL or MCP URL and never sends Basic Auth', async (t) => {
   const { env, calls } = await fixture(t);
   for (const url of [env.PIPO_MCP_URL, env.PIPO_MCP_URL.replace(/mcp$/, '')]) {

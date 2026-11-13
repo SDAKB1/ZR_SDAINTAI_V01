@@ -79,6 +79,16 @@ unsupported restrictions still prevent a data request. WSDL access alone does no
 Additional query pages are fetched only when parsed pagination information supports progress; gaps record incomplete enumeration.
 Requests are read-only: no edits, activation, channel start/stop, CPA refresh or BPM execution.
 
+Monitoring uses fixed GETs: Channel Admin sends `party`, `service`, and `channel` selectors (default `*`)
+with `action=status`; MDT probes `/mdt/index.jsp`; CPA Cache probes `/CPACache/monitor.jsp`.
+The public tool names and registry paths are unchanged. Automatic redirects and HTML form submission remain disabled.
+MDT and CPA Cache UI access is not message/cache extraction. The observed CPA Display operation is a POST,
+but its form fields are not yet verified, so the tool does not send that POST or claim to export cache contents.
+Runtime channel states such as `ERROR` are snapshot data, not HTTP request failures.
+Redeploy/restart the changed MCP server before a fresh discovery; bypass or force-refresh any CAP-cached results.
+The CLI retains only safe numeric HTTP statuses and known failure codes from endpoint-tool error envelopes;
+the error flag still prevents success, and raw failure bodies/headers are always omitted.
+
 ### Reuse an existing PowerShell catalog
 
 Run `node --env-file=.env fetch-pipo.js --export --input-file=pipo-discovery.json`.

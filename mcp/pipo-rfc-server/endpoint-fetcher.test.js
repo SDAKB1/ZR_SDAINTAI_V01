@@ -136,6 +136,9 @@ test('registry contains exactly the 23 fixed paths and stable unique tool names'
   assert.equal(getEndpoint('https://example.invalid/mdt'), undefined);
   assert.equal(getEndpoint('/CPACache?refresh=true'), undefined);
   assert.equal(getEndpoint('/IntegratedConfiguration750InService').entity, 'IntegratedConfiguration');
+  assert.deepEqual(ENDPOINTS.filter(entry => entry.probePath).map(entry => [entry.path, entry.probePath]), [
+    ['/CPACache', '/CPACache/monitor.jsp'], ['/mdt', '/mdt/index.jsp']
+  ]);
   const source = readFileSync(join(__dirname, 'pipo-endpoints.js'), 'utf8');
   assert.doesNotMatch(source, /require\s*\(/); // Registry remains importable without server dependencies.
 });
@@ -629,8 +632,11 @@ test('opaque ESR adapter Attributes cannot leak through strings, namespaced text
   }
 });
 
-test('diagnostics are bare GET snapshots and ChannelAdmin cannot start/stop/refresh', async () => {
-  for (const path of ['/CPACache', '/mdt', '/AdapterFramework/ChannelAdminServlet']) {
+test('diagnostics use fixed GET entry pages and complete read-only channel selectors', async () => {
+  for (const [path, url] of [
+    ['/CPACache', '/CPACache/monitor.jsp'], ['/mdt', '/mdt/index.jsp'],
+    ['/AdapterFramework/ChannelAdminServlet', '/AdapterFramework/ChannelAdminServlet?party=*&service=*&channel=*&action=status']
+  ]) {
     const { fetch, calls } = fixture([reply('<Status><State>Available</State></Status>')]);
     const output = await fetch(path);
     assert.equal(output.status, 'metadata-only');
@@ -639,13 +645,91 @@ test('diagnostics are bare GET snapshots and ChannelAdmin cannot start/stop/refr
     assert.equal(output.artifacts[0].metadataOnly, true);
     assert.equal(output.actualCount, undefined);
     assert.equal(calls[0].request.method, 'get');
-    assert.equal(calls[0].request.url, path + (path.includes('ChannelAdmin') ? '?action=status' : ''));
+    assert.equal(calls[0].request.url, url);
   }
   const { fetch, calls } = fixture([reply('<Status/>')]);
   await fetch('/AdapterFramework/ChannelAdminServlet', { channel: 'Example&action=stop' });
   const query = new URLSearchParams(calls[0].request.url.split('?')[1]);
   assert.deepEqual(query.getAll('action'), ['status']);
   assert.equal(query.get('channel'), 'Example&action=stop');
+});
+
+test('channel status preserves explicit selectors and runtime ERROR is not an HTTP failure', async () => {
+  const { fetch, calls } = fixture([reply('<ChannelStatusResult><Channels><Channel>' +
+    '<ChannelState>ERROR</ChannelState></Channel></Channels></ChannelStatusResult>')]);
+  const output = await fetch('/AdapterFramework/ChannelAdminServlet', {
+    mode: 'metadata', party: '', service: 'Component&One', channel: 'Channel One'
+  });
+  const query = new URLSearchParams(calls[0].request.url.split('?')[1]);
+  assert.deepEqual(Object.fromEntries(query), { party: '', service: 'Component&One', channel: 'Channel One', action: 'status' });
+  assert.equal(output.status, 'metadata-only');
+  assert.equal(output.httpStatus, 200);
+  assert.equal(output.failureCode, undefined);
+  assert.equal(output.artifacts[0].definition.ChannelStatusResult.Channels.Channel.ChannelState, 'ERROR');
+});
+
+test('monitoring HTML pages remain probes and never submit forms or retain raw content', async () => {
+  for (const [path, expectedUrl, warning] of [
+    ['/CPACache', '/CPACache/monitor.jsp', /Display content POST form fields are unverified/],
+    ['/mdt', '/mdt/index.jsp', /no message search or payload request/]
+  ]) {
+    const html = '<html><body><form method="post" action="/CPACache/refresh">' +
+      '<input type="hidden" name="csrf" value="synthetic-private-hidden">' +
+      '<button>Display CPA Cache Content</button></form><script>"synthetic-private-script"</script></body></html>';
+    const { fetch, calls } = fixture([reply(html, 200, 'text/html')]);
+    const output = await fetch(path, { mode: 'metadata' });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].request.method, 'get');
+    assert.equal(calls[0].request.url, expectedUrl);
+    assert.equal(calls[0].request.data, undefined);
+    assert.equal(calls[0].request.maxRedirects, 0);
+    assert.equal(output.status, 'metadata-only');
+    assert.equal(output.httpStatus, 200);
+    assert.equal(output.response.format, 'html-summary');
+    assert.equal(output.actualCount, undefined);
+    assert.deepEqual(output.artifacts, []);
+    assert.match(output.warnings.join(' '), warning);
+    assert.doesNotMatch(JSON.stringify(output), /synthetic-private|<form|<script/);
+  }
+});
+
+test('registered monitoring tools execute corrected requests without accepting arbitrary paths or POST bodies', async () => {
+  const registered = new Map();
+  const calls = [];
+  const source = readFileSync(join(__dirname, 'server.js'), 'utf8');
+  const start = source.indexOf('function buildMcpServer()');
+  const end = source.indexOf('// --- HTTP wiring', start);
+  runInNewContext(source.slice(start, end) + '\nbuildMcpServer();', {
+    McpServer: class {
+      tool() {}
+      registerTool(name, config, handler) { registered.set(name, { config, handler }); }
+    },
+    z, ENDPOINTS, endpointSchema, createEndpointFetcher,
+    buildPipoAuthHeaders: () => ({}),
+    executeHttpRequest: async (destination, request) => {
+      calls.push({ destination, request });
+      return request.url.includes('ChannelAdminServlet') ? reply('<ChannelStatusResult><Channels/></ChannelStatusResult>') :
+        reply('<html><body>Monitoring entry page</body></html>', 200, 'text/html');
+    }
+  });
+  for (const tool of ['fetch_pi8_channel_admin', 'fetch_pi8_cpa_cache', 'fetch_pi8_message_diagnostics']) {
+    const { config, handler } = registered.get(tool);
+    for (const invalid of [{ probePath: '/evil' }, { url: '/CPACache/refresh' },
+      { method: 'post' }, { data: 'action=refresh' }, { action: 'stop' }]) {
+      assert.equal(config.inputSchema.safeParse(invalid).success, false);
+    }
+    const result = await handler(config.inputSchema.parse({ mode: 'metadata' }));
+    assert.equal(result.isError, false);
+    const decoded = JSON.parse(result.content[0].text);
+    assert.equal(decoded.status, 'metadata-only');
+    assert.equal(decoded.httpStatus, 200);
+    assert.equal(decoded.metadataOnly, true);
+  }
+  assert.deepEqual(calls.map(({ destination, request }) => [destination.destinationName, request.method, request.url]), [
+    ['PO_PJ2_DIR', 'get', '/AdapterFramework/ChannelAdminServlet?party=*&service=*&channel=*&action=status'],
+    ['PO_PJ2_DIR', 'get', '/CPACache/monitor.jsp'],
+    ['PO_PJ2_DIR', 'get', '/mdt/index.jsp']
+  ]);
 });
 
 test('response redaction covers namespaced fields, adapter Name/Value, attributes and embedded markup', () => {

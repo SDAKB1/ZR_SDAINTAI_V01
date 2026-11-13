@@ -161,11 +161,11 @@ descriptors drive requests; callers cannot supply URLs or SOAP operations.
 
 | Path | Tool suffix | Read-only behavior |
 | --- | --- | --- |
-| `/AdapterFramework/ChannelAdminServlet` | `channel_admin` | GET `action=status`; optional party/service/channel |
+| `/AdapterFramework/ChannelAdminServlet` | `channel_admin` | GET `action=status`; party/service/channel default to `*`, explicit selectors preserved |
 | `/AlertRuleInService` | `alert_rule` | WSDL-gated Query/Read |
 | `/BPMFacadeBeanImplService` | `bpm_facade` | WSDL metadata only |
 | `/BusinessComponentInService` | `business_component` | WSDL-gated Query/Read |
-| `/CPACache` | `cpa_cache` | Bare GET snapshot; no refresh |
+| `/CPACache` | `cpa_cache` | Fixed GET `/CPACache/monitor.jsp` UI probe; Display content POST form fields remain unverified; no refresh |
 | `/CommunicationChannelInService` | `communication_channel` | WSDL-gated Query/Read |
 | `/ConfigurationScenarioInService` | `configuration_scenario` | WSDL-gated Query/Read |
 | `/IntegratedConfiguration750InService` | `integrated_configuration_750` | WSDL-gated IntegratedConfiguration Query/Read |
@@ -179,7 +179,7 @@ descriptors drive requests; callers cannot supply URLs or SOAP operations.
 | `/ValueMappingInService` | `value_mapping` | WSDL-gated Query/Read |
 | `/dir/query/ext` | `directory_query_ext` | GET protocol probe |
 | `/dir/read/ext` | `directory_read_ext` | GET protocol probe; no invented ESR protocol |
-| `/mdt` | `message_diagnostics` | Bare GET diagnostic probe |
+| `/mdt` | `message_diagnostics` | Fixed GET `/mdt/index.jsp` UI probe; no message search or payload request |
 | `/rep/query/ext` | `repository_query_ext` | GET probe; parse recognized SimpleQuery results only |
 | `/rep/query/int` | `repository_query_int` | GET probe; parse recognized SimpleQuery results only |
 | `/rep/read/ext` | `repository_read_ext` | GET metadata or encoded identifier/version-context read |
