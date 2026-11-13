@@ -11,34 +11,34 @@ This document defines the complete extraction strategy for migrating from SAP PI
 | Property | Value |
 |----------|-------|
 | System Name | PJ2 |
-| Host | pj2sda.consultsda.com |
+| Host | `<your-pipo-host>` |
 | HTTP Port | 50000 |
 | HTTPS Port | 50001 |
-| Version | 7.50.3301.395104.20160316114215 |
-| Installation Number | 002117313 |
+| Version | 7.50.x |
+| Installation Number | `<installation-number>` |
 
 ### Access URLs
 
 | Tool | URL | Purpose |
 |------|-----|---------|
-| **ESR** | `http://pj2sda.consultsda.com:50000/rep/start` | Design objects (interfaces, mappings) |
-| **Integration Directory** | `http://pj2sda.consultsda.com:50000/dir/start` | Configuration objects (ICOs, channels) |
-| **SLD** | `http://pj2sda.consultsda.com:50000/sld` | System landscape |
-| **Message Monitoring** | `http://pj2sda.consultsda.com:50000/mdt` | Message tracking |
-| **Channel Admin** | `http://pj2sda.consultsda.com:50000/AdapterFramework/ChannelAdminServlet` | Channel status |
-| **NWA** | `http://pj2sda.consultsda.com:50000/nwa` | Administration |
-| **ESR SimpleQuery** | `http://pj2sda.consultsda.com:50000/rep/support/SimpleQuery` | ESR API queries |
-| **Directory SimpleQuery** | `http://pj2sda.consultsda.com:50000/dir/support/SimpleQuery` | Directory API queries |
+| **ESR** | `http://<your-pipo-host>:50000/rep/start` | Design objects (interfaces, mappings) |
+| **Integration Directory** | `http://<your-pipo-host>:50000/dir/start` | Configuration objects (ICOs, channels) |
+| **SLD** | `http://<your-pipo-host>:50000/sld` | System landscape |
+| **Message Monitoring** | `http://<your-pipo-host>:50000/mdt` | Message tracking |
+| **Channel Admin** | `http://<your-pipo-host>:50000/AdapterFramework/ChannelAdminServlet` | Channel status |
+| **NWA** | `http://<your-pipo-host>:50000/nwa` | Administration |
+| **ESR SimpleQuery** | `http://<your-pipo-host>:50000/rep/support/SimpleQuery` | ESR API queries |
+| **Directory SimpleQuery** | `http://<your-pipo-host>:50000/dir/support/SimpleQuery` | Directory API queries |
 
 ### Credentials
 
-- **User**: SDAINT
-- **Password**: Password@1
+- **User**: `<service-user>`
+- **Password**: `<service-password>`
 
 ### Jump Server Access
 
-- Jump Server IP: `34.63.161.151`
-- PI/PO Internal IP: `10.1.1.23`
+- Jump Server IP: `<jump-server-ip>`
+- PI/PO Internal IP: `<pipo-internal-ip>`
 - Use MobaXterm: SSH to jump server, then access PI/PO
 
 ---
@@ -49,17 +49,17 @@ This document defines the complete extraction strategy for migrating from SAP PI
 
 | Name | Host | Version | Type |
 |------|------|---------|------|
-| EXT_SYSTEM_DEV on extsystemdev | extsystemdev | - | Third Party |
-| PJ2 on pj2sda | pj2sda | 7.50.3301.395104.20160316114215 | AS Java |
-| SDA on s4sda | s4sda | - | AS ABAP |
+| EXT_SYSTEM_DEV on extsystemdev | `<external-system-host>` | - | Third Party |
+| PJ2 on pj2 | `<pipo-host>` | 7.50.x | AS Java |
+| SDA on s4 | `<s4-host>` | - | AS ABAP |
 
 ### Business Systems (3 systems)
 
 | Name | Technical System | Client |
 |------|------------------|--------|
 | EXT_SYSTEM_DEV | EXT_SYSTEM_DEV on extsystemdev | - |
-| INTEGRATION_ENGINE_JAVA_PJ2 | PJ2 on pj2sda | - |
-| S4_S4D_300_DEV | SDA on s4sda | 300 of SDA |
+| INTEGRATION_ENGINE_JAVA_PJ2 | PJ2 on pj2 | - |
+| S4_S4D_300_DEV | SDA on s4 | 300 of SDA |
 
 ### Software Catalog
 
@@ -203,7 +203,7 @@ This document defines the complete extraction strategy for migrating from SAP PI
 ## Message Prioritization Rules
 
 ### URL
-`http://pj2sda.consultsda.com:50000/mdt` → **Message Prioritization** tab
+`http://<your-pipo-host>:50000/mdt` → **Message Prioritization** tab
 
 ### Purpose
 Prioritization rules define processing order for messages based on sender/receiver/interface combinations. These rules affect runtime behavior and should be documented for migration.
@@ -237,9 +237,9 @@ If prioritization rules exist, they need to be replicated in Cloud Integration u
 ### Authentication
 ```bash
 # Base credentials
-USER="SDAINT"
-PASS="Password@1"
-HOST="http://pj2sda.consultsda.com:50000"
+USER="<service-user>"
+PASS="<service-password>"
+HOST="http://<your-pipo-host>:50000"
 ```
 
 ### ESR SimpleQuery (POST)
@@ -371,9 +371,9 @@ curl -X GET "$HOST/AdapterFramework/ChannelAdminServlet?action=status" \
 #!/bin/bash
 # Full PI/PO landscape extraction
 
-USER="SDAINT"
-PASS="Password@1"
-HOST="http://pj2sda.consultsda.com:50000"
+USER="<service-user>"
+PASS="<service-password>"
+HOST="http://<your-pipo-host>:50000"
 OUTPUT_DIR="./pipo_extract_$(date +%Y%m%d)"
 
 mkdir -p "$OUTPUT_DIR"/{esr,dir,sld,monitoring}

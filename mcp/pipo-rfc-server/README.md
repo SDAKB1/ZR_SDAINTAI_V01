@@ -35,7 +35,7 @@ Browser (btp_cockpit.html)              MCP client (Claude Desktop/Code)
                        │  Cloud Connector destinations PO_PJ2_ESR / PO_PJ2_DIR
                        │  (ProxyType OnPremise)
                        ▼
-          Cloud Connector  →  SAP PI/PO system PJ2 (nwjava.consultsda.com:443)
+          Cloud Connector  →  SAP PI/PO system PJ2 (<virtual-host>:443)
 ```
 
 **Nothing here is an environment variable.** PI8 reachability doesn't go
@@ -43,7 +43,7 @@ through `cf set-env` — it goes through two things that must already exist in
 your BTP subaccount:
 
 1. A Cloud Connector mapping the virtual destinations `PO_PJ2_ESR` and
-   `PO_PJ2_DIR` to the real PJ2 host (`nwjava.consultsda.com:443`),
+   `PO_PJ2_DIR` to the real PJ2 host (`<virtual-host>:443`),
    ProxyType `OnPremise`.
 2. A destination-service instance that exposes those two destinations,
    bound to this app. `manifest.yml` binds the existing
@@ -59,7 +59,7 @@ destination chain broken) counts as unreachable.
 
 ## The real ESR object enumeration
 
-The Cloud Connector's Resources ACL for `nwjava.consultsda.com:443`
+The Cloud Connector's Resources ACL for `<virtual-host>:443`
 allowlists `/rep/support/SimpleQuery` — the classic ESR "SimpleQuery"
 servlet. `/api/pi8/objects` POSTs it directly with a fixed set of object
 types (Service Interface, Operation Mapping, Message Mapping, Communication
