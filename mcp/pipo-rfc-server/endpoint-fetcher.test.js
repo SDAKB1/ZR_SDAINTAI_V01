@@ -42,7 +42,8 @@ function wsdl(entity = 'BusinessComponent', options = {}) {
       <x:element name="${entity}QueryRequest"><x:complexType><x:sequence>
         <x:element name="Query" type="x:string" minOccurs="0" maxOccurs="unbounded"/>
       </x:sequence></x:complexType></x:element>
-      <x:element name="${entity}ReadRequest"><x:complexType><x:sequence>${idShape}${options.readFields || ''}</x:sequence></x:complexType></x:element>
+      ${options.requestType ? `<x:element name="${entity}ReadRequest" type="${options.requestType}"/>` :
+        `<x:element name="${entity}ReadRequest"><x:complexType><x:sequence>${idShape}${options.readFields || ''}</x:sequence></x:complexType></x:element>`}
     </x:schema></w:types>
     <w:message name="Q"><w:part name="parameters" element="b:${entity}QueryRequest"/></w:message>
     <w:message name="R"><w:part name="parameters" element="b:${entity}ReadRequest"/></w:message>
@@ -56,6 +57,37 @@ function wsdl(entity = 'BusinessComponent', options = {}) {
     </w:binding><w:service name="S"><w:port name="p" binding="t:B">
       <soap:address location="http://169.254.169.254/never-fetch"/>
     </w:port></w:service></w:definitions>`;
+}
+
+// Minimal synthetic contracts matching the local type structure of the supplied
+// Directory WSDLs. No uploaded object data or service addresses are retained.
+function directoryWsdl(entity) {
+  const fields = entity === 'CommunicationChannel'
+    ? [['PartyID', 'CommunicationPartyID', true], ['ComponentID', 'CommunicationComponentComponentID'],
+      ['ChannelID', 'CommunicationChannelChannelID']]
+    : [['SenderPartyID', 'CommunicationPartyID', true], ['SenderComponentID', 'CommunicationComponentComponentID'],
+      ['InterfaceName', 'DesignObjectName'], ['InterfaceNamespace', 'DesignObjectNamespace'],
+      ['ReceiverPartyID', 'CommunicationPartyID', true], ['ReceiverComponentID', 'CommunicationComponentComponentID', true]];
+  const idType = entity === 'CommunicationChannel' ? 'CommunicationChannelID' : 'MessageHeaderID';
+  return wsdl(entity, {
+    requestType: `${entity}ReadIn`,
+    types: `<x:simpleType name="ReadContextCode"><x:restriction base="x:token">
+      <x:enumeration value="User"/><x:enumeration value="Active"/>
+    </x:restriction></x:simpleType>` + [
+      ['CommunicationPartyID', 'token', 60], ['CommunicationComponentComponentID', 'token', 60],
+      ['CommunicationChannelChannelID', 'token', 60], ['DesignObjectName', 'string', 120],
+      ['DesignObjectNamespace', 'token', 255]
+    ].map(([name, base, max]) => `<x:simpleType name="${name}"><x:restriction base="x:${base}">
+      <x:maxLength value="${max}"/>
+    </x:restriction></x:simpleType>`).join('') + `
+    <x:complexType name="${idType}"><x:sequence>${fields.map(([name, type, optional]) =>
+      `<x:element name="${name}" type="${type}"${optional ? ' minOccurs="0"' : ''}/>`).join('')}
+    </x:sequence></x:complexType>
+    <x:complexType name="${entity}ReadIn"><x:sequence>
+      <x:element default="User" minOccurs="0" name="ReadContext" type="ReadContextCode"/>
+      <x:element maxOccurs="unbounded" minOccurs="0" name="${entity}ID" type="${idType}"/>
+    </x:sequence></x:complexType>`
+  }).replace('elementFormDefault="qualified"', `xmlns="${BASIS}"`);
 }
 
 function envelope(body) {
@@ -246,6 +278,92 @@ test('SOAP read supports direct string ReadContext and omits unknown optional fi
   assert.equal(calls.length, 2);
   assert.match(calls[1].request.data, /<b:ReadContext>Active<\/b:ReadContext>/);
   assert.doesNotMatch(calls[1].request.data, /Unknown/);
+});
+
+test('Directory Reads support named token restrictions and unqualified composite IDs', async () => {
+  for (const [entity, path, identifier, expectedID] of [
+    ['CommunicationChannel', '/CommunicationChannelInService',
+      { ChannelID: 'Channel&One', ComponentID: 'Component', PartyID: '' },
+      '<CommunicationChannelID><PartyID/><ComponentID>Component</ComponentID><ChannelID>Channel&amp;One</ChannelID></CommunicationChannelID>'],
+    ['IntegratedConfiguration', '/IntegratedConfigurationInService',
+      { ReceiverComponentID: '', InterfaceNamespace: 'urn:offline', InterfaceName: 'Interface',
+        SenderComponentID: 'Sender', SenderPartyID: '', ReceiverPartyID: '' },
+      '<IntegratedConfigurationID><SenderPartyID/><SenderComponentID>Sender</SenderComponentID><InterfaceName>Interface</InterfaceName><InterfaceNamespace>urn:offline</InterfaceNamespace><ReceiverPartyID/><ReceiverComponentID/></IntegratedConfigurationID>']
+  ]) {
+    const data = envelope(`<b:${entity}ReadResponse><${entity}><Description>Definition</Description></${entity}></b:${entity}ReadResponse>`);
+    const { fetch, calls } = fixture([reply(directoryWsdl(entity)), reply(data)]);
+    const output = await fetch(path, { mode: 'read', identifier });
+    assert.equal(output.status, 'ok');
+    assert.equal(output.actualCount, 1);
+    assert.equal(output.artifacts[0].hasFullDefinition, true);
+    assert.deepEqual(calls.map(({ request }) => [request.method, request.url]), [
+      ['get', `${path}/${path.slice(1).replace(/Service$/, '')}ImplBean?wsdl`],
+      ['post', `${path}/${path.slice(1).replace(/Service$/, '')}ImplBean`]
+    ]);
+    assert.ok(calls[1].request.data.includes(`<b:${entity}ReadRequest><ReadContext>Active</ReadContext>${expectedID}</b:${entity}ReadRequest>`));
+    assert.equal(calls[1].request.headers.SOAPAction, ACTION);
+    assert.doesNotMatch(calls[1].request.data, />User<|169\.254/);
+  }
+});
+
+test('Directory string length limits count Unicode characters and allow optional ID omission', async () => {
+  const { fetch, calls } = fixture([reply(directoryWsdl('IntegratedConfiguration')),
+    reply(envelope('<b:IntegratedConfigurationReadResponse/>'))]);
+  const output = await fetch('/IntegratedConfigurationInService', { mode: 'read', identifier: {
+    SenderComponentID: 'S'.repeat(60), InterfaceName: '😀'.repeat(120), InterfaceNamespace: 'n'.repeat(255)
+  } });
+  assert.equal(output.status, 'ok');
+  assert.equal(calls.length, 2);
+  assert.doesNotMatch(calls[1].request.data, /SenderPartyID|ReceiverPartyID|ReceiverComponentID/);
+});
+
+test('Directory Reads reject overlong, incomplete, unknown and noncanonical token IDs without posting', async () => {
+  const identifier = { PartyID: '', ComponentID: 'Component', ChannelID: 'Channel' };
+  for (const invalid of [
+    { ...identifier, PartyID: 'p'.repeat(61) },
+    { ...identifier, ComponentID: 'c'.repeat(61) },
+    { ...identifier, ChannelID: 'c'.repeat(61) },
+    { ...identifier, ComponentID: ' Component' },
+    { ...identifier, ComponentID: 'Component ' },
+    { ...identifier, ComponentID: 'Two  Words' },
+    { ...identifier, ComponentID: 'Two\tWords' },
+    { ...identifier, Unknown: 'value' },
+    { PartyID: '', ChannelID: 'Channel' }
+  ]) {
+    const { fetch, calls } = fixture([reply(directoryWsdl('CommunicationChannel'))]);
+    const output = await fetch('/CommunicationChannelInService', { mode: 'read', identifier: invalid });
+    assert.equal(output.status, 'needs_parameters');
+    assert.equal(calls.length, 1);
+  }
+  for (const field of ['InterfaceName', 'InterfaceNamespace']) {
+    const { fetch, calls } = fixture([reply(directoryWsdl('IntegratedConfiguration'))]);
+    assert.equal((await fetch('/IntegratedConfigurationInService', { mode: 'read', identifier: {
+      SenderComponentID: 'Sender', InterfaceName: 'Interface', InterfaceNamespace: 'urn:offline',
+      [field]: 'x'.repeat(field === 'InterfaceName' ? 121 : 256)
+    } })).status, 'needs_parameters');
+    assert.equal(calls.length, 1);
+  }
+});
+
+test('Directory Reads fail closed on unsupported or invalid facets and ReadContext values', async () => {
+  const contract = directoryWsdl('CommunicationChannel');
+  for (const invalid of [
+    contract.replace('<x:maxLength value="60"/>', '<x:pattern value=".*"/>'),
+    contract.replace('<x:maxLength value="60"/>', '<x:maxLength value="-1"/>'),
+    contract.replace('<x:maxLength value="60"/>', '<x:maxLength value="invalid"/>'),
+    contract.replace('<x:maxLength value="60"/>', '<x:maxLength value="9007199254740992"/>'),
+    contract.replace('<x:maxLength value="60"/>', '<x:maxLength value="60"/><x:maxLength value="50"/>'),
+    contract.replace('<x:maxLength value="60"/>', '<b:maxLength value="60"/>'),
+    contract.replace('<x:enumeration value="Active"/>', ''),
+    contract.replace('<x:enumeration value="Active"/>', '<x:enumeration value="Active"/><x:maxLength value="5"/>'),
+    contract.replace('type="ReadContextCode"', 'type="t:ReadContextCode"')
+  ]) {
+    const { fetch, calls } = fixture([reply(invalid)]);
+    assert.equal((await fetch('/CommunicationChannelInService', { mode: 'read', identifier: {
+      PartyID: '', ComponentID: 'Component', ChannelID: 'Channel'
+    } })).status, 'needs_parameters');
+    assert.equal(calls.length, 1);
+  }
 });
 
 test('SOAP read never posts unsupported ReadContext or unknown required fields', async () => {

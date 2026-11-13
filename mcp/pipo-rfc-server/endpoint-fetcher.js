@@ -212,14 +212,21 @@ function schemaFields(element, schema, depth = 0) {
     if (restrictions.length !== 1) return null;
     const restriction = restrictions[0];
     const base = qname(restriction.node['@_base'], restriction.ns);
-    if (base.uri !== XSD || base.name !== 'string' || text(restriction.node).trim() ||
+    if (base.uri !== XSD || !['string', 'token'].includes(base.name) || text(restriction.node).trim() ||
       entries(restriction.node).some(([key]) => !key.startsWith('@_') &&
-        !['enumeration', 'annotation', '#text'].includes(local(key)))) return null;
+        !['enumeration', 'maxLength', 'annotation', '#text'].includes(local(key)))) return null;
     const values = namedChildren(restriction.node, 'enumeration', XSD, restriction.ns)
       .map((item) => item.node['@_value']);
     if (values.length !== child(restriction.node, 'enumeration').length ||
       values.some((value) => typeof value !== 'string')) return null;
-    return { type: 'string', values: values.length ? values : null };
+    const limits = namedChildren(restriction.node, 'maxLength', XSD, restriction.ns);
+    if (limits.length !== child(restriction.node, 'maxLength').length || limits.length > 1) return null;
+    const limit = limits[0]?.node['@_value'];
+    if (limits.length && (typeof limit !== 'string' || !/^[0-9]+$/.test(limit) ||
+      !Number.isSafeInteger(Number(limit)))) return null;
+    return { type: 'string', values: values.length ? values : null,
+      ...(base.name === 'token' ? { whiteSpace: 'collapse' } : {}),
+      ...(limits.length ? { maxLength: Number(limit) } : {}) };
   }
   if (text(complex).trim() || entries(complex).some(([key]) => !key.startsWith('@_') &&
     !['sequence', 'all', 'annotation', 'attribute', '#text'].includes(local(key)))) return null;
@@ -289,7 +296,10 @@ function emptyFields(fields) {
 
 function matchesString(shape, value) {
   return typeof value === 'string' && (shape === 'string' ||
-    (shape?.type === 'string' && (shape.values === null || shape.values.includes(value))));
+    (shape?.type === 'string' && (shape.values === null || shape.values.includes(value)) &&
+      (shape.maxLength === undefined || Array.from(value).length <= shape.maxLength) &&
+      // Reject rather than silently changing an identifier under xsd:token rules.
+      (shape.whiteSpace !== 'collapse' || value === value.replace(/[\t\n\r ]+/g, ' ').replace(/^ | $/g, ''))));
 }
 
 function buildSoapRequest(contract, descriptor, params) {
@@ -302,7 +312,7 @@ function buildSoapRequest(contract, descriptor, params) {
     const context = contract.fields.find((field) => field.name === 'ReadContext');
     if (!idField || contract.fields.some((field) => field !== idField && field !== context && field.required)) return null;
     if (context && context.shape !== 'string' &&
-      !(context.shape?.type === 'string' && context.shape.values?.includes('Active'))) return null;
+      !(context.shape?.values?.includes('Active') && matchesString(context.shape, 'Active'))) return null;
     const id = params.identifier;
     let value;
     if (matchesString(idField.shape, id)) value = id;

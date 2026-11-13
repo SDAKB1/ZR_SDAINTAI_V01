@@ -72,6 +72,10 @@ Run `node --env-file=.env fetch-pipo.js --export`.
 
 The exporter follows enumerated identifiers through verified Directory SOAP Query/Read contracts and the fixed ESR read tool.
 It does not invent identifiers from display names or infer unsupported protocols. Unknown/imported WSDL contracts remain metadata-only.
+Directory Reads support local `xsd:string`/`xsd:token` restrictions with enumerations and `maxLength`.
+They explicitly send the verified `Active` ReadContext and preserve declared element qualification and field order.
+Overlong identifiers and token values that would change under XML whitespace collapsing are rejected rather than rewritten;
+unsupported restrictions still prevent a data request. WSDL access alone does not prove that an object Read succeeds.
 Additional query pages are fetched only when parsed pagination information supports progress; gaps record incomplete enumeration.
 Requests are read-only: no edits, activation, channel start/stop, CPA refresh or BPM execution.
 
