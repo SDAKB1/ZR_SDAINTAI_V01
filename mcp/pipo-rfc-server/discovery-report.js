@@ -123,6 +123,7 @@ function summarizeDiscovery(output = {}) {
   const discovery = record(data.discovery) ? data.discovery : {};
   const objects = record(data.objects) ? data.objects : {};
   const endpoints = Array.isArray(discovery.endpoints) ? discovery.endpoints.filter(record) : [];
+  const pages = Array.isArray(discovery.pages) ? discovery.pages.filter(record) : [];
   const summary = { source: 'none', ...emptyCounts(),
     reportedTotal: reportedCount(objects.totalCount),
     reportedReturned: reportedCount(objects.returned),
@@ -156,7 +157,7 @@ function summarizeDiscovery(output = {}) {
   } else {
     // Endpoint-local records are a fallback, not another copy of the aggregate.
     summary.source = endpoints.some((endpoint) => Array.isArray(endpoint.artifacts)) ? 'endpoints' : 'none';
-    entries = endpoints.flatMap((endpoint) => (Array.isArray(endpoint.artifacts) ? endpoint.artifacts : [])
+    entries = [...endpoints, ...pages].flatMap((endpoint) => (Array.isArray(endpoint.artifacts) ? endpoint.artifacts : [])
       .map((item) => ({ item, group: category(endpoint.category), metadataOnly: endpoint.metadataOnly === true })));
   }
 

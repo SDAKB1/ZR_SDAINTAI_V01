@@ -19,6 +19,9 @@ mta_archives/
 # Other
 .DS_Store
 .env
+discovery-runs/
+pipo-discovery.json
+roles.local.json
 
 # @cap-js/cds-typer
 @cds-models

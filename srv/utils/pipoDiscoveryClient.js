@@ -41,6 +41,30 @@ function createDiscoveryClient({ getRegistry, createConnection } = {}) {
         const authorization = 'Basic ' + Buffer.from(`${config.username}:${config.password}`).toString('base64');
         const client = new Client({ name: 'pipo-cap-discovery', version: '1.0.0' });
         const transport = new StreamableHTTPClientTransport(new URL(config.url), {
+            fetch: async (url, init) => {
+                const response = await fetch(url, { ...init, redirect: 'error' });
+                if (!response.ok) {
+                    try { await response.body?.cancel(); } catch { /* Preserve the HTTP status even if cancellation fails. */ }
+                    const error = new Error('MCP request failed; response omitted.');
+                    error.httpStatus = response.status;
+                    throw error;
+                }
+                if (Number(response.headers.get('content-length')) > MAX_PAYLOAD_BYTES) {
+                    try { await response.body?.cancel(); } catch { /* Never expose response cancellation errors. */ }
+                    throw new Error('MCP response exceeds the payload limit; response omitted.');
+                }
+                if (!response.body) return response;
+                // Bound JSON and long-lived SSE streams before the SDK decodes them.
+                let bytes = 0;
+                const body = response.body.pipeThrough(new TransformStream({
+                    transform(chunk, controller) {
+                        bytes += chunk.byteLength;
+                        if (bytes > MAX_PAYLOAD_BYTES) throw new Error('MCP response exceeds the payload limit; response omitted.');
+                        controller.enqueue(chunk);
+                    }
+                }));
+                return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+            },
             requestInit: { headers: { Authorization: authorization }, redirect: 'error' }
         });
         return { client, transport };
@@ -56,7 +80,7 @@ function createDiscoveryClient({ getRegistry, createConnection } = {}) {
             const options = { timeout: 60000 };
             await client.connect(transport, options);
             const envelope = await client.callTool({ name: endpoint.tool, arguments: parameters }, undefined, options);
-            if (envelope.isError) return endpointFailure(tool, endpoint);
+            if (envelope.isError) return endpointFailure(tool, endpoint, { failureLayer: 'mcp' });
             let result = envelope.structuredContent;
             if (!result) {
                 const content = envelope.content?.filter(item => item.type === 'text');
@@ -71,8 +95,8 @@ function createDiscoveryClient({ getRegistry, createConnection } = {}) {
             }
             // Do not return SDK/HTTP/SOAP error bodies to CAP callers or logs.
             return isCacheableResponse(result) ? result : endpointFailure(tool, endpoint, result);
-        } catch {
-            return endpointFailure(tool, endpoint);
+        } catch (error) {
+            return endpointFailure(tool, endpoint, { failureLayer: 'mcp', httpStatus: error?.httpStatus });
         } finally {
             try { await connection?.client.close(); } catch { /* Never expose SDK close errors. */ }
         }

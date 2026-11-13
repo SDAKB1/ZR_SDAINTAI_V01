@@ -2,6 +2,8 @@
 
 const { summarizeDiscovery, logSummary } = require('./discovery-report');
 const { ENDPOINTS } = require('./pipo-endpoints');
+const { exportDefinitions } = require('./definition-export');
+const { diagnose, validateRoles, projectDiagnostic } = require('./discovery-diagnostics');
 const { createCapCacheClient, checkedUrl, boundedFetch, readJson,
   MAX_PAYLOAD_BYTES, REQUEST_TIMEOUT } = require('./cap-cache-client');
 
@@ -26,9 +28,12 @@ function defaultParameters(endpoint) {
   return parameters;
 }
 
-function endpointFailure(endpoint, status = 'failed') {
+function endpointFailure(endpoint, status = 'failed', raw = {}, layer = 'source') {
   return { tool: endpoint.tool, path: endpoint.path, category: endpoint.category, kind: endpoint.kind,
     status, metadataOnly: true, artifacts: [], response: { format: 'omitted', body: null },
+    ...(Number.isInteger(raw.httpStatus) && raw.httpStatus >= 100 && raw.httpStatus <= 599 ? { httpStatus: raw.httpStatus } : {}),
+    failureLayer: ['source', 'mcp', 'cap', 'client'].includes(raw.failureLayer) ? raw.failureLayer : layer,
+    ...(['SOAP_FAULT', 'AUTH_REQUIRED'].includes(raw.failureCode) ? { failureCode: raw.failureCode } : {}),
     warnings: ['Discovery endpoint unavailable or failed; sensitive details omitted.'] };
 }
 
@@ -91,7 +96,7 @@ function endpointResult(endpoint, raw, env) {
         (Array.isArray(result.errors) ? result.errors.length :
           record(result.errors) ? Object.keys(result.errors).length : Boolean(result.errors))) {
       const status = ['unavailable', 'unsupported', 'needs_parameters'].includes(result?.status) ? result.status : 'failed';
-      return endpointFailure(endpoint, status);
+      return endpointFailure(endpoint, status, record(result) ? result : {});
     }
     return { ...sanitizeOutput(result, env), tool: endpoint.tool, path: endpoint.path,
       category: endpoint.category, kind: endpoint.kind };
@@ -120,7 +125,8 @@ async function readParametersFile(path) {
   finally { if (file) await file.close().catch(() => {}); }
 }
 
-function validateOptions({ rest, toolsOnly, cache, ttlSeconds, forceRefresh, tool, parametersFile, parameters }) {
+function validateOptions({ rest, toolsOnly, cache, ttlSeconds, forceRefresh, tool, parametersFile, parameters,
+  export: fullExport, inputFile, maxReads, maxPages }) {
   if (rest && toolsOnly) throw new Error('--tools-only requires MCP mode.');
   if (cache && (rest || toolsOnly)) throw new Error('--cache cannot be combined with --rest or --tools-only.');
   if (!cache && (ttlSeconds !== undefined || forceRefresh)) throw new Error('TTL and force refresh require --cache.');
@@ -139,25 +145,91 @@ function validateOptions({ rest, toolsOnly, cache, ttlSeconds, forceRefresh, too
   if (parameters !== undefined && (!record(parameters) || Buffer.byteLength(JSON.stringify(parameters)) > MAX_PARAMETERS_BYTES)) {
     throw new Error('Parameters must be a JSON object of at most 64 KB.');
   }
+  if (fullExport && (rest || toolsOnly || tool)) throw new Error('--export requires full discovery or --cache.');
+  if (inputFile !== undefined && !fullExport) throw new Error('--input-file requires --export.');
+  for (const [name, value, limit] of [['maxReads', maxReads, 100000], ['maxPages', maxPages, 1000]]) {
+    if (value !== undefined && (!Number.isInteger(value) || value < 0 || value > limit)) throw new Error(`Invalid ${name} limit.`);
+  }
+}
+
+async function readDiscoveryFile(path) {
+  const fs = require('node:fs/promises');
+  let file;
+  try {
+    file = await fs.open(path, 'r');
+    const stat = await file.stat();
+    const limit = 100 * 1024 * 1024;
+    if (!stat.isFile() || stat.size > limit) throw new Error();
+    const bytes = Buffer.alloc(Math.min(stat.size + 1, limit + 1));
+    let length = 0;
+    while (length < bytes.length) {
+      const next = await file.read(bytes, length, bytes.length - length, null);
+      if (!next.bytesRead) break;
+      length += next.bytesRead;
+    }
+    if (length > stat.size || length > limit) throw new Error();
+    const utf16 = bytes[0] === 255 && bytes[1] === 254;
+    const data = JSON.parse(bytes.subarray(0, length).toString(utf16 ? 'utf16le' : 'utf8').replace(/^\uFEFF/, ''));
+    if (!Array.isArray(data.discovery?.endpoints)) throw new Error();
+    return data.discovery.endpoints;
+  } catch { throw new Error('Input must be a discovery JSON file (UTF-8 or UTF-16 LE) of at most 100 MB.'); }
+  finally { await file?.close().catch(() => {}); }
 }
 
 async function fetchPipo({ rest = false, toolsOnly = false, cache = false, ttlSeconds,
-  forceRefresh = false, tool, parametersFile, parameters, env = process.env } = {}) {
-  validateOptions({ rest, toolsOnly, cache, ttlSeconds, forceRefresh, tool, parametersFile, parameters });
+  forceRefresh = false, tool, parametersFile, parameters, export: fullExport = false, inputFile,
+  rolesFile, roles = {}, maxReads = 5000, maxPages = 100, event = async () => {}, env = process.env } = {}) {
+  validateOptions({ rest, toolsOnly, cache, ttlSeconds, forceRefresh, tool, parametersFile, parameters,
+    export: fullExport, inputFile, maxReads, maxPages });
+  roles = validateRoles(rolesFile ? await readParametersFile(rolesFile) : roles);
+  const seed = inputFile ? await readDiscoveryFile(inputFile) : undefined;
   const overrides = parametersFile === undefined ? parameters : await readParametersFile(parametersFile);
   const endpoints = tool === undefined ? ENDPOINTS : ENDPOINTS.filter((endpoint) => endpoint.tool === tool);
   const argsFor = (endpoint) => ({ ...defaultParameters(endpoint), ...overrides });
+  const decorate = (endpoint, result) => ({ ...result, diagnostic: diagnose(endpoint, result, { roles }) });
+  const initialResults = () => seed?.flatMap(raw => {
+    const endpoint = ENDPOINTS.find(item => item.tool === raw?.tool);
+    return endpoint ? [decorate(endpoint, endpointResult(endpoint, raw, env))] : [];
+  });
+  async function complete(output, fetchEndpoint) {
+    if (fullExport) output.export = await exportDefinitions({ discovery: output.discovery, fetchEndpoint, event, maxReads, maxPages });
+    return sanitizeOutput(output, env);
+  }
+  async function observed(endpoint, work) {
+    const start = Date.now();
+    let result;
+    try { result = decorate(endpoint, await work()); }
+    catch (error) {
+      const failure = endpointFailure(endpoint, 'failed', error, cache ? 'cap' : 'mcp');
+      await event({ event: 'endpoint-result', phase: 'discovery', tool: endpoint.tool,
+        status: 'failed', httpStatus: failure.httpStatus, diagnostic: diagnose(endpoint, failure, { roles }),
+        durationMs: Date.now() - start });
+      error.abortRun = true;
+      throw error;
+    }
+    await event({ event: 'endpoint-result', phase: 'discovery', tool: endpoint.tool,
+      status: result.status, httpStatus: result.httpStatus, diagnostic: result.diagnostic,
+      durationMs: Date.now() - start, counts: { artifacts: result.artifacts?.length || 0,
+        hits: result.cache?.hit ? 1 : 0, misses: result.cache && !result.cache.hit ? 1 : 0 } });
+    return result;
+  }
 
   // CAP owns authentication, persistence and MCP access in cache mode. Do not
   // even require the MCP SDK, inspect its configuration or discover its tools.
   if (cache) {
-    const fetchEndpoint = createCapCacheClient(env);
-    const results = [];
-    for (const endpoint of endpoints) {
-      const envelope = await fetchEndpoint(endpoint.tool, argsFor(endpoint), { ttlSeconds, forceRefresh });
-      results.push({ ...endpointResult(endpoint, envelope.result, env), cache: envelope.cache });
-    }
-    return { mode: 'cache', discovery: { endpoints: results } };
+    const capFetch = createCapCacheClient(env);
+    const fetchEndpoint = (endpoint, parameters) => observed(endpoint, async () => {
+      try {
+        const envelope = await capFetch(endpoint.tool, parameters, { ttlSeconds, forceRefresh });
+        return { ...endpointResult(endpoint, envelope.result, env), cache: envelope.cache };
+      } catch (error) {
+        error.failureLayer = 'cap';
+        throw error;
+      }
+    });
+    const results = initialResults() || [];
+    if (!seed) for (const endpoint of endpoints) results.push(await fetchEndpoint(endpoint, argsFor(endpoint)));
+    return complete({ mode: 'cache', discovery: { endpoints: results } }, fetchEndpoint);
   }
   const url = serverUrl(env.PIPO_MCP_URL);
 
@@ -184,7 +256,17 @@ async function fetchPipo({ rest = false, toolsOnly = false, cache = false, ttlSe
   const authorization = 'Basic ' + Buffer.from(`${env.PIPO_MCP_USER}:${env.PIPO_MCP_PASS}`).toString('base64');
   const client = new Client({ name: 'pipo-fetch', version: '1.0.0' });
   const transport = new StreamableHTTPClientTransport(url, {
-    fetch: boundedFetch,
+    fetch: async (url, init) => {
+      const response = await boundedFetch(url, init);
+      if (!response.ok) {
+        await response.body?.cancel();
+        const error = new Error('MCP HTTP request failed; response omitted.');
+        error.httpStatus = response.status;
+        error.failureLayer = 'mcp';
+        throw error;
+      }
+      return response;
+    },
     requestInit: { headers: { Authorization: authorization }, redirect: 'error' }
   });
 
@@ -204,18 +286,19 @@ async function fetchPipo({ rest = false, toolsOnly = false, cache = false, ttlSe
     const output = { mode: 'mcp', tools };
     if (!toolsOnly) {
       const available = new Set(tools.map((entry) => entry.name));
-      output.discovery = { endpoints: [] };
-      for (const endpoint of endpoints) {
-        let result = endpointFailure(endpoint, 'unavailable');
+      const fetchEndpoint = (endpoint, parameters) => observed(endpoint, async () => {
+        let result = endpointFailure(endpoint, 'unavailable', {}, 'mcp');
         if (available.has(endpoint.tool)) {
           try {
-            const raw = await client.callTool({ name: endpoint.tool, arguments: argsFor(endpoint) }, undefined, REQUEST_OPTIONS);
+            const raw = await client.callTool({ name: endpoint.tool, arguments: parameters }, undefined, REQUEST_OPTIONS);
             result = endpointResult(endpoint, raw, env);
-          } catch { result = endpointFailure(endpoint); }
+          } catch (error) { result = endpointFailure(endpoint, 'failed', error, 'mcp'); }
         }
-        output.discovery.endpoints.push(result);
-      }
-      if (tool === undefined && !ENDPOINTS.some((endpoint) => available.has(endpoint.tool))) {
+        return result;
+      });
+      output.discovery = { endpoints: initialResults() || [] };
+      if (!seed) for (const endpoint of endpoints) output.discovery.endpoints.push(await fetchEndpoint(endpoint, argsFor(endpoint)));
+      if (!seed && tool === undefined && !ENDPOINTS.some((endpoint) => available.has(endpoint.tool))) {
         for (const [index, name] of READ_TOOLS.entries()) {
           if (!available.has(name)) throw new Error(`Required tool ${name} is unavailable.`);
           const result = await client.callTool({ name, arguments: {} }, undefined, REQUEST_OPTIONS);
@@ -223,6 +306,7 @@ async function fetchPipo({ rest = false, toolsOnly = false, cache = false, ttlSe
           output[index === 0 ? 'status' : 'objects'] = decodeResult(result);
         }
       }
+      return await complete(output, fetchEndpoint);
     }
     return sanitizeOutput(output, env);
   } finally {
@@ -241,9 +325,15 @@ function parseArgs(args) {
     else if (arg === '--tools-only') options.toolsOnly = true;
     else if (arg === '--cache') options.cache = true;
     else if (arg === '--force-refresh') options.forceRefresh = true;
+    else if (arg === '--export') options.export = true;
     else if (arg.startsWith('--ttl-seconds=') && /^[0-9]+$/.test(arg.slice(14))) options.ttlSeconds = Number(arg.slice(14));
     else if (arg.startsWith('--tool=') && arg.slice(7)) options.tool = arg.slice(7);
     else if (arg.startsWith('--parameters-file=') && arg.slice(18)) options.parametersFile = arg.slice(18);
+    else if (arg.startsWith('--input-file=') && arg.slice(13)) options.inputFile = arg.slice(13);
+    else if (arg.startsWith('--roles-file=') && arg.slice(13)) options.rolesFile = arg.slice(13);
+    else if (arg.startsWith('--output-dir=') && arg.slice(13)) options.outputDir = arg.slice(13);
+    else if (arg.startsWith('--max-reads=') && /^[0-9]+$/.test(arg.slice(12))) options.maxReads = Number(arg.slice(12));
+    else if (arg.startsWith('--max-pages=') && /^[0-9]+$/.test(arg.slice(12))) options.maxPages = Number(arg.slice(12));
     else throw new Error('Unknown or invalid argument. Use --help for usage.');
   }
   validateOptions({ forceRefresh: false, ...options });
@@ -261,24 +351,61 @@ async function main() {
       '--cache: authenticated CAP fetchEndpoint only; no direct MCP/SAP fallback.\n' +
       '--ttl-seconds=N (0..604800) and --force-refresh require --cache.\n' +
       '--tool: exact registry tool name; optional JSON object parameters file (64 KB maximum).\n' +
+      '--export: follow catalog identifiers with bounded, read-only definition requests.\n' +
+      '--input-file=PATH: reuse an existing discovery catalog with --export (UTF-8/UTF-16 LE).\n' +
+      '--roles-file=PATH: supplied destination-scoped UME role inventory; effective access is not verified.\n' +
+      '--max-reads=N (default 5000), --max-pages=N (default 100 extra query pages).\n' +
+      '--output-dir=PATH (default discovery-runs): unique UTC run folder with reports, logs and hashes.\n' +
       'MCP environment: PIPO_MCP_URL (optional), PIPO_MCP_USER, PIPO_MCP_PASS.\n' +
       'CAP environment: PIPO_CAP_URL, PIPO_CAP_TOKEN (Bearer), or PIPO_CAP_USER/PIPO_CAP_PASS (Basic).\n' +
       'URLs require HTTPS; HTTP is allowed only on localhost. Requests time out after 60 seconds.\n' +
       'Prints JSON (including summary counts) to stdout and count logs to stderr.');
     return;
   }
-  const output = await fetchPipo(parseArgs(args));
-  output.summary = summarizeDiscovery(output);
-  logSummary(output.summary, (message) => console.error(`[PIPO] ${message}`));
-  console.log(JSON.stringify(output, null, 2));
+  let options;
+  try { options = parseArgs(args); }
+  catch {
+    const failure = new Error('Invalid discovery arguments.');
+    failure.diagnostic = diagnose(null, { failureCode: 'INVALID_ARGUMENTS' }, { layer: 'client' });
+    throw failure;
+  }
+  const run = await require('./discovery-run').createRun({ outputDir: options.outputDir });
+  try {
+    await run.event({ event: 'run-start', phase: 'discovery', status: 'started' });
+    const output = await fetchPipo({ ...options, event: run.event });
+    output.summary = summarizeDiscovery(output);
+    await run.event({ event: 'run-finish', phase: 'complete', status: 'completed', counts: output.summary });
+    await run.finish(output);
+    logSummary(output.summary, (message) => console.error(`[PIPO] ${message}`));
+    if (output.export) {
+      const counts = output.export.coverage;
+      console.error(`[PIPO] Definition reads: ${counts.reads}; verified definitions: ${counts.verifiedDefinitions}; metadata-only: ${counts.metadataOnly}; failed: ${counts.failed}; skipped: ${counts.skippedReads}.`);
+      console.error('[PIPO] Migration readiness is not established; review export gaps in report.html.');
+    }
+    console.error(`[PIPO] Run reports: ${run.directory}`);
+    console.log(JSON.stringify(output, null, 2));
+  } catch (error) {
+    const diagnostic = diagnose(null, { status: 'failed', httpStatus: error.httpStatus, failureCode: error.failureCode },
+      { layer: error.failureLayer || (options.cache ? 'cap' : 'mcp') });
+    await run.event({ event: 'run-failed', phase: 'failed', status: 'failed', httpStatus: error.httpStatus,
+      diagnostic }).catch(() => {});
+    let reported = false;
+    await run.fail().then(() => { reported = true; }).catch(() => {});
+    if (reported) console.error(`[PIPO] Run reports: ${run.directory}`);
+    const failure = new Error('PIPO discovery failed.');
+    failure.diagnostic = diagnostic;
+    throw failure;
+  }
 }
 
 if (require.main === module) {
-  main().catch(() => {
+  main().catch((error) => {
     // SDK/network errors can include response bodies; never echo them or credentials.
-    console.error('PIPO fetch failed. Check arguments (--help), URL, credentials and server connectivity.');
+    const detail = projectDiagnostic(error?.diagnostic);
+    console.error('PIPO fetch failed. ' + (detail ? `${detail.code}: ${detail.reason} ${detail.remediation}` :
+      'Check arguments (--help), URL, credentials and server connectivity.'));
     process.exitCode = 1;
   });
 }
 
-module.exports = { fetchPipo, parseArgs, defaultParameters, decodeResult, readParametersFile, endpointResult };
+module.exports = { fetchPipo, parseArgs, defaultParameters, decodeResult, readParametersFile, readDiscoveryFile, endpointResult };

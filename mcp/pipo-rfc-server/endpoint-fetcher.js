@@ -6,6 +6,7 @@ const { ENDPOINTS, getEndpoint } = require('./pipo-endpoints');
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const TIMEOUT = 20000;
+const safeHttpStatus = (value) => Number.isInteger(value) && value >= 100 && value <= 599 ? value : undefined;
 const BASIS = 'http://sap.com/xi/BASIS';
 const SOAP = 'http://schemas.xmlsoap.org/soap/envelope/';
 const ACTION = 'http://sap.com/xi/WebService/soap1.1';
@@ -454,6 +455,11 @@ function createEndpointFetcher({ executeHttpRequest, buildPipoAuthHeaders }) {
       ? `/rep/read/ext?${new URLSearchParams({ method: 'PLAIN', TYPE: params.object_type,
         KEY: params.object_key, SWCGUID: params.swc_guid })}` : null;
     const request = async (url, method = 'get', data, headers = {}) => {
+      // Each attempt owns its status; a failed SOAP call must not inherit WSDL 200.
+      delete result.httpStatus;
+      delete result.failureLayer;
+      delete result.failureCode;
+      if (result.status === 'failed') result.status = 'unsupported';
       // Allow only fixed paths and the exact parameter URLs computed above.
       const allowed = url === descriptor.path || descriptor.wsdlPaths?.includes(url) ||
         (descriptor.kind === 'soap' && descriptor.wsdlPaths?.some((path) => path.slice(0, -5) === url)) ||
@@ -478,12 +484,16 @@ function createEndpointFetcher({ executeHttpRequest, buildPipoAuthHeaders }) {
           }, TIMEOUT);
         })]);
       } finally { clearTimeout(timer); }
-      result.httpStatus = http.status;
+      const httpStatus = safeHttpStatus(http.status);
+      if (httpStatus !== undefined) result.httpStatus = httpStatus;
       const parsed = parseResponse(http.data, http.headers?.['content-type'] || '');
       result.response = parsed.response;
       result.warnings.push(...parsed.warnings);
-      if (!Number.isInteger(http.status) || http.status < 200 || http.status >= 300 || parsed.login || parsed.fault) {
+      if (httpStatus === undefined || httpStatus < 200 || httpStatus >= 300 || parsed.login || parsed.fault) {
         result.status = 'failed';
+        result.failureLayer = 'source';
+        if (parsed.fault) result.failureCode = 'SOAP_FAULT';
+        else if (parsed.login) result.failureCode = 'AUTH_REQUIRED';
         result.artifacts = [];
         result.response = { format: 'omitted', body: null };
         result.warnings.push(parsed.fault ? 'SOAP fault received.' : parsed.login ? 'Login HTML is not a successful endpoint response.' : 'HTTP request did not succeed.');
@@ -583,7 +593,11 @@ function createEndpointFetcher({ executeHttpRequest, buildPipoAuthHeaders }) {
       return result;
     } catch (error) {
       // Do not serialize exceptions: SDK errors often contain auth/request config.
+      // Only numeric status fields are eligible; never retain error bodies/headers.
+      const httpStatus = safeHttpStatus(error?.response?.status) ?? safeHttpStatus(error?.status);
+      if (httpStatus !== undefined) result.httpStatus = httpStatus;
       result.status = 'failed';
+      result.failureLayer = 'source';
       result.metadataOnly = true;
       result.response = { format: 'omitted', body: null };
       result.artifacts = [];

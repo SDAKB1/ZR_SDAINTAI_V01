@@ -47,18 +47,29 @@ async function readJson(response) {
 }
 
 function createCapCacheClient(env) {
-  const url = checkedUrl(env.PIPO_CAP_URL, 'PIPO_CAP_URL');
+  function configurationError(code, message) {
+    const error = new Error(message);
+    error.failureCode = code;
+    error.failureLayer = 'cap';
+    return error;
+  }
+  if (!env.PIPO_CAP_URL) throw configurationError('CAP_URL_MISSING', 'Set PIPO_CAP_URL for --cache.');
+  let url;
+  try { url = checkedUrl(env.PIPO_CAP_URL, 'PIPO_CAP_URL'); }
+  catch { throw configurationError('CAP_URL_INVALID', 'Invalid PIPO_CAP_URL configuration.'); }
   const path = url.pathname.replace(/\/+$/, '');
   url.pathname = path.endsWith(CAP_ACTION) ? path :
     path.endsWith('/odata/v4/pipo-discovery') ? `${path}/fetchEndpoint` : `${path}${CAP_ACTION}`;
   let authorization;
   if (env.PIPO_CAP_TOKEN) {
-    if (!/^[A-Za-z0-9+/_=.~-]+$/.test(env.PIPO_CAP_TOKEN)) throw new Error('Invalid PIPO_CAP_TOKEN configuration.');
+    if (!/^[A-Za-z0-9+/_=.~-]+$/.test(env.PIPO_CAP_TOKEN)) {
+      throw configurationError('CAP_AUTH_INVALID', 'Invalid PIPO_CAP_TOKEN configuration.');
+    }
     authorization = `Bearer ${env.PIPO_CAP_TOKEN}`;
   } else if (env.PIPO_CAP_USER && env.PIPO_CAP_PASS) {
     authorization = 'Basic ' + Buffer.from(`${env.PIPO_CAP_USER}:${env.PIPO_CAP_PASS}`).toString('base64');
   } else {
-    throw new Error('Set PIPO_CAP_TOKEN or PIPO_CAP_USER and PIPO_CAP_PASS for --cache.');
+    throw configurationError('CAP_AUTH_MISSING', 'Set PIPO_CAP_TOKEN or PIPO_CAP_USER and PIPO_CAP_PASS for --cache.');
   }
   return async function fetchEndpoint(tool, parameters, { ttlSeconds, forceRefresh = false } = {}) {
     const response = await boundedFetch(url, {
@@ -69,7 +80,10 @@ function createCapCacheClient(env) {
     });
     if (!response.ok) {
       await response.body?.cancel();
-      throw new Error(`CAP discovery request failed (HTTP ${response.status}); no direct fallback is permitted.`);
+      const error = new Error(`CAP discovery request failed (HTTP ${response.status}); no direct fallback is permitted.`);
+      error.httpStatus = response.status;
+      error.failureLayer = 'cap';
+      throw error;
     }
     const envelope = await readJson(response);
     const cache = envelope?.cache;

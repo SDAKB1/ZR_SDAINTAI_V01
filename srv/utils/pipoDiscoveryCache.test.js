@@ -6,7 +6,7 @@ const { mkdtemp, rm } = require('node:fs/promises');
 const path = require('node:path');
 const {
     CacheError, MAX_PARAMETERS_BYTES, MAX_PAYLOAD_BYTES, canonicalize, parseParameters,
-    configuredTtl, resolveTtl, createCacheKey, createReadThroughCache, createCdsStore
+    configuredTtl, resolveTtl, createCacheKey, createReadThroughCache, createCdsStore, isCacheableResponse
 } = require('./pipoDiscoveryCache');
 
 const tool = 'fetch_pi8_repository_simple_query';
@@ -34,6 +34,16 @@ function fixture(options = {}) {
     });
     return { entries, counts, store, cache, advance: ms => { now += ms; } };
 }
+
+test('cacheability fails closed for excessive nesting and cycles without prior canonicalization', () => {
+    assert.equal(isCacheableResponse(success), true);
+    let nested = { errors: ['must not be missed'] };
+    for (let depth = 0; depth < 100; depth++) nested = { child: nested };
+    assert.equal(isCacheableResponse({ status: 'ok', nested }), false);
+    const cyclic = { status: 'ok' };
+    cyclic.self = cyclic;
+    assert.equal(isCacheableResponse(cyclic), false);
+});
 
 test('canonical parameters sort nested objects, preserve arrays and reject unsafe JSON', () => {
     assert.equal(canonicalize({ z: [{ b: 2, a: 1 }], a: true }), '{"a":true,"z":[{"a":1,"b":2}]}');

@@ -1,0 +1,10 @@
+.env
+.env.*
+node_modules/
+discovery-runs/
+pipo-discovery.json
+roles.local.json
+*.log
+*.jsonl
+*.test.js
+manifest.yml

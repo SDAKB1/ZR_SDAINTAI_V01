@@ -102,6 +102,8 @@ tools listed below:
 
 ### Small fetch/discovery script (Node.js 20+)
 
+For the end-to-end workflow (Node.js 22 recommended), see [Running discovery tools](../../docs/running-discovery-tools.md): export, saved catalogs, roles, reports, cache and safe redeployment prerequisites.
+
 From `mcp/pipo-rfc-server`, install the existing dependencies with `npm ci`.
 Put these client settings in a local, Git-ignored `.env` file:
 - `PIPO_MCP_URL`: your route (base URL or `/mcp` URL); defaults to the deployed route above.

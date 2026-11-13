@@ -135,6 +135,7 @@ function createCacheKey({ tool, parameters, source, context, parserVersion = PAR
 }
 
 function hasFailure(value, depth = 0) {
+    if (depth > 64) return true; // Reject uninspectable payloads, including cycles, even without prior canonicalization.
     if (!value || typeof value !== 'object') return false;
     return Object.entries(value).some(([key, item]) => {
         const name = key.toLowerCase().replace(/[^a-z]/g, '');
@@ -181,6 +182,8 @@ function endpointFailure(tool, endpoint = {}, result) {
         errors: [{ code: 'PIPO_ENDPOINT_FAILED', message: 'Discovery endpoint did not return a cacheable response.' }]
     };
     if (Number.isInteger(result?.httpStatus) && result.httpStatus >= 100 && result.httpStatus <= 599) failure.httpStatus = result.httpStatus;
+    if (['source', 'mcp', 'cap', 'client'].includes(result?.failureLayer)) failure.failureLayer = result.failureLayer;
+    if (['SOAP_FAULT', 'AUTH_REQUIRED'].includes(result?.failureCode)) failure.failureCode = result.failureCode;
     return failure;
 }
 

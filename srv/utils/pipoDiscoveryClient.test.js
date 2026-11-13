@@ -1,9 +1,10 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const Module = require('node:module');
 const { test } = require('node:test');
 const { resolveEndpoint, readMcpConfig, createDiscoveryClient } = require('./pipoDiscoveryClient');
-const { sourceUrl } = require('./pipoDiscoveryCache');
+const { sourceUrl, MAX_PAYLOAD_BYTES } = require('./pipoDiscoveryCache');
 
 const tool = 'fetch_pi8_repository_simple_query';
 const endpoint = { tool, path: '/rep/support/SimpleQuery', category: 'Repository', kind: 'simple-query' };
@@ -102,4 +103,133 @@ test('SDK, HTTP, SOAP and malformed responses return sanitized per-endpoint fail
     }
     const f = clientFixture({ structuredContent: success }, { closeError: true });
     assert.deepEqual(await f.client.fetchEndpoint(input), success);
+});
+
+// Keep connectionFor's real fetch wrapper while replacing SDK I/O and the network.
+function fetchWrapperFixture(t, response) {
+    const responses = [];
+    const errors = [];
+    let closed = 0;
+    let requests = 0;
+    class Client {
+        async connect(transport) { this.transport = transport; }
+        async callTool() {
+            try {
+                const result = await this.transport.fetch(this.transport.url, { method: 'POST', redirect: 'follow' });
+                responses.push(result);
+                return await result.json();
+            } catch (error) { errors.push(error); throw error; }
+        }
+        async close() { closed++; }
+    }
+    class StreamableHTTPClientTransport {
+        constructor(url, options) {
+            this.url = url;
+            this.fetch = options.fetch;
+            assert.equal(options.requestInit.redirect, 'error');
+        }
+    }
+    const load = Module._load;
+    t.mock.method(Module, '_load', function (id, ...args) {
+        if (id === '@modelcontextprotocol/sdk/client/index.js') return { Client };
+        if (id === '@modelcontextprotocol/sdk/client/streamableHttp.js') return { StreamableHTTPClientTransport };
+        return load.call(this, id, ...args);
+    });
+    t.mock.method(globalThis, 'fetch', async (url, init) => {
+        requests++;
+        assert.equal(String(url), config.url);
+        assert.equal(init.redirect, 'error');
+        return response;
+    });
+    return { client: createDiscoveryClient({ getRegistry: () => registry }), responses, errors,
+        closed: () => closed, requests: () => requests };
+}
+
+test('MCP fetch rejects advertised oversized bodies before reading them', async t => {
+    let reads = 0;
+    let cancelled = false;
+    const response = new Response(new ReadableStream({
+        pull(controller) {
+            reads++;
+            controller.enqueue(Buffer.from(JSON.stringify({ structuredContent: success })));
+            controller.close();
+        },
+        cancel() { cancelled = true; }
+    }, { highWaterMark: 0 }), { headers: { 'Content-Length': String(MAX_PAYLOAD_BYTES + 1) } });
+    const f = fetchWrapperFixture(t, response);
+    const result = await f.client.fetchEndpoint(input);
+    assert.equal(result.status, 'failed');
+    assert.equal(result.failureLayer, 'mcp');
+    assert.equal(reads, 0);
+    assert.equal(cancelled, true);
+    assert.equal(f.responses.length, 0);
+    assert.match(f.errors[0].message, /exceeds the payload limit; response omitted/);
+    assert.equal(f.requests(), 1);
+    assert.equal(f.closed(), 1);
+});
+
+test('MCP fetch bounds actual streamed bytes with absent or understated Content-Length', async t => {
+    for (const headers of [{}, { 'Content-Length': '1' }]) {
+        await t.test(JSON.stringify(headers), async t => {
+            const response = new Response(new ReadableStream({
+                start(controller) {
+                    controller.enqueue(new Uint8Array(MAX_PAYLOAD_BYTES / 2));
+                    controller.enqueue(new Uint8Array(MAX_PAYLOAD_BYTES / 2));
+                    controller.enqueue(Uint8Array.of(0));
+                    controller.close();
+                }
+            }), { headers });
+            const f = fetchWrapperFixture(t, response);
+            const result = await f.client.fetchEndpoint(input);
+            assert.equal(result.status, 'failed');
+            assert.equal(result.failureLayer, 'mcp');
+            assert.equal(f.responses.length, 1);
+            assert.match(f.errors[0].message, /exceeds the payload limit; response omitted/);
+            assert.equal(f.closed(), 1);
+        });
+    }
+});
+
+test('MCP fetch preserves a small response body and response metadata', async t => {
+    const response = new Response(JSON.stringify({ structuredContent: success }), {
+        status: 201, statusText: 'Created', headers: { 'Content-Type': 'application/json', 'X-Test': 'preserved' }
+    });
+    const f = fetchWrapperFixture(t, response);
+    assert.deepEqual(await f.client.fetchEndpoint(input), success);
+    assert.equal(f.responses[0].status, 201);
+    assert.equal(f.responses[0].statusText, 'Created');
+    assert.equal(f.responses[0].headers.get('content-type'), 'application/json');
+    assert.equal(f.responses[0].headers.get('x-test'), 'preserved');
+    assert.equal(f.errors.length, 0);
+    assert.equal(f.requests(), 1);
+    assert.equal(f.closed(), 1);
+});
+
+test('MCP fetch preserves numeric HTTP failures without reading or exposing error bodies', async t => {
+    for (const status of [302, 401, 403, 503]) {
+        await t.test(String(status), async t => {
+            let reads = 0;
+            let cancelled = false;
+            const response = new Response(new ReadableStream({
+                pull(controller) {
+                    reads++;
+                    controller.enqueue(Buffer.from('private HTTP body'));
+                    controller.close();
+                },
+                cancel() { cancelled = true; throw new Error('private cancellation error'); }
+            }, { highWaterMark: 0 }), { status, headers: { 'Content-Length': String(MAX_PAYLOAD_BYTES + 1) } });
+            const f = fetchWrapperFixture(t, response);
+            const result = await f.client.fetchEndpoint(input);
+            assert.equal(result.status, 'failed');
+            assert.equal(result.httpStatus, status);
+            assert.equal(result.failureLayer, 'mcp');
+            assert.equal(reads, 0);
+            assert.equal(cancelled, true);
+            assert.equal(f.responses.length, 0);
+            assert.equal(f.errors[0].httpStatus, status);
+            assert.equal(f.errors[0].message, 'MCP request failed; response omitted.');
+            assert.doesNotMatch(JSON.stringify(result), /private HTTP body|private cancellation error/);
+            assert.equal(f.closed(), 1);
+        });
+    }
 });

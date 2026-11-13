@@ -305,7 +305,14 @@ test('WSDL fallback is exact base?wsdl and occurs only for a missing implementat
   const { fetch, calls } = fixture([reply('Not found', 404), reply(wsdl())]);
   const output = await fetch('/BusinessComponentInService', { mode: 'metadata' });
   assert.equal(output.status, 'metadata-only');
+  assert.equal(output.failureLayer, undefined);
+  assert.equal(output.failureCode, undefined);
+  assert.equal(output.httpStatus, 200);
   assert.equal(calls[1].request.url, '/BusinessComponentInService?wsdl');
+  const unverified = await fixture([reply('Not found', 404), reply('<Protocol/>')]).fetch('/BusinessComponentInService');
+  assert.equal(unverified.status, 'metadata-only');
+  assert.equal(unverified.failureLayer, undefined);
+  assert.equal(unverified.httpStatus, 200);
   for (const status of [302, 401, 500]) {
     const blocked = fixture([reply('No', status)]);
     assert.equal((await blocked.fetch('/BusinessComponentInService')).status, 'failed');
@@ -320,6 +327,8 @@ test('HTTP 200 SOAP faults and login HTML are failures, not successful artifacts
     const { fetch } = fixture([reply(wsdl()), response]);
     const output = await fetch('/BusinessComponentInService');
     assert.equal(output.status, 'failed');
+    assert.equal(output.failureLayer, 'source');
+    assert.equal(output.failureCode, response.data === fault ? 'SOAP_FAULT' : 'AUTH_REQUIRED');
     assert.deepEqual(output.artifacts, []);
     assert.equal(output.actualCount, undefined);
     assert.deepEqual(output.response, { format: 'omitted', body: null });
@@ -525,6 +534,80 @@ test('SDK errors/auth config never appear in output and redirects do not produce
   const failed = await httpError.fetch('/CPACache');
   assert.deepEqual(failed.response, { format: 'omitted', body: null });
   assert.doesNotMatch(JSON.stringify(failed), /synthetic-private-error-body/);
+});
+
+test('SDK exceptions retain only safe numeric source HTTP failure status', async () => {
+  for (const status of [401, 403, 503]) {
+    const error = Object.assign(new Error('synthetic-private-error'), {
+      response: { status, data: 'synthetic-private-body', headers: { authorization: 'synthetic-private-header' } },
+      config: { url: 'synthetic-private-url', auth: { password: 'synthetic-private-password' } }
+    });
+    const { fetch } = fixture([error]);
+    const output = await fetch('/CPACache');
+    assert.equal(output.status, 'failed');
+    assert.equal(output.failureLayer, 'source');
+    assert.equal(output.httpStatus, status);
+    assert.equal(output.failureCode, undefined);
+    assert.deepEqual(output.response, { format: 'omitted', body: null });
+    assert.deepEqual(output.artifacts, []);
+    assert.doesNotMatch(JSON.stringify(output), /synthetic-private|authorization|headers|config/);
+  }
+});
+
+test('SDK status fallback is numeric only and never traverses error details', async () => {
+  const error = Object.assign(new Error('synthetic-private-error'), { response: { status: 403 }, status: 503 });
+  for (const field of ['data', 'headers', 'config']) {
+    Object.defineProperty(error.response, field, { get() { throw new Error('Unsafe error field accessed'); } });
+    Object.defineProperty(error, field, { get() { throw new Error('Unsafe error field accessed'); } });
+  }
+  assert.equal((await fixture([error]).fetch('/CPACache')).httpStatus, 403);
+  const fallback = Object.assign(new Error('synthetic-private-error'), { response: { status: '401' }, status: 503 });
+  assert.equal((await fixture([fallback]).fetch('/CPACache')).httpStatus, 503);
+  for (const status of ['401', null, {}, [], NaN, Infinity, 99, 600, 401.5]) {
+    const invalid = Object.assign(new Error('synthetic-private-error'), { response: { status }, status });
+    const output = await fixture([invalid]).fetch('/CPACache');
+    assert.equal(Object.hasOwn(output, 'httpStatus'), false);
+    assert.equal(output.failureLayer, 'source');
+    assert.doesNotMatch(JSON.stringify(output), /synthetic-private/);
+  }
+});
+
+test('failed SOAP SDK call resets successful WSDL status instead of reporting stale 200', async () => {
+  for (const status of [undefined, 401, 403, 503, '403']) {
+    const error = Object.assign(new Error('synthetic-private-error'), { response: { status, data: 'synthetic-private-body' } });
+    const { fetch, calls } = fixture([reply(wsdl()), error]);
+    const output = await fetch('/BusinessComponentInService');
+    assert.equal(calls.length, 2);
+    assert.equal(output.status, 'failed');
+    assert.equal(output.failureLayer, 'source');
+    assert.equal(output.httpStatus, typeof status === 'number' ? status : undefined);
+    assert.deepEqual(output.artifacts, []);
+    assert.doesNotMatch(JSON.stringify(output), /synthetic-private/);
+  }
+});
+
+test('HTTP errors preserve status even when body parsing throws and omit all unsafe payload', async () => {
+  for (const status of [401, 403, 503]) {
+    for (const data of ['<!DOCTYPE Root [<!ENTITY x "synthetic-private-body">]><Root>&x;</Root>',
+      'synthetic-private-body'.repeat(Math.ceil(MAX_BYTES / 10))]) {
+      const output = await fixture([reply(data, status)]).fetch('/CPACache');
+      assert.equal(output.status, 'failed');
+      assert.equal(output.httpStatus, status);
+      assert.equal(output.failureLayer, 'source');
+      assert.deepEqual(output.response, { format: 'omitted', body: null });
+      assert.doesNotMatch(JSON.stringify(output), /synthetic-private/);
+    }
+  }
+});
+
+test('invalid HTTP response statuses cannot leak into results or become successes', async () => {
+  for (const status of ['401', 'synthetic-private-status', {}, [], NaN, Infinity, 99, 600, 200.5]) {
+    const output = await fixture([reply('<Status/>', status)]).fetch('/CPACache');
+    assert.equal(output.status, 'failed');
+    assert.equal(output.failureLayer, 'source');
+    assert.equal(Object.hasOwn(output, 'httpStatus'), false);
+    assert.doesNotMatch(JSON.stringify(output), /synthetic-private/);
+  }
 });
 
 test('20-second deadline aborts a stalled request without waiting in offline tests', async (t) => {

@@ -6,6 +6,9 @@ const { createServer } = require('node:http');
 const { once } = require('node:events');
 const { spawn } = require('node:child_process');
 const { test } = require('node:test');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const os = require('node:os');
 const { fetchPipo, parseArgs, defaultParameters, decodeResult, endpointResult } = require('./fetch-pipo');
 const { ENDPOINTS } = require('./pipo-endpoints');
 const { endpointSchema } = require('./endpoint-fetcher');
@@ -61,7 +64,7 @@ async function fixture(t, options = {}) {
         return;
       }
       const data = body.params.name === 'get_pi8_status' ? status : objects;
-      result = options.resultFor ? options.resultFor(body.params.name, env) :
+      result = options.resultFor ? options.resultFor(body.params.name, env, body.params.arguments) :
         options.toolError ? { isError: true, content: [{ type: 'text', text: 'internal server details' }] } :
         { content: [{ type: 'text', text: JSON.stringify(data) }] };
     } else {
@@ -304,5 +307,89 @@ test('CLI options strictly validate modes, registry names and cache policy', () 
     ['--cache', '--tools-only'], ['--cache', '--ttl-seconds=604801'], ['--cache', '--ttl-seconds=-1'],
     ['--cache', '--ttl-seconds=1.5'], ['--cache', '--ttl-seconds=NaN'], ['--tool=call_rfc'],
     ['--tool=/CPACache'], ['--parameters-file=fixture.json'], ['--tool=fetch_pi8_cpa_cache', '--rest'],
+    ['--export', '--tool=fetch_pi8_communication_channel', '--input-file=catalog.json'],
+    ['--cache', '--export', '--tool=fetch_pi8_communication_channel', '--input-file=catalog.json'],
     ['--cache', '--cache']]) assert.throws(() => parseArgs(args));
+});
+
+async function exportSeed(t) {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'pipo-export-integration-'));
+  const channel = ENDPOINTS.find(endpoint => endpoint.entity === 'CommunicationChannel');
+  const simple = ENDPOINTS.find(endpoint => endpoint.kind === 'simple-query');
+  const seed = { discovery: { endpoints: [
+    { tool: channel.tool, status: 'ok', metadataOnly: false, actualCount: 2, returned: 2, offset: 0,
+      artifacts: ['one', 'two'].map(ChannelID => ({ type: 'CommunicationChannel', identifier: { ChannelID } })) },
+    { tool: simple.tool, status: 'ok', metadataOnly: false, actualCount: 1, returned: 1, offset: 0,
+      artifacts: [{ type: 'ifmmessif', identifier: { object_type: 'ifmmessif', object_key: 'key', swc_guid: 'guid' } }] }
+  ] } };
+  const inputFile = path.join(directory, 'catalog.json');
+  await fs.writeFile(inputFile, '\uFEFF' + JSON.stringify(seed), 'utf16le');
+  return { directory, inputFile, channel };
+}
+
+test('existing UTF16 catalog drives Directory and ESR Reads with safe role diagnostics, without repeating queries', async t => {
+  const { inputFile, channel } = await exportSeed(t);
+  const { env, calls } = await fixture(t, { toolNames: ENDPOINTS.map(endpoint => endpoint.tool),
+    resultFor(name, credentials, parameters) {
+      assert.equal(parameters.mode, 'read');
+      const payload = name === channel.tool
+        ? parameters.identifier.ChannelID === 'one'
+          ? { status: 'ok', metadataOnly: false, artifacts: [{ type: 'CommunicationChannel', hasFullDefinition: true,
+            definition: { ChannelID: 'one', Password: credentials.PIPO_MCP_PASS } }] }
+          : { status: 'failed', httpStatus: 403, response: { body: credentials.PIPO_MCP_PASS }, diagnostic: { reason: credentials.PIPO_MCP_PASS } }
+        : { status: 'metadata-only', metadataOnly: true, httpStatus: 200, artifacts: [], response: { format: 'xml', body: { object: 'retained' } } };
+      return { structuredContent: payload };
+    } });
+  const output = await fetchPipo({ env, export: true, inputFile, roles: { PO_PJ2_DIR: [] } });
+  assert.equal(output.export.reads.length, 3);
+  assert.equal(output.export.coverage.verifiedDefinitions, 1);
+  assert.equal(output.export.coverage.metadataOnly, 1);
+  assert.equal(output.export.coverage.failed, 1);
+  const forbidden = output.export.reads[1].result;
+  assert.equal(forbidden.httpStatus, 403);
+  assert.equal(forbidden.diagnostic.layer, 'source');
+  assert.deepEqual(forbidden.diagnostic.roleAssessment.candidates, [
+    { role: 'SAP_XI_API_DISPLAY_J2EE', evidence: 'documented', present: false }
+  ]);
+  assert.equal(output.export.reads[2].verifiedDefinition, false);
+  assert.equal(output.export.migrationReady, false);
+  assert.equal(calls.filter(call => call.method === 'tools/call').length, 3);
+  assert.doesNotMatch(JSON.stringify(output), new RegExp(env.PIPO_MCP_PASS));
+});
+
+test('export CLI writes a self-contained run with verifiable artifact hashes and JSON-only stdout', async t => {
+  const { directory, inputFile, channel } = await exportSeed(t);
+  const { env } = await fixture(t, { toolNames: ENDPOINTS.map(endpoint => endpoint.tool),
+    resultFor(name) { return { structuredContent: name === channel.tool
+      ? { status: 'ok', metadataOnly: false, artifacts: [{ type: 'CommunicationChannel', hasFullDefinition: true,
+        definition: { ChannelID: 'fixture', settings: 'safe' } }] }
+      : { status: 'metadata-only', metadataOnly: true, httpStatus: 200, artifacts: [],
+        response: { format: 'xml', body: { object: 'retained' } } } }; } });
+  const outputDir = path.join(directory, 'runs');
+  const child = spawn(process.execPath, [require.resolve('./fetch-pipo'), '--export',
+    `--input-file=${inputFile}`, `--output-dir=${outputDir}`], { env: { ...process.env, ...env } });
+  let stdout = '';
+  let stderr = '';
+  child.stdout.on('data', chunk => { stdout += chunk; });
+  child.stderr.on('data', chunk => { stderr += chunk; });
+  const [code] = await once(child, 'close');
+  assert.equal(code, 0, stderr);
+  const lifecycle = stderr.split('\n').filter(line => line.startsWith('[pipo-discovery] '))
+    .map(line => JSON.parse(line.slice('[pipo-discovery] '.length))).filter(entry => entry.event.startsWith('run-'));
+  assert.deepEqual(lifecycle.map(entry => entry.event), ['run-start', 'run-finish']);
+  assert.equal(JSON.parse(stdout).export.reads.length, 3);
+  assert.match(stderr, /Definition reads: 3; verified definitions: 2/);
+  const [runId] = await fs.readdir(outputDir);
+  const runPath = path.join(outputDir, runId);
+  const manifest = JSON.parse(await fs.readFile(path.join(runPath, 'manifest.json'), 'utf8'));
+  assert.equal(manifest.migrationReady, false);
+  const { createHash } = require('node:crypto');
+  for (const file of manifest.files) {
+    const bytes = await fs.readFile(path.join(runPath, file.filename));
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), file.hash);
+  }
+  assert.ok(manifest.files.some(file => file.filename.startsWith('artifacts/Directory/CommunicationChannel/')));
+  const events = (await fs.readFile(path.join(runPath, 'events.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.ok(events.some(entry => entry.phase === 'read' && entry.counts.fullDefinitions === 1));
+  assert.ok(events.every(entry => entry.event !== 'unknown'));
 });
