@@ -8,6 +8,7 @@ const { runInNewContext } = require('node:vm');
 const { z } = require('zod');
 const { ENDPOINTS, getEndpoint } = require('./pipo-endpoints');
 const { createEndpointFetcher, endpointSchema, parseSimpleQuery, parseResponse, MAX_BYTES, TIMEOUT } = require('./endpoint-fetcher');
+const { exportDefinitions } = require('./definition-export');
 
 const BASIS = 'http://sap.com/xi/BASIS';
 const SOAP = 'http://schemas.xmlsoap.org/soap/envelope/';
@@ -419,8 +420,8 @@ test('read ext uses encoded uppercase GET parameters and never applies ESR proto
   const noRequest = fixture([]);
   assert.equal((await noRequest.fetch('/rep/read/ext', { mode: 'read' })).status, 'needs_parameters');
   const params = { mode: 'read', object_type: 'ifmmessif', object_key: 'Interface A+B|urn:x&action=delete#fragment',
-    swc_guid: '005056a1-2345-1edf-9abc-012345678999' };
-  for (const key of ['object_type', 'object_key', 'swc_guid']) {
+    swc_guid: '005056a1-2345-1edf-9abc-012345678999', vc: 'SWC', sp: '-1', uc: 'false', release: '7.0' };
+  for (const key of ['object_type', 'object_key', 'swc_guid', 'vc', 'sp', 'uc', 'release']) {
     const incomplete = { ...params };
     delete incomplete[key];
     assert.equal((await noRequest.fetch('/rep/read/ext', incomplete)).status, 'needs_parameters');
@@ -436,16 +437,78 @@ test('read ext uses encoded uppercase GET parameters and never applies ESR proto
   assert.equal(calls.length, 1);
   assert.equal(calls[0].request.method, 'get');
   assert.equal(calls[0].request.data, undefined);
-  assert.equal(calls[0].request.url, '/rep/read/ext?method=PLAIN&TYPE=ifmmessif&KEY=Interface+A%2BB%7Curn%3Ax%26action%3Ddelete%23fragment&SWCGUID=005056a1-2345-1edf-9abc-012345678999');
+  assert.equal(calls[0].request.url, '/rep/read/ext?method=PLAIN&TYPE=ifmmessif&KEY=Interface+A%2BB%7Curn%3Ax%26action%3Ddelete%23fragment&VC=SWC&SWCGUID=005056a1-2345-1edf-9abc-012345678999&SP=-1&UC=false&release=7.0');
   const query = new URLSearchParams(calls[0].request.url.split('?')[1]);
   assert.deepEqual([...query], [['method', 'PLAIN'], ['TYPE', params.object_type],
-    ['KEY', params.object_key], ['SWCGUID', params.swc_guid]]);
+    ['KEY', params.object_key], ['VC', 'SWC'], ['SWCGUID', params.swc_guid],
+    ['SP', '-1'], ['UC', 'false'], ['release', '7.0']]);
   assert.doesNotMatch(JSON.stringify(output), /synthetic-secret/);
   const directoryProbe = fixture([reply('<protocol><Version>7.5</Version></protocol>')]);
-  assert.equal((await directoryProbe.fetch('/dir/read/ext', { ...params, mode: 'metadata' })).status, 'metadata-only');
+  assert.equal((await directoryProbe.fetch('/dir/read/ext', { mode: 'metadata', object_type: params.object_type,
+    object_key: params.object_key, swc_guid: params.swc_guid })).status, 'metadata-only');
   assert.equal(directoryProbe.calls[0].request.method, 'get');
   assert.equal(directoryProbe.calls[0].request.url, '/dir/read/ext');
   assert.equal(directoryProbe.calls[0].request.data, undefined);
+});
+
+test('SimpleQuery context survives export into a fixed-path ESR Read without retaining opaque settings', async () => {
+  const encoded = Buffer.from('<AdapterTypeData><Attribute><Name>logonPassword</Name><Value>synthetic-adapter-value</Value></Attribute></AdapterTypeData>').toString('base64');
+  const link = 'http://169.254.169.254/untrusted?method=PLAIN&TYPE=ChannelTemplate&KEY=Template%7Curn%3Aoffline&VC=SWC&SWCGUID=fixture-guid&SP=-1&UC=false&release=7.0&session=synthetic-session';
+  const html = `<html>Amount of objects: 1<a href="${link.replaceAll('&', '&amp;')}">R</a></html>`;
+  const xml = `<p:xiObj xmlns:p="urn:sap-com:xi"><p:content><c:ChannelTemplate xmlns:c="urn:sap-com:xi:xiRepChannelTemplate"><Direction>O</Direction><Attributes>${encoded}</Attributes></c:ChannelTemplate></p:content></p:xiObj>`;
+  const { fetch, calls } = fixture([reply(html, 200, 'text/html'), reply(xml)]);
+  const catalog = await fetch('/rep/support/SimpleQuery');
+  const identifier = { object_type: 'ChannelTemplate', object_key: 'Template|urn:offline', swc_guid: 'fixture-guid',
+    vc: 'SWC', sp: '-1', uc: 'false', release: '7.0' };
+  assert.deepEqual(catalog.artifacts[0].identifier, identifier);
+  const output = await exportDefinitions({ discovery: { endpoints: [catalog] }, fetchEndpoint: fetch });
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[1].destination, { destinationName: 'PO_PJ2_ESR' });
+  assert.equal(calls[1].request.url, '/rep/read/ext?method=PLAIN&TYPE=ChannelTemplate&KEY=Template%7Curn%3Aoffline&VC=SWC&SWCGUID=fixture-guid&SP=-1&UC=false&release=7.0');
+  assert.deepEqual(output.reads[0].identifier, identifier);
+  assert.equal(output.coverage.reads, 1);
+  assert.equal(output.coverage.metadataOnly, 1);
+  assert.equal(output.coverage.verifiedDefinitions, 0);
+  assert.equal(output.reads[0].result.response.body['p:xiObj']['p:content']['c:ChannelTemplate'].Direction, 'O');
+  for (const marker of [encoded, 'synthetic-adapter-value', 'synthetic-session', '169.254.169.254']) {
+    assert.ok(!JSON.stringify({ catalog, output }).includes(marker));
+  }
+});
+
+test('ESR context is not guessed, duplicate parameters are rejected, and generated releases are preserved', async () => {
+  const base = '/rep/read/ext?method=PLAIN&TYPE=XI_TRAFO&KEY=Mapping%7Curn%3Aoffline&SWCGUID=fixture-guid';
+  const context = '&VC=SWC&SP=3&UC=true&release=7.31';
+  const parse = link => parseSimpleQuery(`<a href="${link.replaceAll('&', '&amp;')}">R</a>`).records[0].identifier;
+  assert.deepEqual(parse(base + context), { object_type: 'XI_TRAFO', object_key: 'Mapping|urn:offline',
+    swc_guid: 'fixture-guid', vc: 'SWC', sp: '3', uc: 'true', release: '7.31' });
+  for (const link of [base, base + context + '&release=7.0', (base + context).replace('PLAIN', 'DELETE'),
+    (base + context).replace('UC=true', 'UC=invalid'), (base + context).replace('VC=SWC', 'VC=unsupported'),
+    (base + context).replace('SP=3', 'SP=-2'), base + '&VC=SWC&SP=-1&UC=false&release=7.0%0A']) {
+    const identifier = parse(link);
+    assert.equal(Object.hasOwn(identifier, 'release'), false);
+    const noRequest = fixture([]);
+    assert.equal((await noRequest.fetch('/rep/read/ext', { mode: 'read', ...identifier })).status, 'needs_parameters');
+    assert.equal(noRequest.calls.length, 0);
+  }
+  const { fetch, calls } = fixture([reply('<Object/>')]);
+  await fetch('/rep/read/ext', { mode: 'read', ...parse(base + context) });
+  assert.match(calls[0].request.url, /&SP=3&UC=true&release=7\.31$/);
+  const noRequest = fixture([]);
+  for (const invalid of [{ release: '7.0\n' }, { sp: '3&action=delete' }, { uc: true }, { vc: 'OTHER' }]) {
+    assert.equal((await noRequest.fetch('/rep/read/ext', { mode: 'read', ...parse(base + context), ...invalid })).status, 'needs_parameters');
+  }
+  assert.equal(noRequest.calls.length, 0);
+});
+
+test('opaque ESR adapter Attributes cannot leak through strings, namespaced text nodes or repeated elements', () => {
+  const encoded = Buffer.from('<Attribute><Name>logonPassword</Name><Value>synthetic-opaque-value</Value></Attribute>').toString('base64');
+  for (const attributes of [{ Attributes: encoded }, { 'c:Attributes': { '#text': encoded, '@_encoding': 'base64' } },
+    { Attributes: [encoded, encoded] }]) {
+    const output = parseResponse({ ChannelTemplate: { Direction: 'O', ...attributes } });
+    assert.equal(output.response.body.ChannelTemplate.Direction, 'O');
+    assert.ok(!JSON.stringify(output).includes(encoded));
+    assert.match(JSON.stringify(output), /OMITTED: opaque adapter attributes/);
+  }
 });
 
 test('diagnostics are bare GET snapshots and ChannelAdmin cannot start/stop/refresh', async () => {

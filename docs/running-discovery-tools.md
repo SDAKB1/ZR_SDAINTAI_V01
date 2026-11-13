@@ -88,6 +88,14 @@ Legacy REST-only JSON without `discovery.endpoints` is not a suitable export see
 still use the configured MCP server (or CAP with `--cache`). Direct mode still connects and discovers available tools.
 The operator must ensure the saved catalog and current destination identity refer to the same intended source/version.
 
+**ESR catalogs created before the Read-context fix must be refreshed.** Their identifiers contain only
+`object_type`, `object_key`, `swc_guid`; corrected identifiers also retain validated `vc`, `sp`, `uc`, `release`
+from SAP's SimpleQuery `R` links. The exporter counts legacy identifiers but skips their ESR Reads with a gap
+instead of guessing version context. After an authorized MCP server update, run a fresh catalog/export without
+`--input-file`. A local CLI update alone does not update the deployed MCP parser/tool schema. In cache mode,
+force-refresh the catalog or update the configured source version so old cached identifiers are not reused.
+The link's API `release` is not inferred from the software component's displayed version.
+
 ### Optional controls
 
 Append these options to either export command, using `--name=value` syntax:
@@ -216,6 +224,8 @@ Preserve run folders through your approved sensitive-data retention process if r
 `migrationReady` remains **false**. Directory definitions are sanitized; credentials and secrets are excluded,
 so these files are not directly importable migration packages. ESR parsed read payloads remain
 **metadata-only with an unverified full-definition contract**, even when a response body is retained under `ESR/ReadResponse`.
+Opaque adapter `Attributes` blobs are omitted at source and CLI boundaries because their encoded content can
+contain credentials. Non-secret surrounding fields remain available; adapter settings are therefore incomplete.
 Dependencies, referenced objects, mapping binaries, XSDs/imports, imported archives, complete ESR archives,
 and target-platform compatibility remain unverified. Metadata success is not definition or dependency completeness.
 Pagination can re-query a changing source; neither an old catalog nor TTL cache makes the run transactionally consistent.
@@ -230,6 +240,7 @@ An MCP/CAP HTTP failure does not prove a SAP source-role problem. Check the matc
 | 401 | Authentication at the reported layer; credential validity and destination authentication, not a missing-role conclusion. |
 | 403 | Source role, endpoint policy, gateway/Cloud Connector connectivity policy, or another access restriction. Compare supplied candidate-role evidence, then ask the owner; the status alone is not proof. |
 | 404 | Route/path and service availability for the installed source release/version. |
+| 409 with "Method plain for service read does not exist" | Compare against the current SimpleQuery `R` link. Preserve its VC/SP/UC/release context; do not assume an artifact conflict or fix this by editing artifacts. Refresh older catalogs after an authorized MCP update. |
 | 429 | Request/rate limit; reduce frequency and follow source retry policy. Not evidence of a missing role. |
 | 503 | Service health, connectivity or unavailable CAP database/configuration. Not evidence of a missing role. |
 | Metadata-only / unsupported | Verify the local WSDL/read contract and source capabilities; do not invent operations or follow imports/addresses. |
@@ -248,6 +259,7 @@ An HTTP-successful ping can still contain `reachable: false`; reachability alone
 | --- | --- |
 | `mcp/pipo-rfc-server/fetch-pipo.js` | CLI options, MCP/CAP routing, saved-catalog decoding, orchestration and output sanitization. |
 | `mcp/pipo-rfc-server/pipo-endpoints.js`, `endpoint-fetcher.js` | Fixed endpoint registry and read-only source contract/parser handling. |
+| `mcp/pipo-rfc-server/esr-read-context.js` | Allowlisted ESR Read version-context names and validation; no inferred defaults. |
 | `mcp/pipo-rfc-server/definition-export.js` | Bounded pagination/identifier reads and explicit coverage gaps. |
 | `mcp/pipo-rfc-server/discovery-diagnostics.js` | Layer-aware HTTP diagnostics and allowlisted supplied-role comparisons. |
 | `mcp/pipo-rfc-server/discovery-report.js`, `discovery-run.js` | Counts, CAP-safe event logging, unique run files, hashes and HTML/SVG reports. |

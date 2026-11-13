@@ -320,7 +320,8 @@ async function exportSeed(t) {
     { tool: channel.tool, status: 'ok', metadataOnly: false, actualCount: 2, returned: 2, offset: 0,
       artifacts: ['one', 'two'].map(ChannelID => ({ type: 'CommunicationChannel', identifier: { ChannelID } })) },
     { tool: simple.tool, status: 'ok', metadataOnly: false, actualCount: 1, returned: 1, offset: 0,
-      artifacts: [{ type: 'ifmmessif', identifier: { object_type: 'ifmmessif', object_key: 'key', swc_guid: 'guid' } }] }
+      artifacts: [{ type: 'ifmmessif', identifier: { object_type: 'ifmmessif', object_key: 'key', swc_guid: 'guid',
+        vc: 'SWC', sp: '-1', uc: 'false', release: '7.0' } }] }
   ] } };
   const inputFile = path.join(directory, 'catalog.json');
   await fs.writeFile(inputFile, '\uFEFF' + JSON.stringify(seed), 'utf16le');
@@ -354,17 +355,33 @@ test('existing UTF16 catalog drives Directory and ESR Reads with safe role diagn
   assert.equal(output.export.reads[2].verifiedDefinition, false);
   assert.equal(output.export.migrationReady, false);
   assert.equal(calls.filter(call => call.method === 'tools/call').length, 3);
+  assert.deepEqual(calls.filter(call => call.method === 'tools/call').at(-1).params.arguments,
+    { mode: 'read', object_type: 'ifmmessif', object_key: 'key', swc_guid: 'guid',
+      vc: 'SWC', sp: '-1', uc: 'false', release: '7.0' });
   assert.doesNotMatch(JSON.stringify(output), new RegExp(env.PIPO_MCP_PASS));
+});
+
+test('client output omits opaque adapter Attributes even when an upstream server has not sanitized them', () => {
+  const encoded = Buffer.from('<Attribute><Name>logonPassword</Name><Value>synthetic-opaque-adapter</Value></Attribute>').toString('base64');
+  const endpoint = ENDPOINTS.find(entry => entry.tool === 'fetch_pi8_repository_read_ext');
+  for (const attributes of [{ Attributes: encoded }, { 'c:Attributes': { '#text': encoded } }, { Attributes: [encoded] }]) {
+    const output = endpointResult(endpoint, { status: 'metadata-only', metadataOnly: true, artifacts: [],
+      response: { format: 'xml', body: { ChannelTemplate: { Direction: 'O', ...attributes } } } }, {});
+    assert.equal(output.response.body.ChannelTemplate.Direction, 'O');
+    assert.ok(!JSON.stringify(output).includes(encoded));
+    assert.match(JSON.stringify(output), /OMITTED: opaque adapter attributes/);
+  }
 });
 
 test('export CLI writes a self-contained run with verifiable artifact hashes and JSON-only stdout', async t => {
   const { directory, inputFile, channel } = await exportSeed(t);
+  const encoded = Buffer.from('<Attribute><Name>logonPassword</Name><Value>synthetic-run-adapter</Value></Attribute>').toString('base64');
   const { env } = await fixture(t, { toolNames: ENDPOINTS.map(endpoint => endpoint.tool),
     resultFor(name) { return { structuredContent: name === channel.tool
       ? { status: 'ok', metadataOnly: false, artifacts: [{ type: 'CommunicationChannel', hasFullDefinition: true,
         definition: { ChannelID: 'fixture', settings: 'safe' } }] }
       : { status: 'metadata-only', metadataOnly: true, httpStatus: 200, artifacts: [],
-        response: { format: 'xml', body: { object: 'retained' } } } }; } });
+        response: { format: 'xml', body: { object: 'retained', ChannelTemplate: { Direction: 'O', Attributes: encoded } } } } }; } });
   const outputDir = path.join(directory, 'runs');
   const child = spawn(process.execPath, [require.resolve('./fetch-pipo'), '--export',
     `--input-file=${inputFile}`, `--output-dir=${outputDir}`], { env: { ...process.env, ...env } });
@@ -378,6 +395,7 @@ test('export CLI writes a self-contained run with verifiable artifact hashes and
     .map(line => JSON.parse(line.slice('[pipo-discovery] '.length))).filter(entry => entry.event.startsWith('run-'));
   assert.deepEqual(lifecycle.map(entry => entry.event), ['run-start', 'run-finish']);
   assert.equal(JSON.parse(stdout).export.reads.length, 3);
+  assert.ok(!stdout.includes(encoded) && !stderr.includes(encoded));
   assert.match(stderr, /Definition reads: 3; verified definitions: 2/);
   const [runId] = await fs.readdir(outputDir);
   const runPath = path.join(outputDir, runId);
@@ -387,6 +405,7 @@ test('export CLI writes a self-contained run with verifiable artifact hashes and
   for (const file of manifest.files) {
     const bytes = await fs.readFile(path.join(runPath, file.filename));
     assert.equal(createHash('sha256').update(bytes).digest('hex'), file.hash);
+    assert.ok(!bytes.toString('utf8').includes(encoded), 'opaque adapter settings must not reach any run file');
   }
   assert.ok(manifest.files.some(file => file.filename.startsWith('artifacts/Directory/CommunicationChannel/')));
   const events = (await fs.readFile(path.join(runPath, 'events.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);

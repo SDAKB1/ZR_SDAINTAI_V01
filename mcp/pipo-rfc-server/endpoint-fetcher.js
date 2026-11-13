@@ -3,6 +3,7 @@
 const { XMLParser, XMLBuilder, XMLValidator } = require('fast-xml-parser');
 const { z } = require('zod');
 const { ENDPOINTS, getEndpoint } = require('./pipo-endpoints');
+const { ESR_READ_CONTEXT, readContext } = require('./esr-read-context');
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const TIMEOUT = 20000;
@@ -36,6 +37,11 @@ function endpointSchema(descriptor) {
   if (descriptor.kind === 'soap' && descriptor.entity) fields.identifier = identifierSchema.optional();
   if (descriptor.kind === 'read') {
     for (const key of ['object_type', 'object_key', 'swc_guid']) fields[key] = scalar.optional();
+  }
+  if (descriptor.path === '/rep/read/ext') {
+    for (const [key, { pattern }] of Object.entries(ESR_READ_CONTEXT)) {
+      fields[key] = z.string().max(32).regex(pattern).refine(value => !/[\x00-\x20\x7f]/.test(value)).optional();
+    }
   }
   if (descriptor.path === '/AdapterFramework/ChannelAdminServlet') {
     for (const key of ['party', 'service', 'channel']) fields[key] = scalar.optional();
@@ -88,6 +94,12 @@ function sanitize(value, depth = 0) {
   for (const [key, item] of entries(value)) {
     if (FORBIDDEN_KEY.test(key)) continue;
     const label = local(key);
+    // ESR ChannelTemplate stores adapter settings (including credential fields)
+    // in an opaque base64 Attributes blob. Never persist it as "sanitized" XML.
+    if (/^Attributes$/i.test(label) && (typeof item === 'string' || Array.isArray(item) || typeof item?.['#text'] === 'string')) {
+      result[key] = '[OMITTED: opaque adapter attributes]';
+      continue;
+    }
     result[key] = SECRET.test(decodeHtml(label)) || /^(?:headers|request|requestheaders|authheaders|config)$/i.test(label) ||
       (credentialPair && /^(?:value|#text)$/i.test(label))
       ? '[REDACTED]' : sanitize(item, depth + 1);
@@ -119,21 +131,28 @@ function parseSimpleQuery(html) {
     if (decodeHtml(match[2].replace(/<[^>]*>/g, '')).trim() !== 'R') continue;
     const href = match[1].match(/\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
     if (!href) continue;
-    // Parse only the identifier; never request the link, origin or path.
+    // Parse only the identifier and bounded version context; never follow URLs.
     const link = decodeHtml(href[1] ?? href[2]);
     const query = link.indexOf('?');
     if (query < 0) continue;
     const params = new URLSearchParams(link.slice(query + 1).split('#')[0]);
-    const values = {};
-    for (const [key, value] of params) values[key.toUpperCase()] = value;
+    const values = Object.create(null);
+    let duplicate = false;
+    for (const [key, value] of params) {
+      const name = key.toUpperCase();
+      if (Object.hasOwn(values, name)) duplicate = true;
+      values[name] = value;
+    }
     const { KEY: key, TYPE: type, SWCGUID: guid } = values;
     if (!key || !type || !guid || [key, type, guid].some((v) => v.length > 4096)) continue;
-    const identity = JSON.stringify([type, key, guid]);
+    const context = !duplicate && values.METHOD === 'PLAIN' ? readContext(Object.fromEntries(
+      Object.entries(ESR_READ_CONTEXT).map(([name, { query }]) => [name, values[query.toUpperCase()]]))) : null;
+    const identity = JSON.stringify([type, key, guid, context]);
     if (seen.has(identity)) continue;
     seen.add(identity);
     const [name, namespace] = key.split('|');
     records.push({ category: 'Repository', type: Object.hasOwn(TYPES, type) ? TYPES[type] : type, objectType: type,
-      name, namespace: namespace || '', identifier: { object_type: type, object_key: key, swc_guid: guid },
+      name, namespace: namespace || '', identifier: { object_type: type, object_key: key, swc_guid: guid, ...context },
       hasFullDefinition: false, metadataOnly: false });
   }
   const reported = html.match(/Amount\s+of\s+objects:\s*([0-9]+)/i);
@@ -450,10 +469,12 @@ function createEndpointFetcher({ executeHttpRequest, buildPipoAuthHeaders }) {
       if (params[key] !== undefined) statusParams.set(key, params[key]);
     }
     const channelUrl = `${descriptor.path}?${statusParams}`;
+    const context = readContext(params);
     const repositoryReadUrl = descriptor.kind === 'read' && descriptor.path === '/rep/read/ext' &&
-      params.mode !== 'metadata' && ['object_type', 'object_key', 'swc_guid'].every((key) => params[key])
+      params.mode !== 'metadata' && context && ['object_type', 'object_key', 'swc_guid'].every((key) => params[key])
       ? `/rep/read/ext?${new URLSearchParams({ method: 'PLAIN', TYPE: params.object_type,
-        KEY: params.object_key, SWCGUID: params.swc_guid })}` : null;
+        KEY: params.object_key, VC: context.vc, SWCGUID: params.swc_guid,
+        SP: context.sp, UC: context.uc, release: context.release })}` : null;
     const request = async (url, method = 'get', data, headers = {}) => {
       // Each attempt owns its status; a failed SOAP call must not inherit WSDL 200.
       delete result.httpStatus;
@@ -560,7 +581,9 @@ function createEndpointFetcher({ executeHttpRequest, buildPipoAuthHeaders }) {
         // Directory read servlet has no evidenced ESR-style protocol. Never reuse it there.
         if (descriptor.category !== 'Repository' || !repositoryReadUrl) {
           result.status = 'needs_parameters';
-          result.warnings.push('No verified read protocol/identifier. ESR requires object_type, object_key and swc_guid; directory read is probe-only.');
+          result.warnings.push(descriptor.category === 'Repository'
+            ? 'ESR Read requires object_type, object_key, swc_guid and vc/sp/uc/release from a current SimpleQuery R link; rerun discovery for older catalogs.'
+            : 'No verified directory read protocol; directory read is probe-only.');
           return result;
         }
         const response = await request(repositoryReadUrl);

@@ -79,10 +79,14 @@ function sanitizeOutput(value, env) {
     const entries = Object.entries(item).filter(([key]) => !['__proto__', 'prototype', 'constructor'].includes(key));
     const pair = entries.some(([key, child]) => /^(?:@_)?(?:name|key|type)$/i.test(key.split(':').pop()) &&
       typeof child === 'string' && /password|passwd|pwd|token|secret|credential|auth|cookie|user(?:name)?|login|passphrase/i.test(child));
-    return Object.fromEntries(entries.map(([key, child]) => [clean(key, depth + 1),
-      /password|passwd|pwd|token|secret|credential|authorization|cookie|api[-_]?key|private[-_]?key/i.test(key) ||
-      /^(?:headers|request|requestheaders|authheaders|config)$/i.test(key) || pair && /^(?:@_)?(?:value|#text)$/i.test(key)
-        ? '[REDACTED]' : clean(child, depth + 1)]));
+    return Object.fromEntries(entries.map(([key, child]) => {
+      const opaque = /^Attributes$/i.test(key.replace(/^@_/, '').split(':').pop()) &&
+        (typeof child === 'string' || Array.isArray(child) || typeof child?.['#text'] === 'string');
+      return [clean(key, depth + 1), opaque ? '[OMITTED: opaque adapter attributes]' :
+        /password|passwd|pwd|token|secret|credential|authorization|cookie|api[-_]?key|private[-_]?key/i.test(key) ||
+        /^(?:headers|request|requestheaders|authheaders|config)$/i.test(key) || pair && /^(?:@_)?(?:value|#text)$/i.test(key)
+          ? '[REDACTED]' : clean(child, depth + 1)];
+    }));
   }
   return clean(value);
 }

@@ -182,16 +182,23 @@ descriptors drive requests; callers cannot supply URLs or SOAP operations.
 | `/mdt` | `message_diagnostics` | Bare GET diagnostic probe |
 | `/rep/query/ext` | `repository_query_ext` | GET probe; parse recognized SimpleQuery results only |
 | `/rep/query/int` | `repository_query_int` | GET probe; parse recognized SimpleQuery results only |
-| `/rep/read/ext` | `repository_read_ext` | GET metadata or encoded TYPE/KEY/SWCGUID read |
+| `/rep/read/ext` | `repository_read_ext` | GET metadata or encoded identifier/version-context read |
 | `/rep/support/SimpleQuery` | `repository_simple_query` | Fixed read-only query; parse result identifiers |
 
 Whitelisting permits connectivity, not every operation on that URL. Unknown or
 imported WSDL contracts remain metadata-only; imports/soap:address are never
 followed. Channel start/stop, CPA refresh, edits, deletes and BPM execution are
 excluded. SOAP Read requires `mode: "read"` and an `identifier` matching the
-verified local WSDL. ESR read needs `object_type`, `object_key`, `swc_guid` from a
-query record; its parsed payload is retained but not claimed as a typed full
-definition. Unparsed/binary/raw HTML responses are omitted rather than stored.
+verified local WSDL. ESR read needs `object_type`, `object_key`, `swc_guid` plus
+`vc`, `sp`, `uc`, `release` from the query record's SAP-generated `R` link.
+Only validated context is retained; upstream hosts/paths and arbitrary query
+parameters are never followed. Older catalogs without that context skip ESR
+Reads with an explicit gap: update the MCP server and rerun discovery. Omitting
+the version context can produce HTTP 409 with "Method plain for service read
+does not exist"; this does not establish damaged artifacts or missing roles.
+The parsed payload is retained but not claimed as a typed full definition.
+Opaque adapter `Attributes` blobs are omitted because encoded settings can
+contain credentials. Unparsed/binary/raw HTML responses are also omitted.
 Requests disable redirects, reject XML DTDs, cap upstream responses at 5 MB and
 time out after 20 seconds per SAP request (60 seconds per MCP/client request).
 

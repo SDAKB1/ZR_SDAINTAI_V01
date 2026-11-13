@@ -1,6 +1,7 @@
 'use strict';
 
 const { ENDPOINTS } = require('./pipo-endpoints');
+const { readContext } = require('./esr-read-context');
 
 const SUCCESS = new Set(['ok', 'success', 'successful', 'completed']);
 const STATUSES = new Set([...SUCCESS, 'failed', 'error', 'partial', 'unavailable', 'unsupported',
@@ -18,7 +19,7 @@ const successful = result => SUCCESS.has(result.status) && result.metadataOnly !
 function identifierFor(endpoint, value) {
   if (endpoint.category === 'Repository') {
     return record(value) && ESR_KEYS.every(key => text(value[key]) && value[key].trim())
-      ? Object.fromEntries(ESR_KEYS.map(key => [key, value[key]])) : null;
+      ? { ...Object.fromEntries(ESR_KEYS.map(key => [key, value[key]])), ...readContext(value) } : null;
   }
   if (text(value)) return value.trim() ? value : null;
   if (!record(value)) return null;
@@ -81,6 +82,11 @@ async function exportDefinitions({ discovery, fetchEndpoint, event = () => {}, m
     if (endpoint.category !== 'Repository' && !(endpoint.kind === 'soap' && endpoint.entity)) {
       coverage.skippedReads += 1;
       gap(endpoint, 'Enumerated identifier has no verified Read protocol; no request was invented.');
+      return;
+    }
+    if (endpoint.category === 'Repository' && !readContext(identifier)) {
+      coverage.skippedReads += 1;
+      gap(endpoint, 'ESR Read version context is missing or invalid; rerun discovery with the updated MCP server instead of reusing an older catalog.');
       return;
     }
     if (reads.length >= maxReads) {

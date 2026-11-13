@@ -77,7 +77,8 @@ test('Directory composite identifiers are canonicalized per endpoint without inv
 });
 
 test('SimpleQuery and repository Query IDs use only the fixed ESR Read parameters and retain payloads', async () => {
-  const identifier = { object_type: 'XI_TRAFO', object_key: 'mapping|urn:namespace', swc_guid: 'swc-guid' };
+  const identifier = { object_type: 'XI_TRAFO', object_key: 'mapping|urn:namespace', swc_guid: 'swc-guid',
+    vc: 'SWC', sp: '-1', uc: 'false', release: '7.0' };
   const response = { format: 'xml', body: { RepositoryObject: { content: 'sanitized-payload' } } };
   const output = await exportDefinitions({ discovery: { endpoints: [page(simple, [identifier]),
     page(repositoryQuery, [identifier, { object_type: 'XI_TRAFO', object_key: 'missing-guid' }])] },
@@ -100,6 +101,23 @@ test('SimpleQuery and repository Query IDs use only the fixed ESR Read parameter
   hasGap(output, /metadata-only/);
   hasGap(output, /Missing or invalid identifiers/);
   hasGap(output, /Dependent binaries.*not verified/);
+});
+
+test('legacy and incomplete ESR catalogs retain counts but skip Reads instead of inventing version context', async () => {
+  const base = { object_type: 'XI_TRAFO', object_key: 'mapping|urn:namespace', swc_guid: 'swc-guid' };
+  const context = { vc: 'SWC', sp: '-1', uc: 'false', release: '7.0' };
+  const identifiers = [base, ...Object.keys(context).map((missing, index) => ({ ...base,
+    object_key: `mapping${index}|urn:namespace`, ...Object.fromEntries(Object.entries(context).filter(([key]) => key !== missing)) })),
+  { ...base, object_key: 'invalid|urn:namespace', ...context, release: '7.0\n' }];
+  let calls = 0;
+  const output = await exportDefinitions({ discovery: { endpoints: [page(simple, identifiers)] },
+    fetchEndpoint: async () => { calls += 1; } });
+  assert.equal(calls, 0);
+  assert.equal(output.coverage.catalogIdentifiers, identifiers.length);
+  assert.equal(output.coverage.skippedReads, identifiers.length);
+  assert.equal(output.coverage.reads, 0);
+  assert.equal(output.reads.length, 0);
+  hasGap(output, /version context.*rerun discovery/);
 });
 
 test('maxReads and maxPages are global request budgets across endpoints', async () => {
