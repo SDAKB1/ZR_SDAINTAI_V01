@@ -25,6 +25,8 @@ const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const { z } = require('zod');
 const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
+const { ENDPOINTS } = require('./pipo-endpoints');
+const { createEndpointFetcher, endpointSchema } = require('./endpoint-fetcher');
 
 // --- Allowlisted systems (RFC path) -------------------------------------
 // Each entry's connection params come entirely from env vars. A system that
@@ -319,6 +321,22 @@ function buildMcpServer() {
       }
     }
   );
+
+  const fetchEndpoint = createEndpointFetcher({ executeHttpRequest, buildPipoAuthHeaders });
+  for (const descriptor of ENDPOINTS) {
+    server.registerTool(descriptor.tool, {
+      description: `Read-only PI8 ${descriptor.category} endpoint ${descriptor.path}. ` +
+        'Unknown contracts return metadata/protocol responses, not inferred interfaces.',
+      inputSchema: endpointSchema(descriptor),
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true }
+    }, async (params) => {
+      const result = await fetchEndpoint(descriptor, params);
+      return {
+        isError: ['failed', 'needs_parameters', 'unsupported'].includes(result.status),
+        content: [{ type: 'text', text: JSON.stringify(result) }]
+      };
+    });
+  }
 
   return server;
 }

@@ -93,7 +93,8 @@ defaults in `server.js` are still in use).
 }
 ```
 
-Four tools are available:
+The original four tools remain available, alongside the 23 read-only discovery
+tools listed below:
 - **`get_pi8_status`** — reachability proof for PJ2 through the Cloud Connector.
 - **`list_pi8_esr_objects`** — the real ESR object catalog described above.
 - **`call_rfc`** — `{ system: "SDAINTAI", rfc_name: "...", import_parameters: {...} }`
@@ -112,26 +113,85 @@ when testing against localhost. Load `.env` explicitly with Node's `--env-file`
 option (Node.js 20.6+); existing process environment variables take precedence.
 
 ```bash
-node --env-file=.env fetch-pipo.js                 # discover tools, fetch PI8 status + ESR objects
+node --env-file=.env fetch-pipo.js                 # fetch the 23 read-only discovery endpoints
 node --env-file=.env fetch-pipo.js --tools-only    # live tool names, descriptions and input schemas
 node --env-file=.env fetch-pipo.js > pipo.json     # save the JSON result locally
 node --env-file=.env fetch-pipo.js --rest          # public status + objects; no credentials or npm install needed
+node --env-file=.env fetch-pipo.js --cache         # read through the durable CAP database cache
 node fetch-pipo.js --help
 ```
 
-Default output contains `tools`, `status` and `objects` (including `totalCount`,
-`returned` and `items`). `--rest` uses the equivalent public endpoints below,
-but cannot discover MCP tools. This script does **not** execute `call_rfc` or
-`get_rfc_metadata`: those require a separately configured RFC connection, and
-arbitrary RFCs may change data. ESR results are catalog metadata, not complete
-object definitions; the server caps them at 150 with no pagination parameter.
+Default output contains `tools`, `discovery.endpoints` and a `summary` with
+extracted counts by category/type, service interfaces, full definitions,
+metadata documents, diagnostic snapshots, truncation and endpoint coverage.
+Count logs go to stderr; stdout remains valid JSON. Each endpoint retains its
+parsed, redacted response and artifacts. Repository records are reported as ESR;
+Integrated Configuration and Configuration Scenario records as Configuration.
+Counts describe extracted records, not a deduplicated landscape inventory:
+overlapping endpoints (for example the two ICO services) can return the same ID.
+
+Queries return identifiers, **not full definitions**. Default requests return at
+most 1000 records per endpoint. Inspect `truncated`, `actualCount` and `returned`;
+use `--tool=NAME --parameters-file=PATH` with `offset`/`maxItems` to fetch further
+pages. Pagination is local over a newly fetched response, not a SAP cursor.
+The existing legacy REST catalog still caps at 150. If the remote server exposes
+none of the new tools, MCP mode falls back to `status`/`objects` and reports the
+23 tools unavailable. Redeploy the MCP server to enable them.
+
+`--rest` only calls the existing public endpoints. The script never executes
+`call_rfc` or `get_rfc_metadata`. `--cache` needs separate CAP authentication and
+never falls back to direct MCP/SAP access; see the [durable cache setup](../../docs/pipo-discovery-cache.md).
 
 An unreachable destination may still return a successful HTTP/MCP response:
 inspect `status.reachable` and `status.destinations`. Authentication, HTTP and
-MCP tool errors exit nonzero with a deliberately generic message to avoid
-printing sensitive server error bodies. Without `--env-file`, supply the settings
+legacy MCP tool errors exit nonzero with a generic message. Expanded endpoint
+failures are isolated in `discovery.endpoints`; inspect the summary even when the
+batch exits successfully. CAP authentication/database HTTP failures abort cache
+mode without fallback. Error bodies are omitted. Without `--env-file`, supply the settings
 directly through the process environment; `.env` is not loaded automatically.
-Run the offline client tests with `node --test fetch-pipo.test.js`.
+Run the offline client/report tests with
+`node --test fetch-pipo.test.js discovery-report.test.js endpoint-fetcher.test.js cap-cache-client.test.js`.
+
+### The 23 allowlisted discovery tools
+
+All names below are prefixed with `fetch_pi8_`. Only fixed destination/path
+descriptors drive requests; callers cannot supply URLs or SOAP operations.
+
+| Path | Tool suffix | Read-only behavior |
+| --- | --- | --- |
+| `/AdapterFramework/ChannelAdminServlet` | `channel_admin` | GET `action=status`; optional party/service/channel |
+| `/AlertRuleInService` | `alert_rule` | WSDL-gated Query/Read |
+| `/BPMFacadeBeanImplService` | `bpm_facade` | WSDL metadata only |
+| `/BusinessComponentInService` | `business_component` | WSDL-gated Query/Read |
+| `/CPACache` | `cpa_cache` | Bare GET snapshot; no refresh |
+| `/CommunicationChannelInService` | `communication_channel` | WSDL-gated Query/Read |
+| `/ConfigurationScenarioInService` | `configuration_scenario` | WSDL-gated Query/Read |
+| `/IntegratedConfiguration750InService` | `integrated_configuration_750` | WSDL-gated IntegratedConfiguration Query/Read |
+| `/IntegratedConfigurationInService` | `integrated_configuration` | WSDL-gated Query/Read |
+| `/IntegrationProcessInService` | `integration_process` | WSDL-gated Query/Read |
+| `/InterfaceDeterminationInService` | `interface_determination` | WSDL-gated Query/Read |
+| `/ReceiverAgreementInService` | `receiver_agreement` | WSDL-gated Query/Read |
+| `/ReceiverDeterminationInService` | `receiver_determination` | WSDL-gated Query/Read |
+| `/ReceiverRuleInService` | `receiver_rule` | WSDL-gated Query/Read |
+| `/SenderAgreementInService` | `sender_agreement` | WSDL-gated Query/Read |
+| `/ValueMappingInService` | `value_mapping` | WSDL-gated Query/Read |
+| `/dir/query/ext` | `directory_query_ext` | GET protocol probe |
+| `/dir/read/ext` | `directory_read_ext` | GET protocol probe; no invented ESR protocol |
+| `/mdt` | `message_diagnostics` | Bare GET diagnostic probe |
+| `/rep/query/ext` | `repository_query_ext` | GET probe; parse recognized SimpleQuery results only |
+| `/rep/query/int` | `repository_query_int` | GET probe; parse recognized SimpleQuery results only |
+| `/rep/read/ext` | `repository_read_ext` | GET metadata or encoded TYPE/KEY/SWCGUID read |
+| `/rep/support/SimpleQuery` | `repository_simple_query` | Fixed read-only query; parse result identifiers |
+
+Whitelisting permits connectivity, not every operation on that URL. Unknown or
+imported WSDL contracts remain metadata-only; imports/soap:address are never
+followed. Channel start/stop, CPA refresh, edits, deletes and BPM execution are
+excluded. SOAP Read requires `mode: "read"` and an `identifier` matching the
+verified local WSDL. ESR read needs `object_type`, `object_key`, `swc_guid` from a
+query record; its parsed payload is retained but not claimed as a typed full
+definition. Unparsed/binary/raw HTML responses are omitted rather than stored.
+Requests disable redirects, reject XML DTDs, cap upstream responses at 5 MB and
+time out after 20 seconds per SAP request (60 seconds per MCP/client request).
 
 ## Option B — Call the plain REST endpoints directly (what btp_cockpit.html does)
 
