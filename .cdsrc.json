@@ -1,0 +1,17 @@
+{
+  "requires": {
+    "[postgres]": {
+      "db": {
+        "kind": "postgres",
+        "impl": "@cap-js/postgres"
+      }
+    },
+    "[postgres-mtx]": {
+      "db": {
+        "kind": "postgres",
+        "impl": "@cap-js/postgres"
+      },
+      "multitenancy": true
+    }
+  }
+}

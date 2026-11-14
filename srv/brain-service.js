@@ -735,6 +735,58 @@ module.exports = class BrainService extends cds.ApplicationService {
       };
     });
 
+    // ── lumiChat (Grounded LangGraph + pgvector + Persona-Scoped MCP) ────────
+    this.on('lumiChat', async (req) => {
+      const { resolveAuthContext } = require('./utils/personaAuth');
+      const { runLumiAgentTurn } = require('./ai/lumiAgentGraph');
+      try {
+        const ctx = resolveAuthContext(req);
+        let parsedAgents = [];
+        try {
+          parsedAgents = req.data.configuredAgents ? JSON.parse(req.data.configuredAgents) : [];
+        } catch { parsedAgents = []; }
+        const turn = await runLumiAgentTurn({
+          tenantId: ctx.tenantId,
+          projectId: req.data.projectId || 'PIPO32Migration',
+          sessionId: req.data.sessionId || 'default',
+          persona: ctx.persona,
+          userId: ctx.userId,
+          message: req.data.message || '',
+          configuredAgents: Array.isArray(parsedAgents) ? parsedAgents : []
+        });
+        return {
+          tenantId: turn.tenantId,
+          persona: turn.persona,
+          agentName: turn.agentName,
+          agentDomain: turn.agentDomain,
+          vectorBackend: turn.vectorBackend,
+          reply: turn.reply,
+          citationsJson: JSON.stringify(turn.citations),
+          toolCallsJson: JSON.stringify(turn.toolCalls),
+          allowedTools: turn.allowedTools
+        };
+      } catch (err) {
+        return req.reject(err.statusCode || 500, err.message || 'Grounded Lumi chat failed.');
+      }
+    });
+
+    this.on('getLumiChatHistory', async (req) => {
+      const { resolveAuthContext } = require('./utils/personaAuth');
+      try {
+        const ctx = resolveAuthContext(req);
+        const { AgentChatMessages } = cds.entities('pipo.discovery');
+        const rows = await cds.db.run(
+          cds.ql.SELECT.from(AgentChatMessages)
+            .where({ tenantId: ctx.tenantId, sessionId: req.data.sessionId || 'default' })
+            .orderBy('createdAt asc')
+            .limit(100)
+        );
+        return JSON.stringify(rows);
+      } catch (err) {
+        return req.reject(err.statusCode || 500, err.message || 'Unable to load chat history.');
+      }
+    });
+
     return super.init();
   }
 };

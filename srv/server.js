@@ -121,6 +121,16 @@ cds.on('bootstrap', (app) => {
     </body></html>`);
   });
 
+  // Secret-safe instance capacity & scaling telemetry for BTP Application Autoscaler / K8s HPA
+  app.get('/api/health/capacity', (req, res) => {
+    const { getCapacitySnapshot } = require('./utils/pipoAtomicRunner');
+    const { getTenantVectorStore } = require('./ai/pgVectorStore');
+    const snap = getCapacitySnapshot({ vectorStore: getTenantVectorStore() });
+    const overloaded = snap.scalingRecommendation === 'VERTICAL_SCALE_UP_MEMORY_AND_DISK';
+    if (overloaded) res.set('Retry-After', '45');
+    res.status(overloaded ? 503 : 200).json(snap);
+  });
+
   // Serves the aiconx frontend (btp_cockpit.html etc.) from this same app/origin,
   // so its relative fetch('/odata/v4/documents/...') calls reach this backend
   // instead of 404ing against a separate static-only host.

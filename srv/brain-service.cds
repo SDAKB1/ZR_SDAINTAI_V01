@@ -94,4 +94,24 @@ service BrainService @(path: '/odata/v4/brain', requires: 'any') {
     seeded  : Integer;
     message : String;
   };
+
+  // ── Grounded LangGraph + pgvector + Persona-Scoped MCP Agent Chat ──
+  action lumiChat(
+    sessionId        : String,
+    projectId        : String,
+    message          : LargeString,
+    configuredAgents : LargeString
+  ) returns {
+    tenantId      : String;
+    persona       : String;
+    agentName     : String;
+    agentDomain   : String;
+    vectorBackend : String;
+    reply         : LargeString;
+    citationsJson : LargeString;
+    toolCallsJson : LargeString;
+    allowedTools  : array of String;
+  };
+
+  action getLumiChatHistory(sessionId : String, projectId : String) returns LargeString;
 }

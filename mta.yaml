@@ -138,9 +138,17 @@ resources:
             - https://*~{app-api/app-uri}/**
         role-collections:
           - name: 'admin (AICONX ${space})'
-            description: 'generated'
+            description: 'Migration Factory Administrator'
             role-template-references:
               - '$XSAPPNAME.admin'
+          - name: 'approver (AICONX ${space})'
+            description: 'Migration Factory Approver'
+            role-template-references:
+              - '$XSAPPNAME.approver'
+          - name: 'viewer (AICONX ${space})'
+            description: 'Migration Factory Viewer'
+            role-template-references:
+              - '$XSAPPNAME.viewer'
     requires:
       - name: app-api
     processed-after:

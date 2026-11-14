@@ -10,9 +10,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <link rel="stylesheet" href="style.css?v=lumi36">
-  <link rel="stylesheet" href="btp_style.css?v=lumi36">
-  <link rel="stylesheet" href="btp_lumi.css?v=lumi36">
+  <link rel="stylesheet" href="style.css?v=lumi37">
+  <link rel="stylesheet" href="btp_style.css?v=lumi37">
+  <link rel="stylesheet" href="btp_lumi.css?v=lumi37">
 </head>
 <body>
 
@@ -205,6 +205,12 @@
 
         <div class="btp-workspace-panel">
 
+          <div class="btp-persona-header-bar" id="btp-persona-header-bar">
+            <span style="color:var(--btp-text-muted-dark);font-weight:600;">Authenticated Scope:</span>
+            <span class="persona-effective-pill role-admin" id="header-persona-badge"><i class="fa-solid fa-user-shield"></i> <span id="header-persona-label">Admin</span></span>
+            <span style="color:var(--btp-text-muted-dark);font-family:var(--font-mono);font-size:0.68rem;" id="header-tenant-badge">tenant: verifying…</span>
+          </div>
+
           <div class="lumi-paused-banner" id="paused-banner">
             <div class="lumi-avatar idle"><div class="visor"></div></div>
             <div class="paused-banner-text">Your chat with Lumi is paused at <b><span class="stage-name" id="paused-banner-stage">this step</span></b> — your changes here are saved, and the conversation carries on from where it stopped.</div>
@@ -355,9 +361,19 @@
                   <div class="form-group-btp"><label>Location ID</label><input type="text" class="btp-input" id="admin-pipo-location" value="SDA_LAB"></div>
                 </div>
                 <div class="mock-note"><i class="fa-solid fa-circle-info"></i> This is PJ2, the same real PI/PO system proven live via PI8 below — System Name/User ID corrected to match what's actually configured in the live destination (previously mislabeled PJ1/PI_TECH_MIG from an earlier screenshot capture).</div>
-                <div class="conn-test-row">
+                <div class="conn-test-row" style="flex-wrap:wrap;gap:10px;">
                   <button class="btn-btp-action-solid" id="btn-admin-test-pipo"><i class="fa-solid fa-plug-circle-check"></i> Test Connection</button>
+                  <button class="btn-btp-action-solid btn-pipo-discover" id="btn-admin-discover-pipo" disabled title="Verify SAP PI/PO connection first to enable atomic discovery"><i class="fa-solid fa-magnifying-glass-chart"></i> <span id="btn-admin-discover-pipo-label">Discover Interfaces</span></button>
+                  <button class="btn-pipo-rerun hidden" id="btn-admin-rerun-pipo" title="Wipe prior run and start a fresh atomic discovery"><i class="fa-solid fa-rotate-right"></i> Re-run Discovery</button>
                   <div class="conn-status" id="admin-pipo-test-status" style="display:none;"></div>
+                </div>
+                <div class="pipo-atomic-progress-box" id="admin-pipo-discovery-progress">
+                  <div class="pipo-atomic-head">
+                    <span id="admin-pipo-progress-title"><i class="fa-solid fa-lock"></i> Atomic Discovery Running (Non-Cancellable)</span>
+                    <span id="admin-pipo-progress-pct">0%</span>
+                  </div>
+                  <div class="pipo-atomic-track"><div class="pipo-atomic-fill" id="admin-pipo-progress-fill"></div></div>
+                  <div style="font-size:0.74rem;color:#78350f;" id="admin-pipo-progress-detail">Preparing isolated staging folder…</div>
                 </div>
 
                 <h4 class="admin-section-title" style="margin-top:22px;font-size:0.82rem;"><i class="fa-solid fa-bolt" style="color:var(--gold);"></i> PI8 (PJ2) — Live MCP Connectivity Test</h4>
@@ -863,8 +879,43 @@
     </div>
   </div>
 
+  <!-- ==================== PI/PO ARCHITECT DISCOVERY REPORT MODAL ==================== -->
+  <div class="pipo-arch-overlay hidden" id="pipo-architect-report-overlay">
+    <div class="pipo-arch-modal">
+      <div class="pipo-arch-top">
+        <div>
+          <h3 style="margin:0;font-size:1.05rem;font-weight:800;"><i class="fa-solid fa-compass-drafting" style="color:var(--btp-brand-gold);margin-right:8px;"></i>SAP PI/PO Principal Architect Discovery Assessment</h3>
+          <span style="font-size:0.72rem;color:#a1a1aa;" id="pipo-arch-subtitle">Atomic Landscape Inventory · ESR &amp; Integration Directory</span>
+        </div>
+        <button class="report-close-btn" id="pipo-arch-close" title="Close report"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="pipo-arch-body">
+        <div class="pipo-kpi-strip" id="pipo-arch-kpis"></div>
+        <div class="pipo-narrative-box" id="pipo-arch-narrative"></div>
+        <div class="pipo-charts-row" id="pipo-arch-charts"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+          <div class="pipo-filter-bar" id="pipo-arch-filters">
+            <button class="pipo-filter-btn active" data-filter="interfaces"><i class="fa-solid fa-network-wired"></i> Interfaces Found</button>
+            <button class="pipo-filter-btn" data-filter="failures"><i class="fa-solid fa-triangle-exclamation"></i> Failures &amp; Diagnostics</button>
+            <button class="pipo-filter-btn" data-filter="complexities"><i class="fa-solid fa-diagram-project"></i> Complexities &amp; Mappings</button>
+            <button class="pipo-filter-btn" data-filter="coverage"><i class="fa-solid fa-clipboard-check"></i> Discovery Coverage &amp; Deps</button>
+            <button class="pipo-filter-btn" data-filter="esr_vs_dir"><i class="fa-solid fa-scale-balanced"></i> ESR vs Integration Directory</button>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;" id="pipo-arch-gov-actions">
+            <button class="btn-btp-action-outline" id="btn-pipo-arch-approve"><i class="fa-solid fa-check"></i> Approve Plan</button>
+            <button class="btn-btp-action-outline" id="btn-pipo-arch-reject"><i class="fa-solid fa-ban"></i> Reject Plan</button>
+            <button class="btn-btp-action-solid" id="btn-pipo-arch-deploy" disabled><i class="fa-solid fa-cloud-arrow-up"></i> Deploy Approved Wave</button>
+            <button class="btn-btp-action-solid" id="btn-pipo-arch-open-waves"><i class="fa-solid fa-layer-group"></i> Open Wave Plan</button>
+          </div>
+        </div>
+        <div style="font-size:0.77rem;color:var(--btp-text-muted-dark);font-weight:600;" id="pipo-arch-filter-insight"></div>
+        <div class="pipo-deep-table-wrap" id="pipo-arch-table-wrap"></div>
+      </div>
+    </div>
+  </div>
+
   <div class="notification-container" id="toast-container"></div>
   <script src="jszip.min.js"></script>
-  <script src="btp_app.js?v=lumi36"></script>
+  <script src="btp_app.js?v=lumi37"></script>
 </body>
 </html>

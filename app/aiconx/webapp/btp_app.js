@@ -431,12 +431,20 @@ function setPersona(persona) {
 function applyPersonaGating() {
   const sel = $('persona-select');
   if (sel) sel.value = S.persona;
+  const badge = $('header-persona-badge');
+  const badgeLbl = $('header-persona-label');
+  if (badge && badgeLbl) {
+    badge.className = `persona-effective-pill role-${String(S.persona || 'Admin').toLowerCase()}`;
+    badgeLbl.textContent = S.persona;
+  }
   const adminNav = $('nav-admin');
   if (adminNav) adminNav.style.display = canSeeAdminScreen() ? '' : 'none';
   // Don't strand a session on the Admin screen if the lens switches away from Admin mid-visit.
   if (!canSeeAdminScreen() && $('screen-admin') && $('screen-admin').classList.contains('active')) {
     openScreen('cockpit');
   }
+  if (typeof syncPipoPersonaButtons === 'function') syncPipoPersonaButtons();
+  if (typeof syncServerPersona === 'function') syncServerPersona();
   if (typeof updateCockpitStats === 'function' && S.cockpitRows) updateCockpitStats();
   if (typeof refreshExecTabs === 'function') refreshExecTabs();
 }
@@ -4563,30 +4571,532 @@ function saveAdminDefaults() {
   logBrainEvent('setting_changed', 'admin', S.adminDefaults, `Admin defaults saved — platform=${S.adminDefaults.platform || 'n/a'}, tenant=${S.adminDefaults.tenant}, subaccount=${S.adminDefaults.sdaSubaccount}${S.adminDefaults.prvTenant ? ' (sda-prv-tenant)' : ''}, PI/PO system=${S.adminDefaults.piPo.systemName}.`);
   showToast('Defaults Saved', 'New migrations will start from these connection defaults, and the updated team roster is live for wave assignment.', 'purple');
 }
-// Same mock reachability check as testS4Connection — validates the Integration
-// Directory address is present, doesn't actually call out to nwjava.consultsda.com.
-function testPiPoConnection() {
+// ==================== LIVE PI/PO CONNECTION, ATOMIC DISCOVERY & ARCHITECT REPORT ====================
+S.pipoState = S.pipoState || {
+  connectionToken: null,
+  formFingerprint: null,
+  connected: false,
+  running: false,
+  completedRunId: null,
+  planRevisionHash: null,
+  approvalStatus: 'PENDING',
+  lastReport: null,
+  pollTimer: null
+};
+
+async function capPost(url, payload) {
+  const targetUrl = url.replace('/odata/v4/pipo-discovery/', '/odata/v4/pipo-cockpit/');
+  const res = await fetch(targetUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'X-SDAINTAI-Dev-Persona': S.persona || 'Admin'
+    },
+    body: JSON.stringify(payload || {})
+  });
+  const text = await res.text();
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+  if (!res.ok) {
+    const msg = data?.error?.message || data?.message || `HTTP ${res.status}`;
+    const err = new Error(msg);
+    err.status = res.status;
+    err.payload = data;
+    throw err;
+  }
+  return Object.prototype.hasOwnProperty.call(data, 'value') && typeof data.value === 'string'
+    ? JSON.parse(data.value)
+    : data;
+}
+
+function readPipoFormPayload() {
+  return {
+    systemName: ($('admin-pipo-system-name')?.value || '').trim(),
+    systemVersion: ($('admin-pipo-version')?.value || '').trim(),
+    address: ($('admin-pipo-address')?.value || '').trim(),
+    userId: ($('admin-pipo-userid')?.value || '').trim(),
+    password: $('admin-pipo-password')?.value || '',
+    authType: $('admin-pipo-auth')?.value || 'BasicAuthentication',
+    proxyType: $('admin-pipo-proxy')?.value || 'OnPremise',
+    locationId: ($('admin-pipo-location')?.value || '').trim(),
+    subaccount: $('admin-sda-subaccount')?.value || 'sda-ai-shared-eu10',
+    projectId: S.projectName || 'PIPO32Migration'
+  };
+}
+
+function clearPipoFieldHighlights() {
+  ['admin-pipo-system-name', 'admin-pipo-version', 'admin-pipo-address', 'admin-pipo-userid',
+   'admin-pipo-password', 'admin-pipo-auth', 'admin-pipo-proxy', 'admin-pipo-location', 'admin-sda-subaccount']
+    .forEach(id => { const el = $(id); if (el) el.classList.remove('input-field-error'); });
+}
+
+function highlightPipoField(fieldKey) {
+  const map = {
+    systemName: 'admin-pipo-system-name',
+    systemVersion: 'admin-pipo-version',
+    address: 'admin-pipo-address',
+    userId: 'admin-pipo-userid',
+    password: 'admin-pipo-password',
+    authType: 'admin-pipo-auth',
+    proxyType: 'admin-pipo-proxy',
+    locationId: 'admin-pipo-location',
+    subaccount: 'admin-sda-subaccount'
+  };
+  const el = map[fieldKey] ? $(map[fieldKey]) : null;
+  if (el) el.classList.add('input-field-error');
+}
+
+function invalidatePipoVerification() {
+  if (S.pipoState.running) return; // Never interrupt or unlock during an atomic run
+  S.pipoState.connected = false;
+  S.pipoState.connectionToken = null;
+  clearPipoFieldHighlights();
+  syncPipoPersonaButtons();
+}
+
+function syncPipoPersonaButtons() {
+  const testBtn = $('btn-admin-test-pipo');
+  const discBtn = $('btn-admin-discover-pipo');
+  const discLbl = $('btn-admin-discover-pipo-label');
+  const rerunBtn = $('btn-admin-rerun-pipo');
+  const st = S.pipoState;
+
+  if (testBtn) testBtn.disabled = st.running || !isAdmin();
+
+  if (discBtn && discLbl) {
+    if (st.running) {
+      discBtn.disabled = true;
+      discBtn.classList.remove('ready-results');
+      discLbl.textContent = 'Discovering… (Atomic Lock)';
+    } else if (st.completedRunId) {
+      // Completed run: anyone with view access can inspect the Architect Report
+      discBtn.disabled = false;
+      discBtn.classList.add('ready-results');
+      const countTxt = st.lastReport?.kpis?.totalObjects ? ` (${st.lastReport.kpis.totalObjects})` : '';
+      discLbl.textContent = `View Discovery Results${countTxt}`;
+    } else {
+      discBtn.classList.remove('ready-results');
+      discLbl.textContent = 'Discover Interfaces';
+      discBtn.disabled = !st.connected || !st.connectionToken || !isAdmin();
+    }
+  }
+
+  if (rerunBtn) {
+    const showRerun = !st.running && (Boolean(st.completedRunId) || Boolean(st.lastRunFailed));
+    rerunBtn.classList.toggle('hidden', !showRerun);
+    rerunBtn.disabled = st.running || !isAdmin();
+  }
+
+  const appBtn = $('btn-pipo-arch-approve');
+  const rejBtn = $('btn-pipo-arch-reject');
+  const depBtn = $('btn-pipo-arch-deploy');
+  if (appBtn) appBtn.disabled = !isApprover();
+  if (rejBtn) rejBtn.disabled = !isApprover();
+  if (depBtn) depBtn.disabled = !isAdmin() || st.approvalStatus !== 'APPROVED';
+}
+
+async function syncServerPersona() {
+  try {
+    const info = await capPost('/odata/v4/pipo-discovery/getCurrentPersona', {});
+    if (info && info.persona) {
+      if (info.isProduction && info.persona !== S.persona) {
+        S.persona = info.persona;
+        const sel = $('persona-select');
+        if (sel) { sel.value = info.persona; sel.disabled = true; }
+      }
+      const tBadge = $('header-tenant-badge');
+      if (tBadge) tBadge.textContent = `tenant: ${info.tenantId} · user: ${info.userId}`;
+      const lbl = $('header-persona-label');
+      const pill = $('header-persona-badge');
+      if (lbl && pill) {
+        lbl.textContent = info.persona;
+        pill.className = `persona-effective-pill role-${info.persona.toLowerCase()}`;
+      }
+    }
+  } catch {
+    const tBadge = $('header-tenant-badge');
+    if (tBadge) tBadge.textContent = 'tenant: local-session';
+  }
+}
+
+async function testPiPoConnection() {
+  if (S.pipoState.running) return;
+  clearPipoFieldHighlights();
   const statusEl = $('admin-pipo-test-status');
-  const host = $('admin-pipo-address').value.trim();
+  const form = readPipoFormPayload();
   statusEl.style.display = 'flex';
   statusEl.className = 'conn-status';
-  statusEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Testing PI/PO Integration Directory…';
+  statusEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Verifying BTP Destination alignment &amp; SAP PI/PO reachability via pipo-rfc-server…';
   $('btn-admin-test-pipo').disabled = true;
-  setTimeout(() => {
+
+  try {
+    const res = await capPost('/odata/v4/pipo-discovery/verifyConnection', form);
     $('btn-admin-test-pipo').disabled = false;
-    if (!host) {
+    if (!res.connected) {
+      S.pipoState.connected = false;
+      S.pipoState.connectionToken = null;
+      if (res.field) highlightPipoField(res.field);
       statusEl.className = 'conn-status fail';
-      statusEl.innerHTML = '<span class="dot"></span> Enter an Integration Directory address before testing';
+      statusEl.innerHTML = `<span class="dot"></span> <b>[${res.code || 'BUSINESS_ERROR'}]</b> ${res.userMessage}`;
+      showToast('PI/PO Connection Error', res.userMessage, 'danger');
+      syncPipoPersonaButtons();
       return;
     }
-    if (!$('admin-pipo-password').value) {
-      statusEl.className = 'conn-status fail';
-      statusEl.innerHTML = `<span class="dot"></span> ${$('admin-pipo-userid').value || 'User'} password not set yet — enter it above`;
-      return;
-    }
+    S.pipoState.connected = true;
+    S.pipoState.connectionToken = res.connectionToken;
+    S.pipoState.formFingerprint = res.formFingerprint;
     statusEl.className = 'conn-status ok';
-    statusEl.innerHTML = `<span class="dot"></span> Connected — ${$('admin-pipo-system-name').value || 'PI/PO'} Integration Directory reachable`;
-  }, 1200);
+    statusEl.innerHTML = `<span class="dot"></span> ${res.userMessage}`;
+    showToast('PI/PO Verified', 'Subaccount destination, virtual host, auth, and tunnel verified. Discover Interfaces is now enabled.', 'success');
+    syncPipoPersonaButtons();
+  } catch (err) {
+    $('btn-admin-test-pipo').disabled = false;
+    S.pipoState.connected = false;
+    S.pipoState.connectionToken = null;
+    statusEl.className = 'conn-status fail';
+    statusEl.innerHTML = `<span class="dot"></span> ${err.message || 'Unable to reach CAP PipoDiscoveryService'}`;
+    syncPipoPersonaButtons();
+  }
+}
+
+async function handleDiscoverOrViewPipo() {
+  if (S.pipoState.running) return;
+  if (S.pipoState.completedRunId) {
+    await openPipoArchitectReport('interfaces');
+    return;
+  }
+  if (!S.pipoState.connected || !S.pipoState.connectionToken) {
+    showToast('Verify Connection First', 'Run Test Connection before launching interface discovery.', 'danger');
+    return;
+  }
+  const form = readPipoFormPayload();
+  try {
+    S.pipoState.running = true;
+    S.pipoState.lastRunFailed = false;
+    syncPipoPersonaButtons();
+    const progBox = $('admin-pipo-discovery-progress');
+    if (progBox) progBox.classList.add('active');
+    $('admin-pipo-progress-pct').textContent = '5%';
+    $('admin-pipo-progress-fill').style.width = '5%';
+    $('admin-pipo-progress-detail').textContent = 'Starting non-cancellable atomic fetch-pipo.js background job…';
+
+    const { password: _omittedPassword, ...nonSecretForm } = form;
+    const started = await capPost('/odata/v4/pipo-discovery/startDiscovery', {
+      ...nonSecretForm,
+      connectionToken: S.pipoState.connectionToken
+    });
+    startPipoPolling(started.runId);
+  } catch (err) {
+    S.pipoState.running = false;
+    const progBox = $('admin-pipo-discovery-progress');
+    if (progBox) progBox.classList.remove('active');
+    showToast('Discovery Blocked', err.message, 'danger');
+    syncPipoPersonaButtons();
+  }
+}
+
+function startPipoPolling(runId) {
+  if (S.pipoState.pollTimer) clearInterval(S.pipoState.pollTimer);
+  const pollOnce = async () => {
+    try {
+      const st = await capPost('/odata/v4/pipo-discovery/getDiscoveryStatus', {
+        runId: runId || '',
+        projectId: S.projectName || 'PIPO32Migration'
+      });
+      if (!st || !st.found) return;
+      const progBox = $('admin-pipo-discovery-progress');
+      if (st.status === 'RUNNING' || st.status === 'STAGING') {
+        S.pipoState.running = true;
+        if (progBox) progBox.classList.add('active');
+        $('admin-pipo-progress-pct').textContent = `${st.progressPct || 10}%`;
+        $('admin-pipo-progress-fill').style.width = `${st.progressPct || 10}%`;
+        $('admin-pipo-progress-detail').textContent = st.progressMessage || `Phase: ${st.phase} (atomic lock — non-cancellable)`;
+        syncPipoPersonaButtons();
+      } else if (st.status === 'COMPLETED') {
+        clearInterval(S.pipoState.pollTimer);
+        S.pipoState.pollTimer = null;
+        S.pipoState.running = false;
+        S.pipoState.completedRunId = st.runId;
+        S.pipoState.planRevisionHash = st.planRevisionHash;
+        S.pipoState.approvalStatus = st.approvalStatus || 'PENDING';
+        if (progBox) progBox.classList.remove('active');
+        const statusEl = $('admin-pipo-test-status');
+        if (statusEl) {
+          statusEl.style.display = 'flex';
+          statusEl.className = 'conn-status ok';
+          statusEl.innerHTML = `<span class="dot"></span> Discovery Complete — <b>${st.totalObjects}</b> artifacts (${st.icoCount} ICOs, ${st.channelCount} Channels, ${st.mappingCount} Mappings, ${st.ccBpmCount} ccBPM) saved &amp; auto-planned into Waves 1–3.`;
+        }
+        await loadAndPropagatePipoReport(st.runId);
+        syncPipoPersonaButtons();
+        showToast('Atomic Discovery Complete', `${st.totalObjects} PI/PO artifacts saved, indexed in pgvector, and propagated to Project Details & Wave Plan.`, 'success');
+      } else if (st.status === 'FAILED') {
+        clearInterval(S.pipoState.pollTimer);
+        S.pipoState.pollTimer = null;
+        S.pipoState.running = false;
+        S.pipoState.lastRunFailed = true;
+        if (progBox) progBox.classList.remove('active');
+        const statusEl = $('admin-pipo-test-status');
+        if (statusEl) {
+          statusEl.style.display = 'flex';
+          statusEl.className = 'conn-status fail';
+          statusEl.innerHTML = `<span class="dot"></span> Discovery Failed [${st.errorCode || 'ERR'}]: ${st.errorMessage || 'Staging rolled back cleanly.'} — click Re-run Discovery to start fresh.`;
+        }
+        syncPipoPersonaButtons();
+      }
+    } catch { /* retry on next tick */ }
+  };
+  pollOnce();
+  S.pipoState.pollTimer = setInterval(pollOnce, 1200);
+}
+
+async function loadAndPropagatePipoReport(runId) {
+  const report = await capPost('/odata/v4/pipo-discovery/getArchitectReport', {
+    runId,
+    projectId: S.projectName || 'PIPO32Migration',
+    filter: 'interfaces'
+  });
+  S.pipoState.lastReport = report;
+  S.pipoState.planRevisionHash = report.planRevisionHash;
+  S.pipoState.approvalStatus = report.wavePlan?.approvalStatus || 'PENDING';
+  S.pushApproved = S.pipoState.approvalStatus === 'APPROVED';
+
+  // Auto-propagate discovered artifacts into Project Details, Assets, Buckets & Wave Planning
+  S.platform = 'pipo';
+  if (typeof applyPlatformTerminology === 'function') applyPlatformTerminology();
+  if (report.projectDetails?.projectName) {
+    S.projectName = report.projectDetails.projectName;
+    if ($('project-selector-text')) $('project-selector-text').textContent = S.projectName;
+  }
+  const waveItems = report.wavePlan?.items || [];
+  if (waveItems.length) {
+    S.assets = waveItems.map((it) => {
+      const uiTier = it.tier === 'Complex' ? 'High' : (it.tier || 'Medium');
+      return {
+        id: it.id,
+        name: it.name,
+        type: it.type || 'ICO',
+        tier: uiTier,
+        deps: it.isCcBpm ? Math.max(2, it.processSteps || 3) : 1,
+        status: it.isCcBpm ? 'Warning' : 'Ready',
+        flowCount: uiTier === 'High' ? 18 : uiTier === 'Medium' ? 9 : 4,
+        convertPct: uiTier === 'Simple' ? 95 : uiTier === 'Medium' ? 82 : 68,
+        tree: [
+          leafTree('sender-channel', `${it.sender || 'PIPO_SRC'} (${it.adapterType || 'SOAP/IDoc'})`, true),
+          leafTree('receiver-channel', `${it.receiver || 'S4_IS_TARGET'}`, true),
+          leafTree('message-mapping', it.proposedTarget || 'Integration Suite iFlow', !it.isCcBpm)
+        ]
+      };
+    });
+    const w1 = S.assets.filter(a => a.tier === 'Simple').map(a => a.id);
+    const w2 = S.assets.filter(a => a.tier === 'Medium').map(a => a.id);
+    const w3 = S.assets.filter(a => a.tier === 'High').map(a => a.id);
+    S.waves = { 1: w1, 2: w2, 3: w3 };
+    ['nav-connection', 'nav-assets', 'nav-buckets'].forEach(markDone);
+    ['nav-assets', 'nav-buckets', 'nav-wave', 'nav-approve'].forEach(unlockNav);
+    if (typeof renderAssetsTable === 'function') renderAssetsTable();
+    if (typeof renderBuckets === 'function') renderBuckets();
+    if (typeof autoAssignTeam === 'function') autoAssignTeam();
+    if (typeof renderWaveBoard === 'function') renderWaveBoard();
+    if (typeof renderTeamBoard === 'function') renderTeamBoard();
+  }
+  return report;
+}
+
+async function openPipoArchitectReport(filter = 'interfaces') {
+  try {
+    const report = await capPost('/odata/v4/pipo-discovery/getArchitectReport', {
+      runId: S.pipoState.completedRunId || '',
+      projectId: S.projectName || 'PIPO32Migration',
+      filter
+    });
+    S.pipoState.lastReport = report;
+    S.pipoState.approvalStatus = report.wavePlan?.approvalStatus || 'PENDING';
+    S.pushApproved = S.pipoState.approvalStatus === 'APPROVED';
+    renderPipoArchitectModal(report);
+    $('pipo-architect-report-overlay').classList.remove('hidden');
+    syncPipoPersonaButtons();
+  } catch (err) {
+    showToast('Report Unavailable', err.message, 'danger');
+  }
+}
+
+function renderPipoArchitectModal(rep) {
+  const k = rep.kpis || {};
+  $('pipo-arch-subtitle').textContent = `System ${rep.systemName} (${rep.systemVersion || '7.50'}) · Subaccount ${rep.subaccount || 'BTP'} · Plan Governance: ${rep.wavePlan?.approvalStatus || 'PENDING'}`;
+  $('pipo-arch-kpis').innerHTML = `
+    <div class="pipo-kpi-card"><small>Total Catalogued Objects</small><strong>${k.totalObjects || 0}</strong><div style="font-size:0.7rem;color:var(--btp-text-muted-dark);">${k.dirCount || 0} Directory · ${k.esrCount || 0} ESR</div></div>
+    <div class="pipo-kpi-card"><small>Active ICOs &amp; Channels</small><strong>${k.icoCount || 0} ICO / ${k.channelCount || 0} Ch</strong><div style="font-size:0.7rem;color:var(--btp-text-muted-dark);">${k.senderChannels || 0} Sender · ${k.receiverChannels || 0} Receiver</div></div>
+    <div class="pipo-kpi-card"><small>Mappings &amp; Templates</small><strong>${(k.operationMappingCount || 0) + (k.messageMappingCount || 0)}</strong><div style="font-size:0.7rem;color:var(--btp-text-muted-dark);">${k.operationMappingCount || 0} Op · ${k.messageMappingCount || 0} Msg (${k.customMappingCount || 0} UDF/Java)</div></div>
+    <div class="pipo-kpi-card"><small>ccBPM Orchestrations</small><strong>${k.ccBpmCount || 0}</strong><div style="font-size:0.7rem;color:var(--btp-text-muted-dark);">${k.totalCcBpmSteps || 0} process steps · ${k.serviceInterfaceCount || 0} SIs</div></div>
+    <div class="pipo-kpi-card"><small>Endpoint &amp; Dep Health</small><strong>${k.matchedReferences || 0} Refs</strong><div style="font-size:0.7rem;color:${k.failedEndpointCount ? '#dc2626' : '#16a34a'};">${k.failedEndpointCount || 0} endpoint gap(s) · ${k.unmatchedReferences || 0} external</div></div>
+  `;
+  $('pipo-arch-narrative').innerHTML = `<b><i class="fa-solid fa-user-tie"></i> Principal PI/PO Architect Synthesis:</b> ${rep.architectNarrative}`;
+
+  const total = Math.max(1, k.totalObjects || 1);
+  const esrPct = Math.round(((k.esrCount || 0) / total) * 100);
+  const dirPct = 100 - esrPct;
+  const maxAdp = Math.max(1, ...(rep.charts?.adapterBars || []).map(x => x.count));
+  const maxWave = Math.max(1, ...(rep.charts?.waveBars || []).map(x => x.count));
+
+  const adpHtml = (rep.charts?.adapterBars || []).slice(0, 6).map(b => `
+    <div style="display:flex;align-items:center;gap:8px;font-size:0.73rem;margin-bottom:6px;">
+      <span style="width:95px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${b.label}</span>
+      <div style="flex:1;height:9px;background:#edf0f5;border-radius:5px;overflow:hidden;"><div style="height:100%;width:${Math.round((b.count / maxAdp) * 100)}%;background:var(--btp-brand-gold);"></div></div>
+      <b style="width:24px;text-align:right;">${b.count}</b>
+    </div>`).join('') || '<div style="font-size:0.74rem;color:#64748b;">No channel adapter definitions in snapshot</div>';
+
+  const waveHtml = (rep.charts?.waveBars || []).map(w => `
+    <div style="display:flex;align-items:center;gap:8px;font-size:0.73rem;margin-bottom:8px;">
+      <span style="width:105px;font-weight:700;">${w.label}</span>
+      <div style="flex:1;height:9px;background:#edf0f5;border-radius:5px;overflow:hidden;"><div style="height:100%;width:${Math.round((w.count / maxWave) * 100)}%;background:${w.color};"></div></div>
+      <b style="width:72px;text-align:right;">${w.count} (${w.hours}h)</b>
+    </div>`).join('');
+
+  $('pipo-arch-charts').innerHTML = `
+    <div class="pipo-chart-panel" style="display:flex;align-items:center;gap:14px;">
+      <svg width="110" height="110" viewBox="0 0 42 42">
+        <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#e5e7eb" stroke-width="5"></circle>
+        <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#131417" stroke-width="5" stroke-dasharray="${esrPct} ${dirPct}" stroke-dashoffset="25"></circle>
+        <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#ffbb33" stroke-width="5" stroke-dasharray="${dirPct} ${esrPct}" stroke-dashoffset="${25 - esrPct}"></circle>
+        <text x="21" y="20" text-anchor="middle" font-size="6.5" font-weight="800">${k.totalObjects || 0}</text>
+        <text x="21" y="25.5" text-anchor="middle" font-size="3.2" fill="#64748b">${esrPct}% ESR · ${dirPct}% DIR</text>
+      </svg>
+      <div style="font-size:0.74rem;line-height:1.6;">
+        <div><b>■ ESR Repository:</b> ${k.esrCount || 0}</div>
+        <div><b style="color:#b47814;">■ Integration Dir:</b> ${k.dirCount || 0}</div>
+        <div><b>Verified XML Defs:</b> ${k.verifiedDefinitions || 0}</div>
+      </div>
+    </div>
+    <div class="pipo-chart-panel"><h5>Channels by Adapter Type</h5>${adpHtml}</div>
+    <div class="pipo-chart-panel"><h5>Auto-Classified Wave Workload</h5>${waveHtml}</div>
+  `;
+
+  renderPipoDeepDiveSection(rep, rep.activeFilter || 'interfaces');
+}
+
+function renderPipoDeepDiveSection(rep, filterKey) {
+  const dd = rep.allDeepDives?.[filterKey] || rep.deepDive;
+  if (!dd) return;
+  qsa('#pipo-arch-filters .pipo-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === filterKey));
+  $('pipo-arch-filter-insight').textContent = `${dd.title} — ${dd.insight}`;
+  const headHtml = (dd.columns || []).map(c => `<th>${c}</th>`).join('');
+  const rowsHtml = (dd.rows || []).map(r => `<tr>${r.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('') || `<tr><td colspan="${(dd.columns || []).length}">No records in this view.</td></tr>`;
+  $('pipo-arch-table-wrap').innerHTML = `<table class="btp-table"><thead><tr>${headHtml}</tr></thead><tbody>${rowsHtml}</tbody></table>`;
+}
+
+async function triggerRerunPipoDiscovery() {
+  if (S.pipoState.running || !isAdmin()) return;
+  if (!S.pipoState.connected || !S.pipoState.connectionToken) {
+    await testPiPoConnection();
+    if (!S.pipoState.connected) return;
+  }
+  const form = readPipoFormPayload();
+  openModal('Confirm Atomic Re-run & Wipe Prior Discovery?', `
+    <p style="font-size:0.84rem;line-height:1.5;color:var(--btp-text-dark);">
+      Re-running discovery will <b>permanently wipe</b> the previous <code>discovery-runs</code> snapshot, <code>pgvector</code> embeddings, derived wave plan, and <b>invalidate any existing Approver sign-offs</b> for <b>${form.systemName}</b> before starting a fresh non-cancellable atomic run.
+    </p>
+  `, [
+    { label: 'Cancel', cls: 'btn-btp-action-outline', onClick: closeModal },
+    { label: 'Wipe Prior Run & Start Fresh', cls: 'btn-btp-action-solid', onClick: async () => {
+      closeModal();
+      try {
+        S.pipoState.running = true;
+        S.pipoState.completedRunId = null;
+        S.pipoState.lastReport = null;
+        syncPipoPersonaButtons();
+        const progBox = $('admin-pipo-discovery-progress');
+        if (progBox) progBox.classList.add('active');
+        const { password: _omittedPw2, ...nonSecretForm2 } = form;
+        const res = await capPost('/odata/v4/pipo-discovery/rerunDiscovery', {
+          ...nonSecretForm2,
+          connectionToken: S.pipoState.connectionToken,
+          confirmInvalidateApprovals: true
+        });
+        showToast('Prior Run Wiped', `Removed ${res.priorRunsWiped || 1} prior run(s). Fresh atomic discovery is running.`, 'purple');
+        startPipoPolling(res.runId);
+      } catch (err) {
+        S.pipoState.running = false;
+        const progBox = $('admin-pipo-discovery-progress');
+        if (progBox) progBox.classList.remove('active');
+        showToast('Re-run Failed', err.message, 'danger');
+        syncPipoPersonaButtons();
+      }
+    } }
+  ]);
+}
+
+async function govApprovePipoPlan() {
+  try {
+    const res = await capPost('/odata/v4/pipo-discovery/approveWavePlan', {
+      projectId: S.projectName || 'PIPO32Migration',
+      runId: S.pipoState.completedRunId,
+      planRevisionHash: S.pipoState.planRevisionHash,
+      rationale: 'Approved by Approver from PI/PO Principal Architect Assessment.'
+    });
+    S.pipoState.approvalStatus = 'APPROVED';
+    S.pushApproved = true;
+    syncPipoPersonaButtons();
+    showToast('Wave Plan Approved', res.message, 'success');
+    await openPipoArchitectReport('interfaces');
+  } catch (err) {
+    showToast('Approval Denied', err.message, 'danger');
+  }
+}
+
+async function govRejectPipoPlan() {
+  try {
+    const res = await capPost('/odata/v4/pipo-discovery/rejectWavePlan', {
+      projectId: S.projectName || 'PIPO32Migration',
+      runId: S.pipoState.completedRunId,
+      planRevisionHash: S.pipoState.planRevisionHash,
+      rationale: 'Rejected from PI/PO Principal Architect Assessment.'
+    });
+    S.pipoState.approvalStatus = 'REJECTED';
+    S.pushApproved = false;
+    syncPipoPersonaButtons();
+    showToast('Wave Plan Rejected', res.message, 'danger');
+    await openPipoArchitectReport('interfaces');
+  } catch (err) {
+    showToast('Reject Denied', err.message, 'danger');
+  }
+}
+
+async function govDeployApprovedPipoWave() {
+  try {
+    const res = await capPost('/odata/v4/pipo-discovery/deployApprovedWave', {
+      projectId: S.projectName || 'PIPO32Migration',
+      runId: S.pipoState.completedRunId,
+      waveNumber: 1,
+      planRevisionHash: S.pipoState.planRevisionHash,
+      targetTenant: S.adminDefaults?.tenant || 'sda-prod-eu10'
+    });
+    showToast('Wave Dispatched to BTP', res.message, 'purple');
+  } catch (err) {
+    showToast('Deployment Gate Blocked', err.message, 'danger');
+  }
+}
+
+async function restoreExistingPipoDiscoveryState() {
+  try {
+    const st = await capPost('/odata/v4/pipo-discovery/getDiscoveryStatus', {
+      runId: '',
+      projectId: S.projectName || 'PIPO32Migration'
+    });
+    if (!st || !st.found) return;
+    if (st.status === 'RUNNING' || st.status === 'STAGING') {
+      startPipoPolling(st.runId);
+    } else if (st.status === 'COMPLETED') {
+      S.pipoState.completedRunId = st.runId;
+      S.pipoState.planRevisionHash = st.planRevisionHash;
+      S.pipoState.approvalStatus = st.approvalStatus || 'PENDING';
+      await loadAndPropagatePipoReport(st.runId);
+      syncPipoPersonaButtons();
+    } else if (st.status === 'FAILED') {
+      S.pipoState.lastRunFailed = true;
+      syncPipoPersonaButtons();
+    }
+  } catch { /* backend offline in static-only preview */ }
 }
 // Real check, unlike testPiPoConnection above — calls mcp/pipo-rfc-server's
 // /api/pi8/ping, which proves the Cloud Connector/destination chain to PJ2
@@ -4837,6 +5347,15 @@ function handleComposerSend() {
 
   const t = text.toLowerCase();
   const p = PLATFORMS[S.platform] || PLATFORMS.mulesoft;
+  const isGroundedAgentIntent =
+    /\b(approve\s+(wave|plan|migration)|reject\s+(wave|plan|migration)|deploy\s+(wave|approved|to\s+btp)|move\s+\S+\s+to\s+wave|esr\s*(vs|versus)\s*dir|403|404|500|forbidden|ccbpm|mapping|ico|channel|cosine|pgvector|why\s+did|how\s+many\s+interfaces|failures?)\b/i.test(text) &&
+    !/^(go\s+to|open\s+)/i.test(text.trim());
+
+  if (isGroundedAgentIntent) {
+    askGroundedLumiAgent(text);
+    return;
+  }
+
   if (t.includes('structure') || t.includes('validate')) {
     if (!S.assets.length) { lumiSay(`I don't have any ${p.assetNounPlural} scanned yet — let's finish ${p.terms.sourceStepNoun} Selection first.`); return; }
     const first = S.assets[0];
@@ -4903,9 +5422,35 @@ function handleComposerSend() {
     lumiSay("Here you go — Settings is open.");
     openScreen('admin');
   } else {
-    const prior = recallSimilarQuestion(text);
-    const recallPrefix = prior ? `You asked something close to this before — I still don't have a dedicated answer for it, but noted. ` : '';
-    lumiSay(`${recallPrefix}I can help with connecting a source, scanning ${p.assetNounPlural}, picking ${p.assetNounPlural} into buckets, planning waves and team, approving the plan, opening the cockpit, or opening Settings — try "go to Execute", "go to Plan", "go to Approve", "go to Close", ask about iFlow status/links, say "continue" to pick up where we left off, "start the migration over" to archive this one and begin fresh, or use the buttons above at each step.`);
+    askGroundedLumiAgent(text);
+  }
+}
+
+async function askGroundedLumiAgent(userText) {
+  setLumiState('thinking');
+  try {
+    const customAgents = Array.isArray(S.agents) ? S.agents : [];
+    const res = await capPost('/odata/v4/brain/lumiChat', {
+      sessionId: S.chatSessionId || (S.chatSessionId = 'sess-' + Date.now().toString(36)),
+      projectId: S.projectName || 'PIPO32Migration',
+      message: userText,
+      configuredAgents: JSON.stringify(customAgents)
+    });
+    const citations = (() => { try { return JSON.parse(res.citationsJson || '[]'); } catch { return []; } })();
+    const citeChips = citations.slice(0, 3).map(c =>
+      `<span class="lumi-cite-chip">${c.chunkKind}:${c.artifactId} (cos ${c.score})</span>`
+    ).join('');
+    const formatted = String(res.reply || '')
+      .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+      .replace(/`([^`]+)`/g, '<code class="mono">$1</code>')
+      .replace(/\n/g, '<br>');
+    lumiSay(`${formatted}${citeChips ? `<div style="margin-top:6px;">${citeChips}</div>` : ''}`);
+    if (S.pipoState?.completedRunId) {
+      loadAndPropagatePipoReport(S.pipoState.completedRunId).then(() => syncPipoPersonaButtons()).catch(() => {});
+    }
+  } catch (err) {
+    const p = PLATFORMS[S.platform] || PLATFORMS.pipo;
+    lumiSay(`Grounded AI backend note: ${err.message || 'CAP service offline'}. You can also navigate directly using "go to Execute", "go to Plan", or open Settings to run SAP PI/PO discovery for ${p.label}.`);
   }
 }
 function formatTreeNodeLabel(node) {
@@ -5253,6 +5798,27 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btn-admin-add-agent').addEventListener('click', addAdminAgent);
   $('btn-admin-test-s4').addEventListener('click', testS4Connection);
   $('btn-admin-test-pipo').addEventListener('click', testPiPoConnection);
+  $('btn-admin-discover-pipo')?.addEventListener('click', handleDiscoverOrViewPipo);
+  $('btn-admin-rerun-pipo')?.addEventListener('click', triggerRerunPipoDiscovery);
+  ['admin-pipo-system-name', 'admin-pipo-version', 'admin-pipo-address', 'admin-pipo-userid', 'admin-pipo-password', 'admin-pipo-location']
+    .forEach(id => $(id)?.addEventListener('input', invalidatePipoVerification));
+  ['admin-pipo-auth', 'admin-pipo-proxy', 'admin-sda-subaccount']
+    .forEach(id => $(id)?.addEventListener('change', invalidatePipoVerification));
+  $('pipo-arch-close')?.addEventListener('click', () => $('pipo-architect-report-overlay').classList.add('hidden'));
+  $('pipo-architect-report-overlay')?.addEventListener('click', (e) => {
+    if (e.target.id === 'pipo-architect-report-overlay') $('pipo-architect-report-overlay').classList.add('hidden');
+  });
+  qsa('#pipo-arch-filters .pipo-filter-btn').forEach(btn => btn.addEventListener('click', () => {
+    if (S.pipoState.lastReport) renderPipoDeepDiveSection(S.pipoState.lastReport, btn.dataset.filter);
+    else openPipoArchitectReport(btn.dataset.filter);
+  }));
+  $('btn-pipo-arch-approve')?.addEventListener('click', govApprovePipoPlan);
+  $('btn-pipo-arch-reject')?.addEventListener('click', govRejectPipoPlan);
+  $('btn-pipo-arch-deploy')?.addEventListener('click', govDeployApprovedPipoWave);
+  $('btn-pipo-arch-open-waves')?.addEventListener('click', () => {
+    $('pipo-architect-report-overlay').classList.add('hidden');
+    openScreen('wave');
+  });
   $('btn-admin-test-pi8').addEventListener('click', testPi8Connection);
   $('admin-sda-subaccount').addEventListener('change', updatePrvTenantStatus);
   $('admin-prv-tenant').addEventListener('change', updatePrvTenantStatus);
@@ -5288,6 +5854,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // until someone hits Activate). Fire-and-forget: a network hiccup here
   // shouldn't block the rest of the app from loading.
   activateBrainEngine();
+  syncServerPersona();
+  syncPipoPersonaButtons();
+  restoreExistingPipoDiscoveryState();
 
   // The landing screen (#screen-landing) already carries this same greeting +
   // "Start a new migration" action as the resting Home view — Lumi's chat log

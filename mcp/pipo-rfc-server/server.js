@@ -364,6 +364,19 @@ app.get('/api/pi8/ping', async (req, res) => {
   res.json(await pingPi8());
 });
 
+app.post('/api/pi8/verify-connection', requireBasicAuth, async (req, res) => {
+  const { verifyPipoConnection, PipoBusinessError } = require('./verify-pipo-connection');
+  try {
+    const out = await verifyPipoConnection(req.body || {}, { probeFn: async () => pingPi8() });
+    res.json(out);
+  } catch (err) {
+    const safe = err instanceof PipoBusinessError
+      ? err.toJSON()
+      : { connected: false, code: 'CONNECTION_CHECK_FAILED', userMessage: 'PI/PO destination verification failed.', httpStatus: 503 };
+    res.status(safe.httpStatus || 422).json(safe);
+  }
+});
+
 app.get('/api/pi8/objects', async (req, res) => {
   try {
     res.json(await listPi8EsrObjects());

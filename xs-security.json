@@ -2,7 +2,15 @@
   "scopes": [
     {
       "name": "$XSAPPNAME.admin",
-      "description": "admin"
+      "description": "Full Migration Factory Admin access (setup, discovery, wave planning, post-approval deployment)"
+    },
+    {
+      "name": "$XSAPPNAME.approver",
+      "description": "Migration Factory Approver access (read evidence, approve or reject plans and deployments)"
+    },
+    {
+      "name": "$XSAPPNAME.viewer",
+      "description": "Migration Factory Viewer access (read-only access to discovered interfaces, reports, and grounded chat)"
     },
     {
       "name": "$XSAPPNAME.mtcallback",
@@ -27,9 +35,25 @@
   "role-templates": [
     {
       "name": "admin",
-      "description": "generated",
+      "description": "Migration Factory Administrator",
       "scope-references": [
         "$XSAPPNAME.admin"
+      ],
+      "attribute-references": []
+    },
+    {
+      "name": "approver",
+      "description": "Migration Factory Approver",
+      "scope-references": [
+        "$XSAPPNAME.approver"
+      ],
+      "attribute-references": []
+    },
+    {
+      "name": "viewer",
+      "description": "Migration Factory Viewer",
+      "scope-references": [
+        "$XSAPPNAME.viewer"
       ],
       "attribute-references": []
     }

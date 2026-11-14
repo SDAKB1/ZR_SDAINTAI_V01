@@ -34,6 +34,8 @@ const ENDPOINTS = Object.freeze(definitions.map(([path, suffix, category, kind, 
         destination: path.startsWith('/rep/') ? 'PO_PJ2_ESR' : 'PO_PJ2_DIR'
     };
     if (entity) descriptor.entity = entity;
+    if (path === '/mdt') descriptor.probePath = '/mdt/index.jsp';
+    if (path === '/CPACache') descriptor.probePath = '/CPACache/monitor.jsp';
     if (kind === 'soap') {
         // BPM's implementation address is not established; never derive it.
         descriptor.wsdlPaths = Object.freeze(entity
